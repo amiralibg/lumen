@@ -14,7 +14,7 @@ use super::popover::PopState;
 use super::show_on_drop;
 
 pub(crate) struct MenuCtx {
-    anchor: Id,
+    pub(crate) anchor: Id,
 }
 
 /// One action in a menu.

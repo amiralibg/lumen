@@ -231,3 +231,181 @@ fn color_picker_keyboard_and_hex_editing() {
     assert_eq!(h.s.c.to_hex(), 0xFF5500);
     assert!((h.s.c.a - 128.0 / 255.0).abs() < 0.01, "8-digit hex sets alpha: {}", h.s.c.a);
 }
+
+// ----------------------------------------------------------------- Overlays
+
+#[derive(Default)]
+struct SheetState {
+    open: bool,
+    name: String,
+    trigger_focused: bool,
+}
+
+fn sheet_view(ui: &mut Ui, s: &mut SheetState) {
+    ui.column().pad(24).show(|ui| {
+        let r = ui.button("Open sheet").show();
+        if r.clicked {
+            s.open = true;
+        }
+        s.trigger_focused = r.focused;
+        ui.sheet("inspector", &mut s.open).title("Inspector").show(|ui| {
+            ui.text_input(&mut s.name).label("Name").fill_width();
+        });
+    });
+}
+
+#[test]
+fn sheet_opens_focuses_body_and_escape_restores_trigger_focus() {
+    let mut h = Harness::new(SheetState::default(), sheet_view);
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    h.idle(3);
+    assert!(h.s.open);
+    h.frame(vec![Event::Text("arm64".into())]);
+    assert_eq!(h.s.name, "arm64", "sheet focuses its first control on open");
+    h.frame(key(Key::Escape));
+    h.idle(2);
+    assert!(!h.s.open);
+    assert!(h.s.trigger_focused, "escape returns focus to trigger");
+}
+
+#[derive(Default)]
+struct PalState {
+    open: bool,
+    picked: Option<&'static str>,
+}
+
+fn pal_view(ui: &mut Ui, s: &mut PalState) {
+    const CMDS: &[Command<'static>] = &[
+        Command::new("deploy", "Deploy production").group("Actions").shortcut("⌘D"),
+        Command::new("logs", "Tail live logs").group("Actions").keywords("console"),
+        Command::new("settings", "Workspace settings").group("Navigation"),
+    ];
+    ui.column().pad(24).show(|ui| {
+        ui.button("Trigger");
+        if let Some(id) = ui.command_palette("main", &mut s.open, CMDS).show() {
+            s.picked = Some(id);
+        }
+    });
+}
+
+#[test]
+fn command_palette_cmd_k_filters_and_runs() {
+    let mut h = Harness::new(PalState::default(), pal_view);
+    let cmd = Modifiers { logo: true, mac: true, ..Default::default() };
+    h.frame(vec![Event::Key { key: Key::Char('k'), pressed: true, repeat: false, modifiers: cmd }]);
+    h.idle(2);
+    assert!(h.s.open, "⌘K opens the palette");
+    // Filter by keyword ("console" -> Tail live logs) and press Enter.
+    h.frame(vec![Event::Text("console".into())]);
+    h.idle(1);
+    h.frame(key(Key::Enter));
+    h.idle(1);
+    assert_eq!(h.s.picked, Some("logs"));
+    assert!(!h.s.open, "running a command closes the palette");
+}
+
+#[derive(Default)]
+struct HoverState {
+    anchor: Rect,
+    shown: bool,
+}
+
+fn hover_view(ui: &mut Ui, s: &mut HoverState) {
+    ui.column().pad(40).show(|ui| {
+        let r = ui.button("@jonas").ghost().show();
+        s.anchor = r.rect;
+        s.shown = ui.hover_card(&r).show(|ui| {
+            ui.label("Jonas Berg");
+        }).is_some();
+    });
+}
+
+#[test]
+fn hover_card_delays_bridges_gap_and_dismisses_on_escape() {
+    let mut h = Harness::new(HoverState::default(), hover_view);
+    let c = h.s.anchor.center();
+    h.frame(vec![Event::PointerMoved(c)]);
+    assert!(!h.s.shown, "waits for delay");
+    h.t += 0.35;
+    h.idle(2);
+    assert!(h.s.shown, "opens after delay");
+    // Move into the card below the anchor: stays open.
+    h.frame(vec![Event::PointerMoved(vec2(c.x, h.s.anchor.max.y + 20.0))]);
+    h.t += 0.30;
+    h.idle(2);
+    assert!(h.s.shown, "stays open while pointer is inside the card");
+    h.frame(key(Key::Escape));
+    h.idle(1);
+    assert!(!h.s.shown, "escape dismisses");
+}
+
+#[derive(Default)]
+struct CtxState {
+    zone: Rect,
+    copied: u32,
+}
+
+fn ctx_view(ui: &mut Ui, s: &mut CtxState) {
+    let z = ui.column().pad(24).id("target").show(|ui| {
+        ui.label("Release v2.4.1");
+    });
+    s.zone = z.rect;
+    ui.context_menu(&z.response(), |ui| {
+        if ui.menu_item("copy", "Copy SHA").clicked() {
+            s.copied += 1;
+        }
+    });
+}
+
+#[test]
+fn context_menu_opens_on_secondary_click_and_activates_item() {
+    let mut h = Harness::new(CtxState::default(), ctx_view);
+    let p = h.s.zone.center();
+    h.frame(vec![
+        Event::PointerMoved(p),
+        Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: true },
+        Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: false },
+    ]);
+    h.idle(3);
+    // Click the first item just below `p`.
+    h.click(vec2(p.x + 30.0, p.y + 20.0));
+    h.idle(1);
+    assert_eq!(h.s.copied, 1);
+}
+
+#[derive(Default)]
+struct ConfirmState {
+    btn: Rect,
+    confirmed: u32,
+}
+
+fn confirm_view(ui: &mut Ui, s: &mut ConfirmState) {
+    ui.column().pad(24).show(|ui| {
+        let r = ui.button("Revoke").danger().show();
+        s.btn = r.rect;
+        if ui.confirm_popover(&r, "Revoke key?").confirm_label("Revoke").confirmed() {
+            s.confirmed += 1;
+        }
+    });
+}
+
+#[test]
+fn confirm_popover_cancels_on_escape_and_confirms_via_keyboard() {
+    let mut h = Harness::new(ConfirmState::default(), confirm_view);
+    // Open via keyboard: focus lands on Cancel. Escape cancels.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    h.idle(2);
+    h.frame(key(Key::Escape));
+    h.idle(2);
+    assert_eq!(h.s.confirmed, 0);
+
+    // Reopen, Tab from Cancel to Confirm, press Enter -> confirmed!
+    h.frame(key(Key::Enter));
+    h.idle(2);
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    h.idle(2);
+    assert_eq!(h.s.confirmed, 1);
+}

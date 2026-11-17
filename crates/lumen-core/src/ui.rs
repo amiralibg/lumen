@@ -1292,6 +1292,12 @@ impl Ui {
         self.keys.iter().any(|(k, m, _)| *k == key && !m.command())
     }
 
+    /// True if `⌘/Ctrl + ch` (case-insensitive) was pressed this frame.
+    pub fn shortcut_pressed(&self, ch: char) -> bool {
+        let want = ch.to_ascii_lowercase();
+        self.keys.iter().any(|(k, m, r)| !*r && m.command() && matches!(k, Key::Char(c) if c.to_ascii_lowercase() == want))
+    }
+
     /// Ids that took keyboard focus slots since `since` (an index from
     /// [`focus_mark`](Self::focus_mark)).
     pub fn focusables_since(&self, since: usize) -> Vec<Id> {

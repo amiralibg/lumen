@@ -33,5 +33,5 @@ pub use input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
 pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
-pub use widgets::{ChartKind, Series, Toast, Tone};
+pub use widgets::{ChartKind, Command, Series, Toast, Tone};
 pub use widgets::Variant;

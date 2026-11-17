@@ -220,6 +220,93 @@ ui.popover(&r).width(300.0).pad(16.0).show(|ui| {
     keys: [["Escape", "Close"], ["Tab", "Moves through the dialog's controls"]],
   },
   {
+    slug: "sheet", name: "Sheet", group: "Overlays", demo: "sheet",
+    summary: "An edge-docked drawer over a scrim with a scrollable body and optional pinned footer. Slides in from any edge on the smooth spring.",
+    code: `ui.sheet("runner", &mut s.open)
+    .side(Placement::Right)
+    .title("linux-arm64-02")
+    .description("Frankfurt · 4 concurrent jobs")
+    .footer(|ui| {
+        if ui.button("Cancel").ghost().clicked() { ui.close_layer(); }
+        if ui.button("Save").primary().clicked() { save(); ui.close_layer(); }
+    })
+    .show(|ui| {
+        ui.text_input(&mut s.hostname).label("Hostname").fill_width();
+    });`,
+    options: [
+      [".side(Placement)", "Right (default), Left, Bottom or Top."],
+      [".title(t) .description(t) .size(px)", "Width for left/right drawers; height for top/bottom."],
+      [".footer(|ui| ..) .dismissible(b)", "Scrollable body sits between the header and footer."],
+    ],
+    keys: [["Escape", "Close and return focus to the trigger"], ["Tab", "Moves through the drawer's controls"]],
+  },
+  {
+    slug: "command-palette", name: "Command palette", group: "Overlays", demo: "command-palette",
+    summary: "A modal ⌘K / Ctrl+K command runner that fuzzy-filters grouped actions, highlights matched characters and shows shortcut chips.",
+    code: `const CMDS: &[Command] = &[
+    Command::new("deploy", "Deploy production").group("Actions").icon("rocket").shortcut("⌘D"),
+    Command::new("settings", "Workspace settings").group("Navigation").icon("settings").shortcut("⌘,"),
+];
+if let Some(id) = ui.command_palette("main", &mut s.palette, CMDS).show() {
+    run(id);
+}`,
+    options: [
+      ["Command::new(id, label)", ".group(g) .icon(name) .shortcut(keys) .keywords(extra)"],
+      [".placeholder(t) .width(px)", ""],
+      [".global_shortcut(bool)", "Toggles automatically on ⌘K / Ctrl+K (default true)."],
+    ],
+    keys: [["⌘/Ctrl + K", "Toggle the palette"], ["Type", "Fuzzy-filter labels, groups and keywords"], ["↑ ↓ Home End", "Move the highlight pill"], ["Enter", "Run the highlighted command"], ["Escape", "Close and return focus"]],
+  },
+  {
+    slug: "hover-card", name: "Hover card", group: "Overlays", demo: "hover-card",
+    summary: "A rich preview card that opens after a short hover or keyboard-focus delay and stays open while the pointer crosses into it.",
+    code: `let r = ui.button("@jonas").ghost().small().show();
+ui.hover_card(&r).width(276.0).show(|ui| {
+    ui.row().gap(12).align(Align::Center).show(|ui| {
+        ui.avatar("JB", 0, 38.0, Some(true));
+        ui.label("Jonas Berg").strong();
+    });
+});`,
+    options: [
+      [".placement(Placement) .align(LayerAlign)", "Bottom-start by default; flips when near the window edge."],
+      [".width(px) .pad(px) .delay(secs)", "Default delay 0.28 s with a 0.16 s pointer-bridge grace window."],
+    ],
+    keys: [["Tab to anchor", "Opens after the delay"], ["Escape", "Dismiss"]],
+  },
+  {
+    slug: "context-menu", name: "Context menu", group: "Overlays", demo: "context-menu",
+    summary: "Opens at the pointer on right-click (or Shift+Enter when focused), using the same items, checks, shortcuts and danger styling as Menu.",
+    code: `let zone = ui.column().id("row").show(|ui| { /* content */ });
+ui.context_menu(&zone.response(), |ui| {
+    ui.menu_item("copy", "Copy commit SHA").shortcut("⌘C");
+    ui.menu_separator();
+    ui.menu_item("rotate-ccw", "Roll back…").danger();
+});`,
+    options: [
+      ["ui.context_menu(&Response, |ui| ..)", "Uses menu_item, menu_separator and menu_label; flips to stay on screen."],
+      ["ui.open_context_menu(id, pos)", "Open programmatically at a point."],
+    ],
+    keys: [["Shift + Enter", "Open on a focused target"], ["↑ ↓ Home End", "Move between items"], ["Enter / Space", "Activate"], ["Escape", "Close and return focus"]],
+  },
+  {
+    slug: "confirm-popover", name: "Confirm popover", group: "Overlays", demo: "confirm-popover",
+    summary: "An inline confirmation anchored right next to a destructive button — lighter than a modal dialog so your eyes stay in place.",
+    code: `let r = ui.button("Revoke").danger().small().show();
+if ui.confirm_popover(&r, "Revoke this API key?")
+    .description("Clients using this key will fail immediately.")
+    .confirm_label("Revoke key")
+    .confirmed()
+{
+    revoke();
+}`,
+    options: [
+      [".description(t) .confirm_label(t) .cancel_label(t)", ""],
+      [".danger(bool)", "Destructive confirm button by default; false uses primary."],
+      [".placement(Placement) .width(px)", ""],
+    ],
+    keys: [["Space / Enter on trigger", "Open and focus Cancel"], ["Tab", "Move between Cancel and Confirm"], ["Escape", "Cancel and return focus"]],
+  },
+  {
     slug: "toast", name: "Toast", group: "Feedback", demo: "toast",
     summary: "Short notices that stack in the corner, slide in with a spring and leave on their own.",
     code: `ui.toast(Toast::new("Changes saved").description("Your profile is up to date.").success());

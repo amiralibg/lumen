@@ -4,7 +4,7 @@
 //! - Web: `demo.html?demo=chart-line&dark=1&look=mac&accent=blue`
 //! - Screenshot: `cargo run -p lumen-demos -- chart-line --screenshot out.png`
 
-use lumen::{Accent, Align, Color, Date, Justify, Look, Mode, Platform, Series, Sides, Time, Toast, Tone, Ui};
+use lumen::{Accent, Align, Color, Command, Date, Justify, Look, Mode, Placement, Platform, Series, Sides, Time, Toast, Tone, Ui};
 
 /// Every demo: url name, title.
 pub const DEMOS: &[(&str, &str)] = &[
@@ -22,6 +22,11 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("menu", "Menu"),
     ("popover", "Popover"),
     ("dialog", "Dialog"),
+    ("sheet", "Sheet"),
+    ("command-palette", "Command palette"),
+    ("hover-card", "Hover card"),
+    ("context-menu", "Context menu"),
+    ("confirm-popover", "Confirm popover"),
     ("toast", "Toast"),
     ("tooltip", "Tooltip"),
     ("chips", "Filter chips"),
@@ -98,6 +103,10 @@ struct State {
     quiet_end: Time,
     brand_color: Color,
     glow_color: Color,
+    sheet_side: Placement,
+    pinned: bool,
+    revoked: bool,
+    hover_shot: bool,
 }
 
 impl State {
@@ -136,6 +145,10 @@ impl State {
             quiet_end: Time::new(8, 0),
             brand_color: Color::hex(0x0E6EE6),
             glow_color: Color::hex(0x7D55EC).with_alpha(0.72),
+            sheet_side: Placement::Right,
+            pinned: true,
+            revoked: false,
+            hover_shot: false,
         }
     }
 }
@@ -184,7 +197,19 @@ fn view(ui: &mut Ui, s: &mut State) {
         "bento" => bento(ui, s),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
-        "menu" | "popover" | "select" | "date-picker" | "stepper" | "combobox" | "multi-select" | "date-range-picker" | "time-picker" | "color-picker" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        "menu"
+        | "popover"
+        | "select"
+        | "date-picker"
+        | "stepper"
+        | "combobox"
+        | "multi-select"
+        | "date-range-picker"
+        | "time-picker"
+        | "color-picker"
+        | "hover-card"
+        | "context-menu"
+        | "confirm-popover" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -319,6 +344,150 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                     }
                 })
                 .show(|_| {});
+        }
+        "sheet" => {
+            if std::mem::take(&mut s.force_open) {
+                s.open = true;
+            }
+            ui.row().gap(12).align(Align::Center).show(|ui| {
+                ui.segmented(&mut s.sheet_side, &[(Placement::Right, "Right"), (Placement::Left, "Left"), (Placement::Bottom, "Bottom")]);
+                if ui.button("Inspect runner").primary().icon("panel-right").clicked() {
+                    s.open = true;
+                }
+            });
+            ui.sheet("runner", &mut s.open)
+                .side(s.sheet_side)
+                .title("linux-arm64-02")
+                .description("Frankfurt · online · 4 concurrent jobs")
+                .footer(|ui| {
+                    if ui.button("Cancel").ghost().clicked() {
+                        ui.close_layer();
+                    }
+                    if ui.button("Save changes").primary().clicked() {
+                        ui.toast(Toast::new("Runner updated").success());
+                        ui.close_layer();
+                    }
+                })
+                .show(|ui| {
+                    ui.text_input(&mut s.runner).label("Hostname").fill_width();
+                    ui.select(&mut s.region, &[(Region::Frankfurt, "Frankfurt (eu-central)"), (Region::Virginia, "Virginia (us-east)"), (Region::Tokyo, "Tokyo (ap-northeast)"), (Region::Sydney, "Sydney (ap-southeast)")])
+                        .label("Region")
+                        .fill_width();
+                    ui.settings(|rows| {
+                        rows.row("Auto-drain before reboot", "Finish running jobs before restarting.", |ui| {
+                            ui.switch("", &mut s.on[0]);
+                        });
+                        rows.row("Spot fallback", "Allow burst capacity on spot instances.", |ui| {
+                            ui.switch("", &mut s.on[2]);
+                        });
+                    });
+                });
+        }
+        "command-palette" => {
+            const CMDS: &[Command<'static>] = &[
+                Command::new("deploy", "Deploy production").group("Actions").icon("rocket").shortcut("⌘D").keywords("ship release"),
+                Command::new("logs", "Tail live logs").group("Actions").icon("terminal").shortcut("⌘L").keywords("console output"),
+                Command::new("branch", "Switch branch…").group("Actions").icon("git-branch").shortcut("⌘B"),
+                Command::new("runners", "Go to Runners").group("Navigation").icon("users").shortcut("G R"),
+                Command::new("settings", "Workspace settings").group("Navigation").icon("settings").shortcut("⌘,"),
+                Command::new("theme", "Toggle dark mode").group("Appearance").icon("moon").shortcut("⌘T"),
+            ];
+            if std::mem::take(&mut s.force_open) {
+                s.open = true;
+            }
+            ui.column().gap(10).align(Align::Center).show(|ui| {
+                if ui.button("Open command palette").icon("search").clicked() {
+                    s.open = true;
+                }
+                ui.label("Or press ⌘K / Ctrl+K anywhere in this demo.").muted();
+            });
+            if let Some(cmd) = ui.command_palette("main", &mut s.open, CMDS).show() {
+                ui.toast(Toast::new(format!("Triggered “{cmd}”")).tone(Tone::Accent));
+            }
+        }
+        "hover-card" => {
+            if std::mem::take(&mut s.force_open) {
+                s.hover_shot = true;
+            }
+            let people = [
+                ("@jonas", "JB", "Jonas Berg", "Staff Systems · Frankfurt", "42 deploys this month", Some(true)),
+                ("@priya", "PN", "Priya Nair", "Security Lead · London", "19 reviews this week", Some(false)),
+                ("@lena", "LF", "Lena Fischer", "Runtime · Berlin", "Maintains lumen-wgpu", Some(true)),
+            ];
+            ui.row().gap(8).align(Align::Center).show(|ui| {
+                ui.label("Approved by").secondary();
+                for (i, (handle, ini, name, role, note, pres)) in people.iter().enumerate() {
+                    let r = ui.button(*handle).ghost().small().show();
+                    ui.hover_card(&r).width(276.0).open(s.hover_shot && i == 0).show(|ui| {
+                        ui.row().gap(12).align(Align::Center).show(|ui| {
+                            ui.avatar(ini, i, 38.0, *pres);
+                            ui.column().gap(2).fill_width().show(|ui| {
+                                ui.label(*name).strong();
+                                ui.label(*role).small().secondary();
+                            });
+                        });
+                        ui.divider();
+                        ui.label(*note).small().muted();
+                    });
+                }
+            });
+        }
+        "context-menu" => {
+            let zone = ui.column().fill_width().max_width(440.0).id("release-row").show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                        ui.column().gap(2).fill_width().show(|ui| {
+                            ui.label("v2.4.1 — Production").strong();
+                            ui.label("Right-click this card (or focus and press Shift+Enter).").small().muted();
+                        });
+                        if s.pinned {
+                            ui.badge("Pinned", Tone::Accent);
+                        }
+                        ui.badge("Live", Tone::Success);
+                    });
+                });
+            });
+            let resp = zone.response();
+            if std::mem::take(&mut s.force_open) {
+                ui.open_context_menu(resp.id, lumen::vec2(260.0, 126.0));
+            }
+            ui.context_menu(&resp, |ui| {
+                ui.menu_label("Release v2.4.1");
+                ui.menu_item("file-text", "View build log").shortcut("⌘L");
+                ui.menu_item("copy", "Copy commit SHA").shortcut("⌘C");
+                if ui.menu_item("pin", "Pin to overview").checked(s.pinned).clicked() {
+                    s.pinned = !s.pinned;
+                }
+                ui.menu_separator();
+                if ui.menu_item("rotate-ccw", "Roll back release…").danger().clicked() {
+                    ui.toast(Toast::new("Rollback queued").tone(Tone::Warning));
+                }
+            });
+        }
+        "confirm-popover" => {
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                        ui.column().gap(2).fill_width().show(|ui| {
+                            ui.label("Production API key").strong();
+                            ui.label(if s.revoked { "Revoked · create a new key to restore access" } else { "rk_live_9d2f…8a1c · last used 2m ago" }).small().muted();
+                        });
+                        let r = ui.button(if s.revoked { "Revoked" } else { "Revoke" }).danger().small().disabled(s.revoked).show();
+                        if std::mem::take(&mut s.force_open) {
+                            ui.set_popover_open(r.id, true);
+                        }
+                        if ui
+                            .confirm_popover(&r, "Revoke this API key?")
+                            .description("Clients authenticating with rk_live_9d2f will be rejected immediately.")
+                            .confirm_label("Revoke key")
+                            .confirmed()
+                        {
+                            s.revoked = true;
+                            ui.toast(Toast::new("API key revoked").danger());
+                        }
+                    });
+                });
+            });
         }
         "toast" => {
             ui.row().gap(10).show(|ui| {

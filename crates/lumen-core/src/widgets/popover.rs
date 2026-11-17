@@ -13,7 +13,7 @@ use crate::ui::{LayerAlign, LayerPlace, Placement, Response, Sense, Ui};
 pub(crate) struct PopState {
     pub open: bool,
     /// Opened from the keyboard: move focus into the panel.
-    focus_in: bool,
+    pub focus_in: bool,
     /// Focusable ids inside the panel last frame.
     pub items: Vec<Id>,
     /// Opened this frame by code: skip the outside-press check once (the
@@ -193,7 +193,7 @@ impl Ui {
     /// Open or close the popover anchored at `anchor`.
     pub fn set_popover_open(&mut self, anchor: Id, open: bool) {
         let st = self.mem::<PopState>(anchor);
-        st.just_opened = open && !st.open;
+        st.just_opened = open;
         st.open = open;
     }
 

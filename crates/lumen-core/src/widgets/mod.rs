@@ -25,6 +25,8 @@ pub mod field;
 pub mod combo;
 pub mod time_picker;
 pub mod color_picker;
+pub mod overlays;
+pub mod palette;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -43,6 +45,8 @@ pub use chart::{Chart, ChartKind, Series};
 pub use combo::{Combobox, MultiSelect};
 pub use time_picker::TimePicker;
 pub use color_picker::ColorPicker;
+pub use overlays::{ConfirmPopover, HoverCard, Sheet};
+pub use palette::{Command, CommandPalette};
 
 use crate::color::Color;
 use crate::theme::Token;
