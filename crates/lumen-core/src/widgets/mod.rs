@@ -27,6 +27,9 @@ pub mod time_picker;
 pub mod color_picker;
 pub mod overlays;
 pub mod palette;
+pub mod inputs;
+pub mod number_field;
+pub mod otp;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -47,6 +50,9 @@ pub use time_picker::TimePicker;
 pub use color_picker::ColorPicker;
 pub use overlays::{ConfirmPopover, HoverCard, Sheet};
 pub use palette::{Command, CommandPalette};
+pub use inputs::{password_strength, PasswordInput, SearchField, TagInput, TextArea};
+pub use number_field::NumberField;
+pub use otp::OtpInput;
 
 use crate::color::Color;
 use crate::theme::Token;

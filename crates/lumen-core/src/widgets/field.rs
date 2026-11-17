@@ -34,6 +34,8 @@ pub(crate) struct InlineState {
     pub edit: TextEdit,
     scroll: Vec2,
     last_activity: f64,
+    last_scroll: Option<f64>,
+    prev_cursor: usize,
     dragging: bool,
     /// Column kept while moving the caret up and down a multi-line text.
     goal_x: Option<f32>,
@@ -244,20 +246,47 @@ impl Ui {
         self.text_leaf(label, st, lc, false, true, Style::default());
     }
 
-    /// Helper or error line under a control. The error fades in.
-    pub(crate) fn field_message(&mut self, id: Id, helper: Option<&str>, error: Option<&str>, disabled: bool) {
-        let err_a = self.fade(id, 45, error.is_some(), 0.12, 0.10, Ease::Linear);
+    /// Helper, animated error, and optional right-hand counter under a field.
+    pub(crate) fn field_message(&mut self, id: Id, helper: Option<&str>, error: Option<&str>, counter: Option<(String, Color)>, disabled: bool) {
+        #[derive(Default)]
+        struct ErrMem(String);
+        if let Some(e) = error {
+            self.mem::<ErrMem>(id).0 = e.to_owned();
+        }
+        let has_error = error.is_some();
+        let mo = self.motion();
+        let reveal = self.anims.spring_from(id, 46, 0.0, if has_error { 1.0 } else { 0.0 }, if has_error { mo.smooth } else { mo.snappy });
+        let err_a = self.fade(id, 45, has_error, 0.12, 0.10, Ease::Linear);
         let mut st = self.text_style(TextRole::Label);
         st.weight = 400;
-        if let Some(e) = error {
+        if reveal > 0.001 || err_a > 0.0 {
+            let msg = self.mem_get::<ErrMem>(id).map(|m| m.0.clone()).unwrap_or_default();
+            let wrap_w = self.rect_of(id).map(|r| (r.width() - 24.0).max(100.0)).unwrap_or(220.0);
+            let msg_h = self.text.layout(&msg, &st, Some(wrap_w), TextAlign::Start).height;
             let dc = self.color(Token::DangerStrong).multiply_alpha(err_a);
-            self.begin(Style { dir: crate::layout::Dir::Row, gap: 6.0, align: crate::layout::Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            self.begin(Style { width: Size::FILL, height: Size::Fixed((reveal * msg_h).max(0.0)), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, true, None);
+            self.begin(Style { dir: crate::layout::Dir::Row, width: Size::FILL, gap: 6.0, align: crate::layout::Align::Start, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            self.begin(Style { pad: crate::math::Sides { top: 1.0, ..Default::default() }, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
             self.icon_leaf("circle-alert", 14.0, dc);
-            self.text_leaf(e, st, dc, true, false, Style { width: Size::FILL, ..Default::default() });
             self.end();
-        } else if let Some(h) = helper {
-            let hc = if disabled { self.color(Token::TextDisabled) } else { self.color(Token::TextMuted) };
-            self.text_leaf(h, st, hc, true, false, Style::default());
+            self.text_leaf(msg, st.clone(), dc, true, false, Style { width: Size::FILL, ..Default::default() });
+            if let Some((cnt, cc)) = counter {
+                self.text_leaf(cnt, st, cc, false, false, Style::default());
+            }
+            self.end();
+            self.end();
+        } else if helper.is_some() || counter.is_some() {
+            self.begin(Style { dir: crate::layout::Dir::Row, width: Size::FILL, gap: 8.0, align: crate::layout::Align::Start, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            if let Some(h) = helper {
+                let hc = if disabled { self.color(Token::TextDisabled) } else { self.color(Token::TextMuted) };
+                self.text_leaf(h, st.clone(), hc, true, false, Style { width: Size::FILL, ..Default::default() });
+            } else {
+                self.spacer();
+            }
+            if let Some((cnt, cc)) = counter {
+                self.text_leaf(cnt, st, cc, false, false, Style::default());
+            }
+            self.end();
         }
     }
 
@@ -448,23 +477,36 @@ impl Ui {
         let last = self.mem::<InlineState>(id).last_activity;
         let caret_a = if o.disabled { 0.0 } else { self.caret_alpha(ix.focused, last) };
 
-        // Geometry: keep the caret in view.
+        // Geometry: keep the caret in view and allow wheel scrolling on multiline overflow.
         let g = layout(self, value);
         let vis = vec2(ix.rect.width().max(1.0), ix.rect.height().max(line_h));
-        let (cursor, sel) = {
+        let max_sy = (g.height - vis.y).max(0.0);
+        let wheel = if o.multiline && max_sy > 0.5 { self.take_scroll(id).y } else { 0.0 };
+        let (cursor, sel, last_scroll) = {
             let st = self.mem::<InlineState>(id);
             st.edit.clamp(value);
+            let caret_moved = st.edit.cursor != st.prev_cursor || changed;
+            st.prev_cursor = st.edit.cursor;
             let (cx, line) = caret_at(&g, to_d(value, st.edit.cursor));
             let ly = g.lines[line].top;
             if o.multiline {
                 st.scroll.x = 0.0;
-                if ly + line_h - st.scroll.y > vis.y {
-                    st.scroll.y = ly + line_h - vis.y;
+                if wheel != 0.0 {
+                    st.scroll.y = (st.scroll.y + wheel).clamp(0.0, max_sy);
+                    st.last_scroll = Some(now);
+                } else if caret_moved {
+                    let before = st.scroll.y;
+                    if ly + line_h - st.scroll.y > vis.y {
+                        st.scroll.y = ly + line_h - vis.y;
+                    }
+                    if ly - st.scroll.y < 0.0 {
+                        st.scroll.y = ly;
+                    }
+                    if (st.scroll.y - before).abs() > 0.5 {
+                        st.last_scroll = Some(now);
+                    }
                 }
-                if ly - st.scroll.y < 0.0 {
-                    st.scroll.y = ly;
-                }
-                st.scroll.y = st.scroll.y.clamp(0.0, (g.height - vis.y).max(0.0));
+                st.scroll.y = st.scroll.y.clamp(0.0, max_sy);
             } else if g.width <= vis.x - 2.0 {
                 st.scroll.x = 0.0;
             } else {
@@ -477,7 +519,7 @@ impl Ui {
                 st.scroll.x = st.scroll.x.clamp(0.0, (g.width - vis.x + 2.0).max(0.0));
             }
             let r = st.edit.selection();
-            (to_d(value, st.edit.cursor), to_d(value, r.start)..to_d(value, r.end))
+            (to_d(value, st.edit.cursor), to_d(value, r.start)..to_d(value, r.end), st.last_scroll)
         };
         let scroll = self.mem::<InlineState>(id).scroll;
         let ph = (value.is_empty() && !o.placeholder.is_empty()).then(|| self.galley(&o.placeholder, &style));
@@ -485,6 +527,7 @@ impl Ui {
         let ph_c = if o.disabled { self.color(Token::TextDisabled) } else { self.color(Token::TextMuted) };
         let sel_c = self.color(Token::Selection);
         let caret_c = self.color(Token::FocusRing);
+        let thumb_c = self.color(Token::BorderStrong);
         let focused = ix.focused;
         let height = if o.multiline {
             let rows = (g.height / line_h).round().clamp(o.rows.0 as f32, o.rows.1 as f32);
@@ -501,11 +544,18 @@ impl Ui {
         } else {
             height
         };
+        let since_scroll = last_scroll.map(|t| (now - t) as f32).unwrap_or(99.0);
+        let show_bar = max_sy > 0.5 && (since_scroll < 1.0 || ix.hovered);
+        let bar_a = self.fade(id, 31, show_bar, 0.06, 0.35, Ease::Linear);
+        if max_sy > 0.5 && since_scroll < 1.0 {
+            self.request_repaint_after((1.0 - since_scroll) as f64);
+        }
+        let leaf_sense = Sense { click: true, drag: true, focusable: true, scroll: o.multiline && max_sy > 0.5 };
         self.leaf(
             Style { width: o.width, min: vec2(min_w, 0.0), height: Size::Fixed(height), ..Default::default() },
             vec2(pref_w, height),
             Some(id),
-            sense,
+            leaf_sense,
             if o.disabled { CursorIcon::Default } else { CursorIcon::Text },
             Some(Box::new(move |cx, r| {
                 let origin = vec2(r.min.x - scroll.x, cx.painter.snap(r.min.y - scroll.y));
@@ -538,6 +588,12 @@ impl Ui {
                     let x = cx.painter.snap(origin.x + x - 1.0);
                     let cr = Rect::from_xywh(x, origin.y + l.top + 2.0, 2.0, l.height.max(line_h) - 4.0);
                     cx.painter.rrect_unsnapped(cr, Corners::all(1.0), [caret_c.multiply_alpha(caret_a); 2], 0.0, Color::TRANSPARENT);
+                }
+                if bar_a > 0.0 && max_sy > 0.5 {
+                    let th = (r.height() / g.height.max(1.0) * r.height()).clamp(18.0, r.height());
+                    let ty = r.min.y + (scroll.y / max_sy).clamp(0.0, 1.0) * (r.height() - th);
+                    let tr = Rect::from_xywh(r.max.x - 3.0, ty, 3.0, th);
+                    cx.painter.rrect_unsnapped(tr, Corners::all(1.5), [thumb_c.multiply_alpha(bar_a); 2], 0.0, Color::TRANSPARENT);
                 }
                 cx.painter.pop_clip();
             })),

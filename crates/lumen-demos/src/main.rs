@@ -16,6 +16,12 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("radio", "Radio"),
     ("slider", "Slider"),
     ("text-input", "Text input"),
+    ("text-area", "Text area"),
+    ("number-field", "Number field"),
+    ("tag-input", "Tag input"),
+    ("otp-input", "One-time code"),
+    ("password-input", "Password input"),
+    ("search-field", "Search field"),
     ("select", "Select"),
     ("segmented", "Segmented control"),
     ("tabs", "Tabs"),
@@ -107,6 +113,15 @@ struct State {
     pinned: bool,
     revoked: bool,
     hover_shot: bool,
+    release_notes: String,
+    timeout_ms: f64,
+    mem_gb: f64,
+    budget_usd: f64,
+    tags: Vec<String>,
+    otp_code: String,
+    new_pw: String,
+    confirm_pw: String,
+    deploy_query: String,
 }
 
 impl State {
@@ -149,6 +164,15 @@ impl State {
             pinned: true,
             revoked: false,
             hover_shot: false,
+            release_notes: "Added zero-copy glyph uploads and spring-driven sheet drawers.\nReduced idle frame wakeups to zero across all four looks.".into(),
+            timeout_ms: 2500.0,
+            mem_gb: 8.0,
+            budget_usd: 240.0,
+            tags: vec!["rust".into(), "wgpu".into(), "wasm".into(), "arm64".into(), "metal".into(), "linux".into()],
+            otp_code: "482".into(),
+            new_pw: "Northwind42".into(),
+            confirm_pw: String::new(),
+            deploy_query: String::new(),
         }
     }
 }
@@ -277,6 +301,122 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 let err = (!s.email.is_empty() && !s.email.contains('@')).then_some("Enter a valid email address.");
                 ui.text_input(&mut s.email).label("Email").icon("mail").placeholder("you@example.com").error(err).helper("We never share it.").fill_width();
                 ui.text_input(&mut s.search).icon("search").placeholder("Search…").fill_width();
+            });
+        }
+        "text-area" => {
+            ui.column().gap(12).fill_width().max_width(420.0).show(|ui| {
+                ui.text_area(&mut s.release_notes)
+                    .label("Release notes")
+                    .placeholder("Summarize what shipped in this tag…")
+                    .rows(3, 6)
+                    .max_chars(240)
+                    .helper("Shown on the public changelog.")
+                    .fill_width();
+                ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                    ui.spacer();
+                    if ui.button("Clear").ghost().small().disabled(s.release_notes.is_empty()).clicked() {
+                        s.release_notes.clear();
+                    }
+                    if ui.button("Publish notes").primary().small().disabled(s.release_notes.trim().is_empty()).clicked() {
+                        ui.toast(Toast::new("Release notes published").success());
+                    }
+                });
+            });
+        }
+        "number-field" => {
+            ui.column().gap(14).fill_width().max_width(420.0).show(|ui| {
+                ui.row().fill_width().gap(12).show(|ui| {
+                    ui.number_field(&mut s.timeout_ms).label("Timeout").range(100.0..=30000.0).step(50.0).suffix("ms").fill_width();
+                    ui.number_field(&mut s.mem_gb).label("Memory").range(0.5..=64.0).step(0.5).decimals(1).suffix("GB").fill_width();
+                });
+                ui.number_field(&mut s.budget_usd)
+                    .label("Monthly spend cap")
+                    .range(0.0..=5000.0)
+                    .step(10.0)
+                    .prefix("$")
+                    .helper("Drag any label or handle left/right to scrub · Shift 10× · Alt 0.1×")
+                    .fill_width();
+            });
+        }
+        "tag-input" => {
+            ui.column().gap(12).fill_width().max_width(400.0).show(|ui| {
+                ui.tag_input(&mut s.tags)
+                    .label("Runner labels")
+                    .placeholder("Add label…")
+                    .lowercase(true)
+                    .max_tags(8)
+                    .helper("Press Enter or comma to add · Backspace twice removes the last tag.")
+                    .fill_width();
+            });
+        }
+        "otp-input" => {
+            ui.column().gap(12).align(Align::Center).show(|ui| {
+                ui.column().gap(2).align(Align::Center).show(|ui| {
+                    ui.label("Verify hardware key").strong();
+                    ui.label("Enter the 6-digit code from your authenticator.").small().secondary();
+                });
+                let bad = (s.otp_code == "000000").then_some("Invalid verification code. Try any other 6 digits.");
+                if ui.otp_input("2fa", &mut s.otp_code).error(bad).completed() && s.otp_code != "000000" {
+                    ui.toast(Toast::new("Session verified").success());
+                }
+                if s.otp_code.len() == 6 && s.otp_code != "000000" {
+                    ui.badge("Verified", Tone::Success);
+                } else {
+                    ui.label("Tip: paste “482-913” to fill every cell at once.").small().muted();
+                }
+            });
+        }
+        "password-input" => {
+            ui.column().gap(14).fill_width().max_width(380.0).show(|ui| {
+                ui.password_input(&mut s.new_pw)
+                    .label("Master password")
+                    .icon("lock")
+                    .placeholder("Create a strong passphrase")
+                    .strength(true)
+                    .copyable(true)
+                    .fill_width();
+                let mismatch = (!s.confirm_pw.is_empty() && s.confirm_pw != s.new_pw).then_some("Passwords do not match.");
+                ui.password_input(&mut s.confirm_pw)
+                    .label("Confirm password")
+                    .placeholder("Re-enter master password")
+                    .error(mismatch)
+                    .fill_width();
+            });
+        }
+        "search-field" => {
+            const DEPLOYS: [(&str, &str, Tone); 5] = [
+                ("v2.4.1 · Frankfurt", "2m ago", Tone::Success),
+                ("v2.4.0 · Virginia", "1h ago", Tone::Success),
+                ("v2.4.0-rc2 · Tokyo", "4h ago", Tone::Info),
+                ("canary-882 · Sydney", "6h ago", Tone::Warning),
+                ("v2.3.9 · London", "Yesterday", Tone::Neutral),
+            ];
+            let q = s.deploy_query.trim().to_lowercase();
+            let hits: Vec<_> = DEPLOYS.iter().copied().filter(|(name, _, _)| q.is_empty() || name.to_lowercase().contains(&q)).collect();
+            ui.column().gap(10).fill_width().max_width(400.0).show(|ui| {
+                ui.search_field(&mut s.deploy_query)
+                    .placeholder("Filter deployments…")
+                    .shortcut("/")
+                    .focus_key('/')
+                    .results(Some(hits.len()))
+                    .fill_width();
+                ui.card().pad(6.0).show(|ui| {
+                    if hits.is_empty() {
+                        ui.row().fill_width().pad(10.0).justify(Justify::Center).show(|ui| {
+                            ui.label(format!("No deployments matching “{}”.", s.deploy_query.trim())).small().muted();
+                        });
+                    } else {
+                        ui.column().fill_width().gap(2).show(|ui| {
+                            for (name, when, tone) in hits.into_iter().take(3) {
+                                ui.row().fill_width().pad(Sides::xy(10.0, 6.0)).gap(10).align(Align::Center).show(|ui| {
+                                    ui.status(name, tone);
+                                    ui.spacer();
+                                    ui.label(when).small().muted();
+                                });
+                            }
+                        });
+                    }
+                });
             });
         }
         "select" => {
@@ -929,6 +1069,7 @@ fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
     match demo {
         "combobox" => vec![k(lumen::Key::Tab), Type("an".into()), Wait(0.6)],
         "multi-select" => vec![k(lumen::Key::Tab), k(lumen::Key::ArrowDown), k(lumen::Key::ArrowDown), Wait(0.6)],
+        "otp-input" => vec![k(lumen::Key::Tab), Wait(0.4)],
         _ => vec![],
     }
 }

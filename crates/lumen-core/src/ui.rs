@@ -777,10 +777,13 @@ impl Ui {
         self.frame += 1;
         self.text_focused_prev = self.wants_text_input;
 
-        let cursor = self
-            .pointer
-            .and_then(|p| self.prev_hits.iter().rev().find(|h| h.rect.contains(p) && (h.sense.click || h.sense.drag)))
-            .map(|h| h.cursor)
+        let active_cursor = self.active.and_then(|a| self.prev_hits.iter().rev().find(|h| h.id == a && h.sense.drag).map(|h| h.cursor));
+        let cursor = active_cursor
+            .or_else(|| {
+                self.pointer
+                    .and_then(|p| self.prev_hits.iter().rev().find(|h| h.rect.contains(p) && (h.sense.click || h.sense.drag)))
+                    .map(|h| h.cursor)
+            })
             .unwrap_or_default();
         let cursor = match (self.active, cursor) {
             (Some(_), CursorIcon::Grab) => CursorIcon::Grabbing,
@@ -983,7 +986,7 @@ impl Ui {
     }
 
     /// Scroll delta for the scroll area `id` (if the pointer is over it).
-    fn take_scroll(&mut self, id: Id) -> Vec2 {
+    pub(crate) fn take_scroll(&mut self, id: Id) -> Vec2 {
         if self.scroll_target == Some(id) {
             std::mem::take(&mut self.scroll_delta)
         } else {

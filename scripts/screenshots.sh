@@ -35,7 +35,7 @@ shot c-looks looks 960x440 --scale 1.5
 wait
 for d in $("$D" --list | cut -f1); do
   case "$d" in bento|hero|vault|looks) continue ;; esac
-  case "$d" in menu|dialog|popover|date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover) extra=--open ;; *) extra= ;; esac
+  case "$d" in menu|dialog|popover|date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover|otp-input) extra=--open ;; *) extra= ;; esac
   case "$d" in date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover) sz=736x460 ;; *) sz=560x350 ;; esac
   shot "c-$d" "$d" "$sz" --embed --scale 2 $extra
   wait

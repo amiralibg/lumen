@@ -409,3 +409,192 @@ fn confirm_popover_cancels_on_escape_and_confirms_via_keyboard() {
     h.idle(2);
     assert_eq!(h.s.confirmed, 1);
 }
+
+// ------------------------------------------------------------------ Inputs
+
+#[derive(Default)]
+struct AreaState {
+    text: String,
+    rect: Rect,
+}
+
+fn area_view(ui: &mut Ui, s: &mut AreaState) {
+    ui.column().pad(24).show(|ui| {
+        s.rect = ui.text_area(&mut s.text).label("Notes").rows(2, 5).max_chars(24).width(280.0).show().rect;
+    });
+}
+
+#[test]
+fn text_area_inserts_newlines_grows_and_caps_max_chars() {
+    let mut h = Harness::new(AreaState::default(), area_view);
+    let initial_h = h.s.rect.height();
+    h.frame(key(Key::Tab));
+    h.frame(vec![Event::Text("line1".into())]);
+    h.frame(key(Key::Enter));
+    h.frame(vec![Event::Text("line2".into())]);
+    h.frame(key(Key::Enter));
+    h.frame(vec![Event::Text("line3".into())]);
+    h.idle(30);
+    assert!(h.s.text.contains('\n'));
+    assert!(h.s.rect.height() > initial_h, "height grew from {initial_h} to {}", h.s.rect.height());
+
+    // Cap at 24 characters.
+    h.frame(vec![Event::Text("01234567890123456789".into())]);
+    assert_eq!(h.s.text.chars().count(), 24);
+}
+
+struct NumState {
+    val: f64,
+    rect: Rect,
+}
+
+fn num_view(ui: &mut Ui, s: &mut NumState) {
+    ui.column().pad(24).show(|ui| {
+        s.rect = ui.number_field(&mut s.val).label("Timeout").range(0.0..=1000.0).step(10.0).suffix("ms").show().rect;
+        ui.button("After");
+    });
+}
+
+#[test]
+fn number_field_scrubs_steps_and_parses_inline_text() {
+    let mut h = Harness::new(NumState { val: 100.0, rect: Rect::ZERO }, num_view);
+    // Drag horizontally on the left scrub handle (20px = 5 steps * 10 = +50 -> 150).
+    let scrub_p = vec2(h.s.rect.min.x + 14.0, h.s.rect.center().y);
+    h.frame(vec![Event::PointerMoved(scrub_p), press(scrub_p)]);
+    h.frame(vec![Event::PointerMoved(vec2(scrub_p.x + 20.0, scrub_p.y))]);
+    h.frame(vec![release(vec2(scrub_p.x + 20.0, scrub_p.y))]);
+    h.idle(1);
+    assert_eq!(h.s.val, 150.0, "horizontal scrub updated value");
+
+    // Focus via Tab: text is selected, ArrowUp steps +10 -> 160.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowUp));
+    assert_eq!(h.s.val, 160.0);
+
+    // Select all, type "2050" (clamped to 1000) and press Enter.
+    let cmd_a = Modifiers { logo: true, mac: true, ..Default::default() };
+    h.frame(vec![Event::Key { key: Key::Char('a'), pressed: true, repeat: false, modifiers: cmd_a }]);
+    h.frame(vec![Event::Text("2050".into())]);
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.val, 1000.0);
+}
+
+#[derive(Default)]
+struct TagState {
+    tags: Vec<String>,
+}
+
+fn tag_view(ui: &mut Ui, s: &mut TagState) {
+    ui.column().pad(24).show(|ui| {
+        ui.tag_input(&mut s.tags).label("Tags").lowercase(true).max_tags(4).width(300.0);
+    });
+}
+
+#[test]
+fn tag_input_commits_on_enter_and_comma_and_deduplicates() {
+    let mut h = Harness::new(TagState::default(), tag_view);
+    h.frame(key(Key::Tab));
+    // Comma-separated burst commits first two and leaves empty draft.
+    h.frame(vec![Event::Text("Rust, WGPU,".into())]);
+    h.idle(1);
+    assert_eq!(h.s.tags, vec!["rust", "wgpu"]);
+
+    // Duplicate "RUST" + Enter is ignored; new "wasm" + Enter is added.
+    h.frame(vec![Event::Text("RUST".into())]);
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.tags, vec!["rust", "wgpu"]);
+    h.frame(vec![Event::Text("wasm".into())]);
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.tags, vec!["rust", "wgpu", "wasm"]);
+
+    // Two Backspaces on empty draft remove "wasm".
+    h.frame(key(Key::Backspace));
+    h.frame(key(Key::Backspace));
+    assert_eq!(h.s.tags, vec!["rust", "wgpu"]);
+}
+
+#[derive(Default)]
+struct OtpState {
+    code: String,
+    done: u32,
+}
+
+fn otp_view(ui: &mut Ui, s: &mut OtpState) {
+    ui.column().pad(24).show(|ui| {
+        if ui.otp_input("2fa", &mut s.code).completed() {
+            s.done += 1;
+        }
+    });
+}
+
+#[test]
+fn otp_input_auto_advances_pastes_with_hyphens_and_backspaces() {
+    let mut h = Harness::new(OtpState::default(), otp_view);
+    h.frame(key(Key::Tab));
+    // Paste with hyphen fills all 6 cells and triggers completed().
+    h.frame(vec![Event::Paste("482-913".into())]);
+    assert_eq!(h.s.code, "482913");
+    assert_eq!(h.s.done, 1);
+
+    // Backspace clears the last digit; typing '7' completes again.
+    h.frame(key(Key::Backspace));
+    assert_eq!(h.s.code, "48291");
+    h.frame(vec![Event::Text("7".into())]);
+    assert_eq!(h.s.code, "482917");
+    assert_eq!(h.s.done, 2);
+}
+
+#[derive(Default)]
+struct PwState {
+    pw: String,
+}
+
+fn pw_view(ui: &mut Ui, s: &mut PwState) {
+    ui.column().pad(24).show(|ui| {
+        ui.password_input(&mut s.pw).label("Password").strength(true).copyable(true);
+    });
+}
+
+#[test]
+fn password_strength_scores_and_reveal_toggle_works() {
+    assert_eq!(password_strength(""), 0);
+    assert_eq!(password_strength("password123"), 1);
+    assert_eq!(password_strength("abcdefghij"), 2);
+    assert_eq!(password_strength("Abcdefgh12"), 3);
+    assert_eq!(password_strength("Correct-Horse9!"), 4);
+
+    let mut h = Harness::new(PwState::default(), pw_view);
+    h.frame(key(Key::Tab));
+    h.frame(vec![Event::Text("S3cret-Phrase!".into())]);
+    assert_eq!(h.s.pw, "S3cret-Phrase!");
+    // While masked, Cmd+C must not copy the password.
+    let cmd_c = Modifiers { logo: true, mac: true, ..Default::default() };
+    let out = h.frame(vec![Event::Key { key: Key::Char('c'), pressed: true, repeat: false, modifiers: cmd_c }]);
+    assert_eq!(out.copied_text, None);
+}
+
+#[derive(Default)]
+struct SearchState {
+    q: String,
+}
+
+fn search_view(ui: &mut Ui, s: &mut SearchState) {
+    ui.column().pad(24).show(|ui| {
+        ui.search_field(&mut s.q).shortcut("/").focus_key('/');
+    });
+}
+
+#[test]
+fn search_field_focuses_on_slash_and_clears_on_escape() {
+    let mut h = Harness::new(SearchState::default(), search_view);
+    // Pressing '/' outside text inputs focuses the search field.
+    h.frame(key(Key::Char('/')));
+    h.idle(1);
+    h.frame(vec![Event::Text("canary".into())]);
+    assert_eq!(h.s.q, "canary");
+    // First Escape clears the query while keeping focus; typing works right away.
+    h.frame(key(Key::Escape));
+    assert_eq!(h.s.q, "");
+    h.frame(vec![Event::Text("prod".into())]);
+    assert_eq!(h.s.q, "prod");
+}

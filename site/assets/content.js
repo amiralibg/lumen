@@ -53,6 +53,104 @@ ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");`,
     keys: [["⌘/Ctrl + A, C, X, V, Z", "Select all, copy, cut, paste, undo"], ["Alt/Ctrl + ← →", "Jump by word"], ["Double / triple click", "Select word / all"]],
   },
   {
+    slug: "text-area", name: "Text area", group: "Inputs", demo: "text-area",
+    summary: "Multi-line field that springs in height between min and max rows, scrolls with an overlay thumb when full, and optionally tracks a character limit.",
+    code: `ui.text_area(&mut s.notes)
+    .label("Release notes")
+    .placeholder("Summarize what shipped…")
+    .rows(3, 6)
+    .max_chars(240)
+    .helper("Shown on the public changelog.")
+    .fill_width();`,
+    options: [
+      [".rows(min, max)", "Visible line bounds before scrolling (default 3..=8); height animates on the smooth spring."],
+      [".max_chars(n)", "Caps input and shows a live n / max counter that turns warning and danger near the limit."],
+      [".label(t) .placeholder(t) .helper(t) .error(Option<&str>)", ""],
+      [".mono() .disabled(b) .width(px) .fill_width()", ""],
+    ],
+    keys: [["Enter", "Insert a newline"], ["↑ ↓", "Move across wrapped lines while keeping the column"], ["⌘/Ctrl + A, C, X, V, Z", "Select all, copy, cut, paste, undo"]],
+  },
+  {
+    slug: "number-field", name: "Number field", group: "Inputs", demo: "number-field",
+    summary: "Numeric input with drag-to-scrub on the handle or label, inline text editing, prefix and suffix units, and − / + steppers.",
+    code: `ui.number_field(&mut s.timeout_ms)
+    .label("Timeout")
+    .range(100.0..=30000.0)
+    .step(50.0)
+    .suffix("ms");
+ui.number_field(&mut s.cap).label("Spend cap").prefix("$").step(10.0);`,
+    options: [
+      [".range(min..=max) .step(s) .decimals(n)", "Bounds, increment and resting precision."],
+      [".prefix(t) .suffix(t) .icon(name)", "Units and leading scrub-handle badge."],
+      [".scrub_pixels(px) .controls(bool)", "Pixels per step while dragging (default 4.0) and trailing − / + buttons."],
+      [".label(t) .helper(t) .error(Option<&str>) .width(px) .fill_width() .disabled(b)", ""],
+    ],
+    keys: [["Drag handle or label", "Scrub value (Shift 10×, Alt 0.1×)"], ["Click value", "Select all and edit as text"], ["↑ ↓ (Shift 10×)", "Step up or down"], ["Enter / Escape", "Commit typed number / revert"]],
+  },
+  {
+    slug: "tag-input", name: "Tag input", group: "Inputs", demo: "tag-input",
+    summary: "Free-form tags inside a wrapping field whose height springs open as chips flow onto new lines. Enter or comma commits; duplicate tags bounce.",
+    code: `ui.tag_input(&mut s.tags)
+    .label("Runner labels")
+    .lowercase(true)
+    .max_tags(8)
+    .helper("Press Enter or comma to add.")
+    .fill_width();`,
+    options: [
+      [".max_tags(n) .lowercase(bool)", "Cap total tags (with live counter) and normalize casing."],
+      [".label(t) .placeholder(t) .helper(t) .error(Option<&str>)", ""],
+      [".width(px) .fill_width() .disabled(b)", ""],
+    ],
+    keys: [["Enter / ,", "Commit current text (or pasted comma-separated list) as tags"], ["Backspace (twice on empty)", "Arm, then remove the last tag"], ["Escape", "Clear uncommitted draft"]],
+  },
+  {
+    slug: "otp-input", name: "One-time code", group: "Inputs", demo: "otp-input",
+    summary: "Individual verification-code cells in a single Tab stop: typing auto-advances with a bouncy pop, and pasting fills the entire code at once.",
+    code: `if ui.otp_input("2fa", &mut s.code).completed() {
+    verify(&s.code);
+}`,
+    options: [
+      [".digits(n) .group(n)", "Cell count (3..=8, default 6) and separator dash interval (default 3)."],
+      [".alphanumeric() .masked(bool)", "Allow A–Z codes or mask digits as bullets for PINs."],
+      [".completed()", "True on the frame the final slot is filled."],
+      [".label(t) .helper(t) .error(Option<&str>) .disabled(b)", ""],
+    ],
+    keys: [["0–9 (or A–Z)", "Fill active cell and advance"], ["⌘/Ctrl + V", "Paste full code (ignores spaces and hyphens)"], ["Backspace / Delete", "Clear cell and step back"], ["← → Home End", "Move between cells"]],
+  },
+  {
+    slug: "password-input", name: "Password input", group: "Inputs", demo: "password-input",
+    summary: "Masked password field with a reveal toggle, optional copy button, and a four-segment strength meter that morphs in OKLab from weak to strong.",
+    code: `ui.password_input(&mut s.password)
+    .label("Master password")
+    .icon("lock")
+    .strength(true)
+    .copyable(true)
+    .fill_width();`,
+    options: [
+      [".strength(bool)", "Animated four-bar meter plus grade and actionable hint."],
+      [".copyable(bool) .icon(name)", "Trailing clipboard button with confirmation check."],
+      ["lumen::password_strength(pw)", "Returns the 0..=4 strength score directly."],
+      [".label(t) .placeholder(t) .helper(t) .error(Option<&str>) .fill_width()", ""],
+    ],
+    keys: [["Tab to eye button + Space/Enter", "Reveal or mask password"], ["⌘/Ctrl + A, V, Z", "Select all, paste, undo (copy is blocked while masked)"]],
+  },
+  {
+    slug: "search-field", name: "Search field", group: "Inputs", demo: "search-field",
+    summary: "Filter and search input with an accent-tinted magnifier, inline loading spinner, shortcut hint chip, match counter and spring-in clear button.",
+    code: `ui.search_field(&mut s.query)
+    .placeholder("Filter deployments…")
+    .shortcut("/")
+    .focus_key('/')
+    .results(Some(matches.len()))
+    .fill_width();`,
+    options: [
+      [".shortcut(t) .focus_key(ch) .cmd_key(ch)", "Keycap hint when idle, plus plain-key or ⌘/Ctrl shortcut focus."],
+      [".loading(bool) .results(Option<usize>)", "Swap icon for a spinner while fetching; show live match count."],
+      [".label(t) .placeholder(t) .width(px) .fill_width() .disabled(b)", ""],
+    ],
+    keys: [["/ or ⌘F", "Focus and select query (when configured)"], ["Escape", "Clear query first; press again to blur"]],
+  },
+  {
     slug: "select", name: "Select", group: "Inputs", demo: "select",
     summary: "A dropdown that picks one value from a list, in a popover matched to the field's width.",
     code: `ui.select(&mut s.region, &[
