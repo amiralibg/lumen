@@ -22,7 +22,6 @@ pub struct EditState {
     dragging: bool,
 }
 
-#[must_use = "text inputs are added when dropped or shown"]
 pub struct TextInput<'u> {
     ui: &'u mut Ui,
     value: &'u mut String,
@@ -223,8 +222,8 @@ impl<'u> TextInput<'u> {
         let since = (now - ui.mem::<EditState>(id).last_activity) as f32;
         let caret_a = if !ix.focused || self.disabled {
             0.0
-        } else if since < 0.5 || ui.reduced_motion() {
-            if !ui.reduced_motion() {
+        } else if since < 0.5 || ui.reduced_motion() || !ui.caret_blink {
+            if !ui.reduced_motion() && ui.caret_blink {
                 ui.request_repaint_after((0.5 - since) as f64);
             }
             1.0
@@ -335,17 +334,24 @@ impl<'u> TextInput<'u> {
         if let Some(e) = &self.error {
             ui.mem::<EditState>(id).last_error = e.clone();
         }
-        let reveal = ui.anims.spring_from(id, 5, if has_error { 0.0 } else { 0.0 }, if has_error { 22.0 } else { 0.0 }, if has_error { springs::SMOOTH } else { springs::SNAPPY });
+        // Height of the message (6 gap + wrapped text), measured at the
+        // field's previous width so the reveal animates to the right size.
+        let msg = ui.mem::<EditState>(id).last_error.clone();
+        let mut msg_style = TextRole::Label.style();
+        msg_style.weight = 400;
+        let wrap_w = (field_w_prev - 20.0).max(100.0);
+        let msg_h = 6.0 + ui.text.layout(&msg, &msg_style, Some(wrap_w), TextAlign::Start).height;
+        let reveal = ui.anims.spring_from(id, 5, 0.0, if has_error { 1.0 } else { 0.0 }, if has_error { springs::SMOOTH } else { springs::SNAPPY });
         let err_a = ui.fade(id, 6, has_error, 0.12, 0.10, Ease::Linear);
-        if reveal > 0.01 || err_a > 0.0 {
-            let msg = ui.mem::<EditState>(id).last_error.clone();
+        if reveal > 0.001 || err_a > 0.0 {
             let dc = ui.color(Token::DangerStrong).multiply_alpha(err_a);
-            ui.begin(Style { width: Size::FILL, height: Size::Fixed(reveal), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, true, None);
-            ui.begin(Style { dir: Dir::Row, gap: 6.0, align: Align::Center, pad: crate::math::Sides { top: 6.0, ..Default::default() }, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            ui.begin(Style { width: Size::FILL, height: Size::Fixed((reveal * msg_h).max(0.0)), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, true, None);
+            ui.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Start, pad: crate::math::Sides { top: 6.0, ..Default::default() }, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            // 14px icon centered on the first 16px line.
+            ui.begin(Style { pad: crate::math::Sides { top: 1.0, ..Default::default() }, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
             ui.icon_leaf("circle-alert", 14.0, dc);
-            let mut st = TextRole::Label.style();
-            st.weight = 400;
-            ui.text_leaf(msg, st, dc, true, false, Style::default());
+            ui.end();
+            ui.text_leaf(msg, msg_style, dc, true, false, Style { width: Size::FILL, ..Default::default() });
             ui.end();
             ui.end();
         } else if let Some(hp) = self.helper.take() {

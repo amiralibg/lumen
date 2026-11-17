@@ -9,7 +9,6 @@ use crate::Color;
 
 use super::{key_activate, show_on_drop};
 
-#[must_use = "switches are added when dropped or shown"]
 pub struct Switch<'u> {
     ui: &'u mut Ui,
     label: String,

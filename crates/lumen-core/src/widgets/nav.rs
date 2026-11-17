@@ -95,7 +95,6 @@ impl Sidebar<'_> {
 }
 
 /// A sidebar item; `.clicked()` when chosen.
-#[must_use = "nav items are added when dropped or shown"]
 pub struct NavItem<'u> {
     ui: &'u mut Ui,
     icon: String,

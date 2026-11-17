@@ -20,7 +20,6 @@ struct DragState {
     tracking: bool,
 }
 
-#[must_use = "sliders are added when dropped or shown"]
 pub struct Slider<'u> {
     ui: &'u mut Ui,
     label: String,

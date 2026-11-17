@@ -249,10 +249,15 @@ pub struct FrameOutput {
     pub copied_text: Option<String>,
     /// Text input is focused (show the IME / virtual keyboard).
     pub wants_text_input: bool,
+    /// Springs, fades or the theme blend are still moving (as opposed to a
+    /// timer such as a tooltip delay or caret blink).
+    pub animating: bool,
 }
 
 /// The UI context. Persistent across frames.
 pub struct Ui {
+    /// Blink the text caret (on by default; screenshots turn it off).
+    pub caret_blink: bool,
     pub text: TextSystem,
     pub theme: Theme,
     pub anims: AnimStore,
@@ -323,6 +328,7 @@ impl Default for Ui {
 impl Ui {
     pub fn new() -> Self {
         Ui {
+            caret_blink: true,
             text: TextSystem::new(),
             theme: Theme::new(Mode::Light, Accent::Violet),
             anims: AnimStore::new(),
@@ -657,12 +663,13 @@ impl Ui {
         };
 
         let mut repaint = self.repaint_at.map(|t| (t - self.time).max(0.0));
-        if self.anims.is_active() || self.theme.is_animating() {
+        let animating = self.anims.is_active() || self.theme.is_animating();
+        if animating {
             repaint = Some(0.0);
         }
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
-        FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input }
+        FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input, animating }
     }
 
     /// Run one frame with a closure (convenience for tests and apps).

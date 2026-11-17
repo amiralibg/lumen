@@ -18,7 +18,6 @@ pub enum Variant {
     Danger,
 }
 
-#[must_use = "buttons are added when dropped or shown"]
 pub struct Button<'u> {
     ui: &'u mut Ui,
     label: String,

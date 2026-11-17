@@ -7,7 +7,6 @@ use crate::ui::{Response, Ui};
 use super::show_on_drop;
 
 /// A run of text with a type role. Wraps at the available width.
-#[must_use = "labels are added when dropped or shown"]
 pub struct Label<'u> {
     ui: &'u mut Ui,
     text: String,
@@ -83,7 +82,6 @@ impl<'u> Label<'u> {
 show_on_drop!(Label);
 
 /// A heading. Levels 1-4 plus display (spec section 2).
-#[must_use = "headings are added when dropped or shown"]
 pub struct Heading<'u> {
     ui: &'u mut Ui,
     text: String,

@@ -10,7 +10,6 @@ use crate::Color;
 
 use super::{blend3, key_activate, neutral_layers, show_on_drop};
 
-#[must_use = "checkboxes are added when dropped or shown"]
 pub struct Checkbox<'u> {
     ui: &'u mut Ui,
     label: String,

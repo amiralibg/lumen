@@ -1065,6 +1065,7 @@ dependencies = [
  "bytemuck",
  "log",
  "lumen-core",
+ "pollster",
  "wgpu",
 ]
 

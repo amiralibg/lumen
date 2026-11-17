@@ -337,3 +337,15 @@ fn theme_switch_animates_then_settles() {
     assert_eq!(out.draw.clear.to_hex(), 0x0B0C0F);
     assert_eq!(out.repaint_after, None);
 }
+
+#[test]
+fn focused_input_draws_caret() {
+    let mut h = Harness::new(Txt { s: "Mara".into(), ..Default::default() }, text_view);
+    let r = h.s.rect;
+    h.click(vec2(r.max.x - 20.0, r.center().y));
+    h.frame(vec![Event::Text("x".into())]);
+    let out = h.frame(vec![]);
+    let caret = h.ui.color(Token::FocusRing).to_u8();
+    let found = out.draw.vertices.iter().any(|v| v.mode == lumen_core::paint::mode::RRECT && v.color == caret && (v.half[0] - 1.0).abs() < 0.01 && (v.half[1] - 8.0).abs() < 0.01);
+    assert!(found, "caret quad present");
+}
