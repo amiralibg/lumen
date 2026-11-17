@@ -1,6 +1,6 @@
 # Component roadmap
 
-lumen ships 28 components today. CUI lists about 173 index entries ("about 210" components) in 17 groups. This file lists what we are missing, grouped and ordered by what a real app needs first. Every new widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors from tokens.
+lumen now ships **90 live components across 15 groups** (up from 28), covering Batch 2, Batch 3, Batch 4, and the core Batch 5 AI, DevTools, Motion, and Native Window Chrome sets. Every widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors strictly from `Token::*`, closed-form springs, reduced-motion fallbacks, and zero idle wakeups at rest.
 
 ## Design bar for every widget
 

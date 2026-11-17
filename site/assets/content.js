@@ -11,8 +11,11 @@ export const GROUPS = [
   "Feedback",
   "Data",
   "Planning",
+  "AI",
+  "Developer tools",
   "Dates",
   "Charts",
+  "Motion",
   "Layout and surfaces",
 ];
 
@@ -1066,6 +1069,134 @@ ui.kanban("sprint", &cols, &mut s.cards);`,
     ],
     keys: [["Tab", "Focus card"], ["← →", "Move focused card to previous or next column"]],
   },
+  {
+    slug: "ai-reasoning", name: "AI reasoning and tools", group: "AI", demo: "ai-reasoning",
+    summary: "Collapsible chain-of-thought trace with an accent rail and structured tool-call status rows.",
+    code: `ui.reasoning_block("cot", "Thought for 2.4s", Some("3 steps"), &mut s.open, |ui| {
+    ui.label("Checked physical pixel snapping in Painter::snap_rect.").secondary();
+    ui.tool_call("tc1", &ToolCall::new("read_file", "layout.rs:240-310", ToolStatus::Done).duration("18 ms"));
+});`,
+    options: [
+      ["ui.reasoning_block(key, summary, duration, &mut open, |ui| ..)", "Rotating chevron + left accent guide bar."],
+      ["ToolCall::new(name, args, ToolStatus)", "ToolStatus::Running, Done, or Error; .duration(text)."],
+    ],
+    keys: [["Space / Enter", "Expand or collapse reasoning trace"]],
+  },
+  {
+    slug: "ai-composer", name: "Prompt composer", group: "AI", demo: "ai-composer",
+    summary: "Multi-line auto-growing AI prompt box with removable attachment chips, model selector menu, context-window ring and Send / Stop button.",
+    code: `let out = ui.prompt_composer("composer", &mut s.prompt, &mut s.model)
+    .models(&["Claude 3.7 Sonnet", "Gemini 2.5 Pro", "o3-mini"])
+    .attachments(&mut s.files)
+    .context_used(0.34)
+    .streaming(s.streaming)
+    .show();`,
+    options: [
+      [".models(&[&str]) .attachments(&mut Vec<String>)", "Dropdown model selector and removable file chips."],
+      [".context_used(0.0..=1.0) .streaming(bool)", "Mini arc gauge and Send-to-Stop state switch."],
+      ["ComposerOut", "{ submitted, stopped, attach_clicked }"],
+    ],
+    keys: [["⌘/Ctrl + Enter", "Submit prompt"], ["Enter", "Insert newline"]],
+  },
+  {
+    slug: "ai-chat", name: "AI chat thread", group: "AI", demo: "ai-chat",
+    summary: "User and assistant conversation feed with numbered source citation pills and timestamps.",
+    code: `let msgs = [
+    ChatMessage::user("Why does lumen draw zero frames when idle?"),
+    ChatMessage::assistant("lumen", "Springs settle analytically and park the thread.")
+        .citations(&["anim.rs:84", "ui.rs:643"]),
+];
+ui.chat_thread("chat", &msgs);`,
+    options: [
+      ["ChatMessage::user(body) / ::assistant(author, body)", ".citations(&[&str]), .time(text)"],
+    ],
+    keys: [],
+  },
+  {
+    slug: "diff-viewer", name: "Diff viewer", group: "Developer tools", demo: "diff-viewer",
+    summary: "Unified diff card with file header, +added / -removed counters, hunk markers and dual old/new line numbers.",
+    code: `ui.diff_viewer("patch", "crates/lumen-core/src/ui.rs", diff_str).show();`,
+    options: [
+      ["ui.diff_viewer(key, path, unified_diff)", "Colors + and - lines with Success and Danger subtle tints."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "waterfall", name: "Trace waterfall", group: "Developer tools", demo: "waterfall",
+    summary: "Distributed trace and network span timeline with millisecond ruler ticks, nested span labels and hover timing tooltips.",
+    code: `let spans = [
+    TraceSpan::new("POST /v1/chat/completions", "edge-proxy", 0.0, 148.0, 0),
+    TraceSpan::new("verify_session_jwt", "auth-svc", 3.5, 14.2, 1),
+];
+ui.waterfall("trace", &spans);`,
+    options: [
+      ["TraceSpan::new(name, service, start_ms, duration_ms, depth)", ".error() highlights failed spans in Danger."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "uptime-bars", name: "Uptime status", group: "Developer tools", demo: "uptime-bars",
+    summary: "Service availability strip showing daily Operational, Degraded and Outage bars with overall uptime percentage and hover tooltips.",
+    code: `ui.uptime_bars("api", "Inference API · eu-central", &statuses);`,
+    options: [
+      ["UptimeStatus", "::Operational, ::Degraded, ::Outage"],
+    ],
+    keys: [],
+  },
+  {
+    slug: "rolling-number", name: "Rolling number", group: "Motion", demo: "rolling-number",
+    summary: "Per-digit vertical odometer counter where each place-value column spins smoothly to its new digit and parks at zero wakeups.",
+    code: `ui.rolling_number("mrr", s.mrr)
+    .prefix("$")
+    .suffix("USD")
+    .role(TextRole::Display)
+    .show();`,
+    options: [
+      [".prefix(t) .suffix(t) .role(TextRole)", "Automatic comma grouping and tabular digit columns."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "dock", name: "Magnifying dock", group: "Motion", demo: "dock",
+    summary: "Floating glass icon dock whose tiles magnify along a Gaussian neighbor curve on bouncy springs as the pointer glides across.",
+    code: `let items = [
+    DockItem::new("compass", "Explorer").active(true),
+    DockItem::new("terminal", "Terminal"),
+    DockItem::new("code", "Editor"),
+];
+if let Some(i) = ui.dock("app_dock", &items) {
+    open_app(i);
+}`,
+    options: [
+      ["DockItem::new(icon, label).active(bool)", "Active apps draw an accent dot beneath their tile."],
+    ],
+    keys: [["Tab + Space / Enter", "Focus and launch dock item"]],
+  },
+  {
+    slug: "waveform", name: "Audio waveform", group: "Motion", demo: "waveform",
+    summary: "Scrubbable voice and audio bar spectrum with circular play/pause button, played/unplayed split and tabular mm:ss readout.",
+    code: `ui.waveform("voice_note", &samples, &mut s.progress, &mut s.playing)
+    .title("Architecture walkthrough")
+    .duration(42.0)
+    .show();`,
+    options: [
+      [".title(text) .duration(secs)", "Click or drag across bars to scrub playback position."],
+    ],
+    keys: [["Space", "Toggle play / pause"], ["← →", "Scrub backward or forward 5%"]],
+  },
+  {
+    slug: "window-chrome", name: "Window chrome", group: "Layout and surfaces", demo: "window-chrome",
+    summary: "Native-feel window header bar that morphs between macOS traffic lights, Windows 11 caption buttons, GNOME Adwaita and Lumen.",
+    code: `ui.window_chrome("main_win", "lumen — workspace")
+    .subtitle("ethereal")
+    .show(|ui| {
+        ui.label("Window body");
+    });`,
+    options: [
+      [".subtitle(text) .show(|ui| ..)", "Follows ui.look() automatically and morphs when switching looks."],
+    ],
+    keys: [],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -1271,7 +1402,11 @@ lumen        facade</code></pre>
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-17", items: [
+  { v: "Unreleased", date: "2026-11-18", items: [
+    "90 components across 15 groups: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, syntax code block, JSON viewer, key-value editor & log console.",
+    "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, radar, scatter, conversion funnel, OHLC candlestick & Kanban board.",
+    "DevTools, motion & chrome: unified diff viewer, trace waterfall, uptime strip, rolling odometer numbers, neighbor-magnifying dock, scrubbable audio waveform & look-aware window chrome.",
+    "Inputs, pickers & overlays: combobox, multi-select, time & HSV/hex color pickers, sheet/drawer, ⌘K command palette, hover card, context menu, confirm popover, text area, scrubbable number field, tag input, OTP code, password strength, search field, alert/banner, skeleton, empty state, breadcrumb, pagination, wizard steps, radio cards, rating, dual-thumb range slider, shortcut recorder, split/hold/copy buttons, dropzone, toolbar, status bar & segmented meter.",
     "Ethereal: the Lumen look takes the site's night-sky palette, 36 px controls, 16 px glass cards with a light top edge and a pointer-following accent glow.",
     "New: filter chips, stepper, toggle group, avatar and avatar group.",
     "Motion: lines and sparklines draw themselves in and their end dot pops; select rows arrive in sequence, the check springs in, and a new value rolls into the trigger.",

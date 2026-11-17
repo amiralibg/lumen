@@ -260,3 +260,67 @@ fn kanban_moves_cards_and_all_charts_settle_to_zero_wakeups() {
     assert_eq!(h.s.cards[0].col, 1);
 }
 
+// ----------------------------------------- AI, DevTools, Motion & Chrome
+
+struct AiMotionState {
+    cot_open: bool,
+    prompt: String,
+    model: usize,
+    files: Vec<String>,
+    prog: f32,
+    playing: bool,
+    dock_clicked: Option<usize>,
+}
+
+fn ai_motion_view(ui: &mut Ui, s: &mut AiMotionState) {
+    ui.column().width(640.0).gap(10).show(|ui| {
+        ui.reasoning_block("cot", "Thought for 1.2s", Some("2 steps"), &mut s.cot_open, |ui| {
+            ui.tool_call("t1", &ToolCall::new("grep", "Token::Accent", ToolStatus::Done));
+        });
+        ui.prompt_composer("comp", &mut s.prompt, &mut s.model)
+            .attachments(&mut s.files)
+            .show();
+        ui.chat_thread("chat", &[
+            ChatMessage::user("Hi"),
+            ChatMessage::assistant("lumen", "Hello").citations(&["lib.rs:1"]),
+        ]);
+        ui.diff_viewer("dv", "src/lib.rs", "@@ -1,2 +1,2 @@\n-old\n+new").show();
+        ui.waterfall("wf", &[TraceSpan::new("GET /", "edge", 0.0, 12.0, 0)]);
+        ui.uptime_bars("up", "API", &[UptimeStatus::Operational; 14]);
+        ui.rolling_number("rn", 42_500).prefix("$").show();
+        s.dock_clicked = ui.dock("dk", &[DockItem::new("terminal", "Term").active(true), DockItem::new("code", "Code")]);
+        ui.waveform("wv", &[0.3, 0.7, 0.5, 0.9], &mut s.prog, &mut s.playing).show();
+        ui.window_chrome("wc", "lumen").show(|ui| {
+            ui.label("Inside window");
+        });
+    });
+}
+
+#[test]
+fn ai_devtools_motion_and_window_chrome_interact_and_settle_cleanly() {
+    let mut h = Harness::new(
+        AiMotionState {
+            cot_open: true,
+            prompt: "Ship Batch 5".into(),
+            model: 0,
+            files: vec!["main.rs".into()],
+            prog: 0.25,
+            playing: false,
+            dock_clicked: None,
+        },
+        ai_motion_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all Group 8 AI, devtools, motion & chrome widgets must settle to zero wakeups");
+
+    // First Tab focuses the reasoning_block header; Space collapses it!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Space));
+    assert!(!h.s.cot_open);
+
+    let settled2 = h.idle(90);
+    assert_eq!(settled2.repaint_after, None);
+}
+
+

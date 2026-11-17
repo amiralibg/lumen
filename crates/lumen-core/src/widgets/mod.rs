@@ -38,6 +38,8 @@ pub mod data;
 pub mod code_data;
 pub mod charts_extra;
 pub mod planning;
+pub mod ai_devtools;
+pub mod motion_chrome;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -69,6 +71,8 @@ pub use data::{Accordion, AccordionItem, Collapsible, SortDir, Table, TableCell,
 pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, LogLevel, LogViewer};
 pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatmap, ProgressRing, RadarChart, RingSpec, ScatterChart, ScatterPoint, ScatterSeries};
 pub use planning::{KanbanCard, KanbanCol};
+pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComposer, ToolCall, ToolStatus, TraceSpan, UptimeStatus};
+pub use motion_chrome::{DockItem, RollingNumber, Waveform, WindowChrome};
 
 use crate::color::Color;
 use crate::theme::Token;

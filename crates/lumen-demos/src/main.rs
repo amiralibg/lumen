@@ -7,9 +7,10 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    Accent, Align, BarListItem, Candle, Color, Command, Date, Justify, KanbanCard, KanbanCol, KvPair, LogEntry,
-    LogLevel, Look, Mode, Placement, Platform, RingSpec, ScatterPoint, ScatterSeries, Series, Sides, SortDir,
-    TableCell, TableCol, Time, TimelineItem, Toast, Tone, TreeNode, Ui,
+    Accent, Align, BarListItem, Candle, ChatMessage, Color, Command, Date, DockItem, Justify, KanbanCard, KanbanCol,
+    KvPair, LogEntry, LogLevel, Look, Mode, Placement, Platform, RingSpec, ScatterPoint, ScatterSeries, Series, Sides,
+    SortDir, TableCell, TableCol, TextRole, Time, TimelineItem, Toast, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode,
+    Ui, UptimeStatus,
 };
 
 /// Every demo: url name, title.
@@ -93,6 +94,16 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("funnel-chart", "Funnel chart"),
     ("candlestick", "Candlestick chart"),
     ("kanban", "Kanban board"),
+    ("ai-reasoning", "AI reasoning and tools"),
+    ("ai-composer", "AI prompt composer"),
+    ("ai-chat", "AI chat thread"),
+    ("diff-viewer", "Diff viewer"),
+    ("waterfall", "Trace waterfall"),
+    ("uptime-bars", "Uptime status"),
+    ("rolling-number", "Rolling number"),
+    ("dock", "Magnifying dock"),
+    ("waveform", "Audio waveform"),
+    ("window-chrome", "Window chrome"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -180,6 +191,16 @@ struct State {
     tree_sel: String,
     env_vars: Vec<KvPair>,
     kanban_cards: Vec<KanbanCard>,
+    cot_open: bool,
+    ai_prompt: String,
+    ai_model: usize,
+    ai_files: Vec<String>,
+    ai_streaming: bool,
+    mrr_val: i64,
+    dock_active: usize,
+    audio_prog: f32,
+    audio_playing: bool,
+    win_look: Platform,
 }
 
 impl State {
@@ -260,6 +281,16 @@ impl State {
                 KanbanCard::new("115", 1, "High-DPI scissor clip rounding").tag("Fix", Tone::Warning).meta("LUM-115").assignee("TR"),
                 KanbanCard::new("119", 2, "Zero idle wakeups at rest").tag("Perf", Tone::Success).meta("LUM-119").assignee("AK"),
             ],
+            cot_open: true,
+            ai_prompt: "Audit crates/lumen-core/src/layout.rs for rounding drift on 1.5x displays.".into(),
+            ai_model: 0,
+            ai_files: vec!["layout.rs".into(), "paint.rs".into()],
+            ai_streaming: false,
+            mrr_val: 128_490,
+            dock_active: 1,
+            audio_prog: 0.38,
+            audio_playing: false,
+            win_look: Platform::Mac,
         }
     }
 }
@@ -1496,6 +1527,168 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 ui.kanban("sprint_board", &cols, &mut s.kanban_cards);
             });
         }
+        "ai-reasoning" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.reasoning_block("cot_1", "Thought for 2.4s", Some("3 steps"), &mut s.cot_open, |ui| {
+                        ui.label("Checked physical pixel snapping in Painter::snap_rect; verifying whether Fill children accumulate subpixel remainders across columns.").secondary();
+                        ui.tool_call("tc1", &ToolCall::new("read_file", "crates/lumen-core/src/layout.rs:240-310", ToolStatus::Done).duration("18 ms"));
+                        ui.tool_call("tc2", &ToolCall::new("cargo_test", "-p lumen-core layout::tests", ToolStatus::Done).duration("310 ms"));
+                    });
+                    ui.divider();
+                    ui.label("All 14 flex layout tests pass; coordinates snap cleanly to physical pixels at 1.5× and 2.0× scale.").strong();
+                });
+            });
+        }
+        "ai-composer" => {
+            ui.column().fill_width().max_width(560.0).gap(10).show(|ui| {
+                let out = ui
+                    .prompt_composer("main_composer", &mut s.ai_prompt, &mut s.ai_model)
+                    .models(&["Claude 3.7 Sonnet", "Gemini 2.5 Pro", "o3-mini"])
+                    .attachments(&mut s.ai_files)
+                    .context_used(0.34)
+                    .streaming(s.ai_streaming)
+                    .show();
+                if out.submitted {
+                    s.ai_streaming = true;
+                } else if out.stopped {
+                    s.ai_streaming = false;
+                } else if out.attach_clicked && s.ai_files.len() < 4 {
+                    s.ai_files.push(format!("trace-{}.json", s.ai_files.len() + 1));
+                }
+            });
+        }
+        "ai-chat" => {
+            let msgs = [
+                ChatMessage::user("Why does lumen draw zero frames when idle?"),
+                ChatMessage::assistant(
+                    "lumen assistant",
+                    "Springs evaluate in closed form and settle once displacement and velocity fall below 0.0005. With no active springs or timers, FrameOutput::repaint_after returns None and winit parks the thread.",
+                )
+                .time("Just now")
+                .citations(&["anim.rs:84", "ui.rs:643"]),
+            ];
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.chat_thread("demo_chat", &msgs);
+                });
+            });
+        }
+        "diff-viewer" => {
+            let diff = r#"@@ -268,7 +268,9 @@
+ pub(crate) struct ScrollState {
+     offset: f32,
+     content: f32,
+-    last_scroll_time: 0.0,
++    viewport: f32,
++    last_scroll_time: -10.0,
+     target: Option<f32>,
+ }"#;
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.diff_viewer("scroll_fix", "crates/lumen-core/src/ui.rs", diff).show();
+            });
+        }
+        "waterfall" => {
+            let spans = [
+                TraceSpan::new("POST /v1/chat/completions", "edge-proxy", 0.0, 148.0, 0),
+                TraceSpan::new("verify_session_jwt", "auth-svc", 3.5, 14.2, 1),
+                TraceSpan::new("pg.fetch_context", "postgres-primary", 18.0, 26.5, 1),
+                TraceSpan::new("kv_cache.lookup", "redis-eu", 21.0, 6.8, 2),
+                TraceSpan::new("model.forward_stream", "gpu-pool-a100", 46.0, 98.4, 1),
+            ];
+            ui.column().fill_width().max_width(620.0).show(|ui| {
+                ui.waterfall("req_trace", &spans);
+            });
+        }
+        "uptime-bars" => {
+            let mut api = vec![UptimeStatus::Operational; 44];
+            api[14] = UptimeStatus::Degraded;
+            let mut cdn = vec![UptimeStatus::Operational; 44];
+            cdn[29] = UptimeStatus::Degraded;
+            cdn[30] = UptimeStatus::Outage;
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.uptime_bars("u_api", "Inference API · eu-central", &api);
+                    ui.divider();
+                    ui.uptime_bars("u_cdn", "Artifact CDN · global", &cdn);
+                });
+            });
+        }
+        "rolling-number" => {
+            ui.column().align(Align::Center).gap(16).show(|ui| {
+                ui.card().pad(24.0).show(|ui| {
+                    ui.label("Annual recurring revenue").small().secondary();
+                    ui.rolling_number("mrr", s.mrr_val).prefix("$").suffix("USD").role(TextRole::Display).show();
+                });
+                ui.row().gap(8).show(|ui| {
+                    if ui.button("− $350").clicked() {
+                        s.mrr_val = (s.mrr_val - 350).max(0);
+                    }
+                    if ui.button("+ $1,250").primary().icon("plus").clicked() {
+                        s.mrr_val += 1_250;
+                    }
+                    if ui.button("+ $10,000").clicked() {
+                        s.mrr_val += 10_000;
+                    }
+                });
+            });
+        }
+        "dock" => {
+            let items: Vec<DockItem> = [
+                ("compass", "Explorer"),
+                ("terminal", "Terminal"),
+                ("code", "Editor"),
+                ("message-square", "Threads"),
+                ("music", "Studio"),
+                ("settings", "Settings"),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(i, (ic, lbl))| DockItem::new(ic, *lbl).active(i == s.dock_active || i == 2))
+            .collect();
+            ui.column().align(Align::Center).gap(14).show(|ui| {
+                if let Some(chosen) = ui.dock("app_dock", &items) {
+                    s.dock_active = chosen;
+                }
+                ui.label("Move the pointer across the dock — neighboring icons magnify with a bouncy spring.").small().secondary();
+            });
+        }
+        "waveform" => {
+            let samples: Vec<f32> = (0..44)
+                .map(|i| {
+                    let x = i as f32 * 0.37;
+                    (0.24 + 0.46 * x.sin().abs() + 0.28 * (x * 2.3 + 1.1).cos().abs()).clamp(0.15, 0.98)
+                })
+                .collect();
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.waveform("voice_note", &samples, &mut s.audio_prog, &mut s.audio_playing)
+                    .title("Architecture walkthrough · voice note")
+                    .duration(42.0)
+                    .show();
+            });
+        }
+        "window-chrome" => {
+            ui.set_look(s.win_look.look());
+            if s.embed {
+                for m in [Mode::Light, Mode::Dark] {
+                    ui.override_color(m, lumen::Token::Background, Some(Look::lumen().neutrals(m).surface));
+                }
+            }
+            ui.column().fill_width().max_width(520.0).align(Align::Center).gap(14).show(|ui| {
+                let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
+                ui.segmented(&mut s.win_look, &opts);
+                ui.window_chrome("preview_win", "lumen — workspace")
+                    .subtitle("ethereal")
+                    .show(|ui| {
+                        ui.row().fill_width().align(Align::Center).show(|ui| {
+                            ui.label("Native window chrome").strong();
+                            ui.spacer();
+                            ui.badge(s.win_look.name(), Tone::Accent);
+                        });
+                        ui.label("Traffic lights on macOS, caption buttons on Windows 11, headerbar pill on GNOME, and frosted chrome on Lumen.").secondary();
+                    });
+            });
+        }
         _ => {
             ui.label(format!("Unknown demo “{demo}”.")).secondary();
         }
@@ -1728,6 +1921,7 @@ fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
         "multi-select" => vec![k(lumen::Key::Tab), k(lumen::Key::ArrowDown), k(lumen::Key::ArrowDown), Wait(0.6)],
         "otp-input" => vec![k(lumen::Key::Tab), Wait(0.4)],
         "split-button" => vec![k(lumen::Key::Tab), k(lumen::Key::Tab), k(lumen::Key::Enter), Wait(0.5)],
+        "dock" => vec![Hover(lumen::vec2(342.0, 212.0)), Wait(0.6)],
         _ => vec![],
     }
 }
