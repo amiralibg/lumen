@@ -1,0 +1,13 @@
+[package]
+name = "lumen-wgpu"
+description = "wgpu renderer for lumen draw data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+wgpu.workspace = true
+bytemuck.workspace = true
+log.workspace = true

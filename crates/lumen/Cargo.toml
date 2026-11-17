@@ -1,0 +1,11 @@
+[package]
+name = "lumen"
+description = "Polished-by-default immediate-mode UI kit for Rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+lumen-app.workspace = true

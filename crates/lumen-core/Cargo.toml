@@ -1,0 +1,13 @@
+[package]
+name = "lumen-core"
+description = "Immediate-mode core of lumen: ids, input, layout, theme, motion, widgets, draw data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lumen-text.workspace = true
+ahash.workspace = true
+unicode-segmentation.workspace = true
+web-time.workspace = true
