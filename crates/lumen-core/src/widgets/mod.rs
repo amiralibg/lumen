@@ -10,6 +10,7 @@ pub mod switch;
 pub mod text;
 pub mod text_input;
 pub mod picker;
+pub mod segmented;
 
 pub use button::{Button, Variant};
 pub use card::Card;

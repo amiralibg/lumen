@@ -126,6 +126,44 @@ impl Color {
     pub fn lightness(self) -> f32 {
         self.to_oklab().l
     }
+
+    /// A color from OKLCH (`l` 0..1, chroma, hue in degrees), reduced in
+    /// chroma until it fits in sRGB.
+    pub fn oklch(l: f32, c: f32, hue_deg: f32) -> Color {
+        let h = hue_deg.to_radians();
+        let make = |c: f32| Oklab { l: l.clamp(0.0, 1.0), a: c * h.cos(), b: c * h.sin(), alpha: 1.0 };
+        if make(c).in_gamut() {
+            return make(c).to_srgb();
+        }
+        let (mut lo, mut hi) = (0.0, c);
+        for _ in 0..24 {
+            let mid = (lo + hi) / 2.0;
+            if make(mid).in_gamut() {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        make(lo).to_srgb()
+    }
+
+    /// OKLCH hue in degrees (0..360).
+    pub fn hue(self) -> f32 {
+        let lab = self.to_oklab();
+        lab.b.atan2(lab.a).to_degrees().rem_euclid(360.0)
+    }
+
+    /// WCAG relative luminance.
+    pub fn luminance(self) -> f32 {
+        let l = |c: f32| if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+        0.2126 * l(self.r) + 0.7152 * l(self.g) + 0.0722 * l(self.b)
+    }
+
+    /// WCAG contrast ratio between two opaque colors (1..21).
+    pub fn contrast(self, other: Color) -> f32 {
+        let (a, b) = (self.luminance(), other.luminance());
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -207,6 +245,14 @@ mod tests {
         let fade = Color::TRANSPARENT.mix(b, 0.5);
         assert_eq!(fade.to_hex(), 0xFFFFFF);
         assert!((fade.a - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn contrast_and_oklch() {
+        assert!((Color::WHITE.contrast(Color::BLACK) - 21.0).abs() < 0.01);
+        let c = Color::oklch(0.6, 0.15, 250.0);
+        assert!((c.lightness() - 0.6).abs() < 0.01);
+        assert!((c.hue() - 250.0).abs() < 1.0);
     }
 
     #[test]

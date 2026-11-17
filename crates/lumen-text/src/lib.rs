@@ -226,6 +226,9 @@ pub struct TextSystem {
     galleys: AHashMap<u64, CachedGalley>,
     icons: icons::IconTable,
     frame: u64,
+    /// Family overrides for Sans, Display and Mono.
+    families: [Option<String>; 3],
+    system_loaded: bool,
 }
 
 impl Default for TextSystem {
@@ -253,6 +256,8 @@ impl TextSystem {
             galleys: AHashMap::new(),
             icons: icons::IconTable::load(),
             frame: 0,
+            families: [None, None, None],
+            system_loaded: false,
         }
     }
 
@@ -263,10 +268,70 @@ impl TextSystem {
         self.galleys.clear();
     }
 
-    /// Load the platform's system fonts as fallbacks (native only; slow).
+    /// Load the platform's system fonts as fallbacks (native only; slow,
+    /// done once).
     pub fn load_system_fonts(&mut self) {
-        self.fonts.db_mut().load_system_fonts();
-        self.galleys.clear();
+        if self.system_loaded {
+            return;
+        }
+        self.system_loaded = true;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.fonts.db_mut().load_system_fonts();
+            self.galleys.clear();
+        }
+    }
+
+    fn role_index(role: FontFamily) -> Option<usize> {
+        match role {
+            FontFamily::Sans => Some(0),
+            FontFamily::Display => Some(1),
+            FontFamily::Mono => Some(2),
+            FontFamily::Icons => None,
+        }
+    }
+
+    /// Whether a family with this name is loaded.
+    pub fn has_family(&self, name: &str) -> bool {
+        self.fonts.db().faces().any(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
+    }
+
+    /// All loaded family names (sorted, deduplicated).
+    pub fn family_names(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.fonts.db().faces().flat_map(|f| f.families.iter().map(|(n, _)| n.clone())).collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /// Use `name` for a role instead of the bundled family (`None` resets).
+    /// Icons cannot be overridden.
+    pub fn set_family(&mut self, role: FontFamily, name: Option<&str>) {
+        let Some(i) = Self::role_index(role) else { return };
+        let new = name.map(str::to_owned);
+        if self.families[i] != new {
+            self.families[i] = new;
+            self.galleys.clear();
+        }
+    }
+
+    /// The family name a role currently resolves to.
+    pub fn family_name(&self, role: FontFamily) -> &str {
+        Self::role_index(role).and_then(|i| self.families[i].as_deref()).unwrap_or(role.name())
+    }
+
+    /// Use the first installed family from `candidates` for `role`, loading
+    /// system fonts if needed. Falls back to the bundled family and returns
+    /// the chosen name, if any.
+    pub fn choose_family(&mut self, role: FontFamily, candidates: &[&str]) -> Option<String> {
+        if candidates.is_empty() {
+            self.set_family(role, None);
+            return None;
+        }
+        self.load_system_fonts();
+        let found = candidates.iter().find(|c| self.has_family(c)).map(|c| c.to_string());
+        self.set_family(role, found.as_deref());
+        found
     }
 
     /// The Lucide codepoint for an icon name such as `"settings"`.
@@ -299,7 +364,8 @@ impl TextSystem {
         // Round the wrap width up a hair so text measured unconstrained and
         // then laid out at exactly its own width doesn't re-wrap.
         buffer.set_size(max_width.map(|w| w + 0.01), None);
-        let mut attrs = Attrs::new().family(Family::Name(style.family.name())).weight(Weight(style.weight));
+        let family = self.family_name(style.family).to_owned();
+        let mut attrs = Attrs::new().family(Family::Name(&family)).weight(Weight(style.weight));
         if style.tracking != 0.0 {
             attrs = attrs.letter_spacing(style.tracking);
         }
@@ -512,6 +578,28 @@ mod tests {
         ts.glyph_quads(&g, (0.0, 0.0), 1.0, |_| n += 1);
         assert_eq!(n, 1);
         assert!((g.width - 16.0).abs() < 1.0, "lucide glyphs are 1em wide: {}", g.width);
+    }
+
+    #[test]
+    fn family_override_falls_back() {
+        let mut ts = TextSystem::new();
+        assert!(ts.has_family("Inter"));
+        ts.set_family(FontFamily::Sans, Some("Geist"));
+        assert_eq!(ts.family_name(FontFamily::Sans), "Geist");
+        let g = ts.layout("Hello", &body(), None, TextAlign::Start);
+        assert!(g.width > 0.0);
+        ts.set_family(FontFamily::Sans, None);
+        assert_eq!(ts.family_name(FontFamily::Sans), "Inter");
+    }
+
+    #[test]
+    #[ignore = "lists system fonts; run with --ignored --nocapture"]
+    fn print_system_families() {
+        let mut ts = TextSystem::new();
+        ts.load_system_fonts();
+        for f in ts.family_names() {
+            println!("{f}");
+        }
     }
 
     #[test]

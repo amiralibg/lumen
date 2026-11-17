@@ -349,3 +349,63 @@ fn focused_input_draws_caret() {
     let found = out.draw.vertices.iter().any(|v| v.mode == lumen_core::paint::mode::RRECT && v.color == caret && (v.half[0] - 1.0).abs() < 0.01 && (v.half[1] - 8.0).abs() < 0.01);
     assert!(found, "caret quad present");
 }
+
+#[derive(Default)]
+struct Seg {
+    v: u8,
+    rect: Rect,
+}
+
+fn seg_view(ui: &mut Ui, s: &mut Seg) {
+    ui.column().pad(20).show(|ui| {
+        s.rect = ui.segmented(&mut s.v, &[(0, "One"), (1, "Two"), (2, "Three")]).rect;
+    });
+}
+
+#[test]
+fn segmented_click_and_arrows() {
+    let mut h = Harness::new(Seg::default(), seg_view);
+    let r = h.s.rect;
+    assert!(r.width() > 0.0);
+    // Click the right end: the last segment.
+    h.click(vec2(r.max.x - 6.0, r.center().y));
+    h.idle(1);
+    assert_eq!(h.s.v, 2);
+    // Tab focuses the first segment; arrows move and select.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    h.idle(1);
+    assert_eq!(h.s.v, 1);
+    h.frame(key(Key::ArrowLeft));
+    h.idle(1);
+    assert_eq!(h.s.v, 0);
+}
+
+#[derive(Default)]
+struct LookState {
+    look: u8,
+    btn: Rect,
+}
+
+fn look_view(ui: &mut Ui, s: &mut LookState) {
+    ui.set_look(if s.look == 0 { Look::lumen() } else { Look::gnome() });
+    ui.column().pad(20).show(|ui| {
+        s.btn = ui.button("Save").show().rect;
+    });
+}
+
+#[test]
+fn look_switch_morphs_control_size() {
+    let mut h = Harness::new(LookState::default(), look_view);
+    h.idle(2);
+    assert_eq!(h.s.btn.height(), 32.0);
+    h.s.look = 1;
+    h.idle(8);
+    let mid = h.s.btn.height();
+    assert!(mid > 32.0 && mid < 34.0, "mid-blend height {mid}");
+    let out = h.frame(vec![]);
+    assert!(out.animating);
+    h.idle(60);
+    assert_eq!(h.s.btn.height(), 34.0);
+    assert_eq!(h.ui.color(Token::Background).to_hex(), 0xFAFAFB);
+}

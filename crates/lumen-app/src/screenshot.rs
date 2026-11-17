@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use lumen_core::input::{Event, Key, Modifiers, PointerButton, RawInput};
-use lumen_core::{vec2, Accent, Mode, Ui, Vec2};
+use lumen_core::{vec2, Accent, Color, Look, Mode, Ui, Vec2};
 use lumen_wgpu::{offscreen, Renderer};
 
 /// A scripted input step applied before settling and capturing.
@@ -32,12 +32,15 @@ pub struct Shot {
     pub scale: f32,
     pub mode: Mode,
     pub accent: Accent,
+    pub look: Look,
+    /// Stand-in for the OS accent (for `Accent::Native`).
+    pub native_accent: Option<Color>,
     pub steps: Vec<ShotStep>,
 }
 
 impl Default for Shot {
     fn default() -> Self {
-        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Violet, steps: vec![] }
+        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Violet, look: Look::lumen(), native_accent: None, steps: vec![] }
     }
 }
 
@@ -47,7 +50,9 @@ pub fn screenshot<S>(path: impl AsRef<Path>, shot: &Shot, state: &mut S, mut vie
     let (device, queue) = offscreen::headless_device().ok_or("no GPU adapter")?;
     let mut renderer = Renderer::new(&device, offscreen::FORMAT);
     let mut ui = Ui::new();
-    ui.theme = lumen_core::theme::Theme::new(shot.mode, shot.accent);
+    ui.theme = lumen_core::theme::Theme::with_look(shot.mode, shot.accent, shot.look);
+    ui.set_native_accent(shot.native_accent);
+    ui.theme.settle();
     ui.caret_blink = false;
     let mut t = 1.0f64;
     let dt = 1.0 / 60.0;

@@ -5,7 +5,7 @@ use crate::id::Id;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Justify, Size, Style};
 use crate::math::{vec2, Corners, Rect, Sides};
-use crate::theme::{durations, springs, TextRole, Token};
+use crate::theme::{TextRole, Token};
 use crate::ui::{Placement, Response, Sense, TooltipSpec, Ui};
 use crate::Color;
 
@@ -47,10 +47,12 @@ impl Sidebar<'_> {
     pub fn show<R>(self, f: impl FnOnce(&mut Ui) -> R) -> R {
         let Sidebar { ui, collapsed, width } = self;
         let id = ui.make_id("sidebar");
-        let w = ui.spring(id, 0, if collapsed { 56.0 } else { width }, springs::SMOOTH);
+        let mo = ui.motion();
+        let nl = ui.look().nav;
+        let w = ui.spring(id, 0, if collapsed { 56.0 } else { width }, mo.smooth);
         let collapse_t = ((width - w) / (width - 56.0)).clamp(0.0, 1.0);
         let label_on = !collapsed && collapse_t < 0.2;
-        let label_alpha = ui.fade(id, 1, label_on, durations::LAYER_IN, durations::FADE_OUT, Ease::Linear);
+        let label_alpha = ui.fade(id, 1, label_on, mo.layer_in, mo.fade_out, Ease::Linear);
         let bg = ui.color(Token::Background);
         let edge = ui.color(Token::BorderSubtle);
         let node = ui.begin(
@@ -68,7 +70,12 @@ impl Sidebar<'_> {
         ui.mem::<NavMem>(id).items = ctx.items;
 
         // The selected pill: one shared rect that slides between items.
-        let pill = ui.color(Token::AccentSubtle);
+        let neutral_pill = bg.over(ui.color(Token::Pressed));
+        let pill = neutral_pill.mix(ui.color(Token::AccentSubtle), nl.accent_selection);
+        let pill = pill.mix(bg.over(ui.color(Token::Hover)), nl.indicator);
+        let bar = ui.color(Token::Accent).multiply_alpha(nl.indicator);
+        let smooth = mo.smooth;
+        let pill_r = nl.radius;
         let selected = ctx.selected;
         let anim_key = id.with("pill");
         let reduced = ui.reduced_motion();
@@ -82,11 +89,17 @@ impl Sidebar<'_> {
                         sel.min.y
                     } else {
                         let first = cx.anims.spring_state(anim_key, 0).is_none();
-                        let y = cx.anims.spring_from(anim_key, 0, sel.min.y, sel.min.y, springs::SMOOTH);
+                        let y = cx.anims.spring_from(anim_key, 0, sel.min.y, sel.min.y, smooth);
                         if first { sel.min.y } else { y }
                     };
                     let pr = Rect::from_xywh(sel.min.x, y, sel.width(), sel.height());
-                    cx.painter.rrect(pr, Corners::all(8.0), pill, 0.0, Color::TRANSPARENT);
+                    cx.painter.rrect(pr, Corners::all(pill_r), pill, 0.0, Color::TRANSPARENT);
+                    if bar.a > 0.0 {
+                        // Windows: an accent bar at the leading edge.
+                        let bh = (sel.height() * 0.45).round();
+                        let br = Rect::from_xywh(pr.min.x, pr.center().y - bh / 2.0, 3.0, bh);
+                        cx.painter.rrect_unsnapped(br, Corners::all(1.5), [bar; 2], 0.0, Color::TRANSPARENT);
+                    }
                 }
             }),
         );
@@ -149,9 +162,13 @@ impl NavItem<'_> {
             }
         }
         let (h, p) = ui.state_weights(&ix, key_held);
-        let sel = ui.fade(id, 3, selected, durations::SELECTED, durations::SELECTED, Ease::Out);
+        let mo = ui.motion();
+        let nl = ui.look().nav;
+        let press_inset = ui.look().button.press_inset;
+        let sel = ui.fade(id, 3, selected, mo.selected, mo.selected, Ease::Out);
         let pressed = (ix.pressed || key_held) && !self.disabled;
-        let inset = ui.spring(id, 0, if pressed { 1.0 } else { 0.0 }, if pressed { springs::SNAPPY } else { springs::BOUNCY });
+        let inset = ui.spring(id, 0, if pressed { press_inset } else { 0.0 }, if pressed { mo.snappy } else { mo.bouncy });
+        let sel_c = c_sel(ui, nl.accent_selection);
         let (ring_a, ring_gap) = ui.focus_anim(&ix);
         let c = |t| ui.color(t);
         let (hv, pr) = neutral_layers(ui, Color::TRANSPARENT);
@@ -159,24 +176,27 @@ impl NavItem<'_> {
             (Color::TRANSPARENT, c(Token::TextDisabled), c(Token::TextDisabled))
         } else {
             let fill = Color::TRANSPARENT.mix(hv, h).mix(pr, p).mix(Color::TRANSPARENT, sel);
-            let ic = c(Token::TextMuted).mix(c(Token::Foreground), h.max(p)).mix(c(Token::AccentStrong), sel);
-            let lc = c(Token::TextSecondary).mix(c(Token::Foreground), h.max(p)).mix(c(Token::AccentStrong), sel);
+            let ic = c(Token::TextMuted).mix(c(Token::Foreground), h.max(p)).mix(sel_c, sel);
+            let lc = c(Token::TextSecondary).mix(c(Token::Foreground), h.max(p)).mix(sel_c, sel);
             (fill, ic, lc)
         };
         let (badge_fill, badge_text) = if self.disabled {
             (c(Token::SurfaceMuted), c(Token::TextDisabled))
         } else {
-            (c(Token::SurfaceMuted).mix(Color::TRANSPARENT, sel), c(Token::TextSecondary).mix(c(Token::AccentStrong), sel))
+            (c(Token::SurfaceMuted).mix(Color::TRANSPARENT, sel * nl.accent_selection), c(Token::TextSecondary).mix(sel_c, sel))
         };
         let dot = c(Token::Accent);
         let ring = c(Token::FocusRing);
         let cursor = if self.disabled { CursorIcon::Default } else { CursorIcon::Pointer };
         let has_badge = self.badge.is_some();
+        let item_r = nl.radius;
+        let body_strong = ui.text_style(TextRole::BodyStrong);
+        let caption = ui.text_style(TextRole::Caption);
         ui.begin(
             Style {
                 dir: Dir::Row,
                 width: Size::FILL,
-                height: Size::Fixed(32.0),
+                height: Size::Fixed(nl.item_height),
                 pad: Sides::xy(8.0, 0.0),
                 gap: 8.0,
                 align: Align::Center,
@@ -189,13 +209,13 @@ impl NavItem<'_> {
             true,
             Some(Box::new(move |cx, r| {
                 let bg = r.expand(-inset);
-                cx.painter.rrect(bg, Corners::all(8.0 - inset), fill, 0.0, Color::TRANSPARENT);
+                cx.painter.rrect(bg, Corners::all((item_r - inset).max(0.0)), fill, 0.0, Color::TRANSPARENT);
                 if collapse_t > 0.5 && has_badge {
                     // Collapsed: a count becomes a dot on the icon's corner.
                     cx.painter.circle(vec2(r.min.x + 8.0 + 16.0 - 1.0, r.center().y - 8.0 + 1.0), 3.0, dot, 0.0, Color::TRANSPARENT);
                 }
                 if ring_a > 0.0 {
-                    cx.defer(r, Box::new(move |cx, r| cx.focus_ring(r, 8.0, ring_a, ring_gap, ring)));
+                    cx.defer(r, Box::new(move |cx, r| cx.focus_ring(r, item_r, ring_a, ring_gap, ring)));
                 }
             })),
         );
@@ -203,10 +223,10 @@ impl NavItem<'_> {
         if label_alpha > 0.0 {
             let label = std::mem::take(&mut self.label);
             let st = Style { width: Size::FILL, ..Default::default() };
-            ui.text_leaf(label.clone(), TextRole::BodyStrong.style(), label_c.multiply_alpha(label_alpha), false, true, st);
+            ui.text_leaf(label.clone(), body_strong, label_c.multiply_alpha(label_alpha), false, true, st);
             self.label = label;
             if let Some(b) = self.badge.take() {
-                let mut ts = TextRole::Caption.style();
+                let mut ts = caption;
                 ts.weight = 500;
                 ts.tabular = true;
                 let bf = badge_fill.multiply_alpha(label_alpha);
@@ -231,6 +251,12 @@ impl NavItem<'_> {
 }
 
 show_on_drop!(NavItem);
+
+/// Selected item text: accent-strong for accent selections, foreground for
+/// neutral ones.
+fn c_sel(ui: &Ui, accent: f32) -> Color {
+    ui.color(Token::Foreground).mix(ui.color(Token::AccentStrong), accent)
+}
 
 impl Ui {
     /// A navigation sidebar (240 wide, collapsible to 56).
@@ -259,11 +285,13 @@ impl Ui {
             false,
             Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(6.0), accent, 0.0, Color::TRANSPARENT))),
         );
-        self.text_leaf(initial, TextRole::Label.style(), afg, false, false, Style::default());
+        let st = self.text_style(TextRole::Label);
+        self.text_leaf(initial, st, afg, false, false, Style::default());
         self.end();
         if alpha > 0.0 {
             let c = self.color(Token::Foreground).multiply_alpha(alpha);
-            self.text_leaf(name, TextRole::BodyStrong.style(), c, false, true, Style { width: Size::FILL, ..Default::default() });
+            let st = self.text_style(TextRole::BodyStrong);
+            self.text_leaf(name, st, c, false, true, Style { width: Size::FILL, ..Default::default() });
         }
         self.end();
     }
@@ -292,7 +320,8 @@ impl Ui {
             true,
             None,
         );
-        self.text_leaf(label, TextRole::Label.style(), c, false, true, Style::default());
+        let st = self.text_style(TextRole::Label);
+        self.text_leaf(label, st, c, false, true, Style::default());
         self.end();
     }
 

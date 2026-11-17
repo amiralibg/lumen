@@ -69,7 +69,7 @@ impl<'u> Label<'u> {
     }
 
     fn show_inner(&mut self) -> Response {
-        let mut style = self.role.style();
+        let mut style = self.ui.text_style(self.role);
         style.tabular = self.tabular;
         let c = self.ui.color(self.color);
         let text = std::mem::take(&mut self.text);
@@ -112,7 +112,8 @@ impl<'u> Heading<'u> {
         };
         let c = self.ui.color(Token::Foreground);
         let text = std::mem::take(&mut self.text);
-        self.ui.text_leaf(text, role.style(), c, true, false, Style { margin_top: above, ..Default::default() });
+        let st = self.ui.text_style(role);
+        self.ui.text_leaf(text, st, c, true, false, Style { margin_top: above, ..Default::default() });
         Response::default()
     }
 }

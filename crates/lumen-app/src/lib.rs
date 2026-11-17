@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use lumen_core::input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
-use lumen_core::{vec2, Accent, Mode, Ui};
+use lumen_core::{vec2, Accent, Look, Mode, Ui};
 use lumen_wgpu::Renderer;
 use web_time::Instant;
 use winit::application::ApplicationHandler;
@@ -20,6 +20,8 @@ use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WKey, NamedKey};
 use winit::window::{Window, WindowId};
+
+pub mod system;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod screenshot;
@@ -33,12 +35,23 @@ pub struct App {
     min_size: Option<(u32, u32)>,
     mode: Option<Mode>,
     accent: Accent,
+    look: Look,
+    follow_reduced_motion: bool,
     canvas_id: Option<String>,
 }
 
 impl App {
     pub fn new(title: impl Into<String>) -> Self {
-        App { title: title.into(), size: (960, 640), min_size: None, mode: None, accent: Accent::Violet, canvas_id: None }
+        App {
+            title: title.into(),
+            size: (960, 640),
+            min_size: None,
+            mode: None,
+            accent: Accent::Violet,
+            look: Look::lumen(),
+            follow_reduced_motion: true,
+            canvas_id: None,
+        }
     }
     /// Initial window size in logical pixels.
     pub fn size(mut self, w: u32, h: u32) -> Self {
@@ -56,6 +69,20 @@ impl App {
     }
     pub fn accent(mut self, a: Accent) -> Self {
         self.accent = a;
+        self
+    }
+    /// The visual language (default: lumen's own). See [`Look`].
+    pub fn look(mut self, l: Look) -> Self {
+        self.look = l;
+        self
+    }
+    /// Look like the OS: its look, its accent color, its fonts.
+    pub fn native(self) -> Self {
+        self.look(Look::native()).accent(Accent::Native)
+    }
+    /// Follow the OS reduce-motion setting (default on).
+    pub fn follow_reduced_motion(mut self, on: bool) -> Self {
+        self.follow_reduced_motion = on;
         self
     }
     /// Web only: render into an existing `<canvas id=...>` instead of appending one.
@@ -79,7 +106,7 @@ impl App {
         let event_loop = EventLoop::<Gpu>::with_user_event().build().expect("event loop");
         let proxy = event_loop.create_proxy();
         let mut ui = Ui::new();
-        ui.theme = lumen_core::theme::Theme::new(self.mode.unwrap_or(Mode::Light), self.accent);
+        ui.theme = lumen_core::theme::Theme::with_look(self.mode.unwrap_or(Mode::Light), self.accent, self.look);
         let runner = Runner {
             app: self,
             ui,
@@ -188,6 +215,19 @@ struct Runner<S> {
 }
 
 impl<S> Runner<S> {
+    fn refresh_system_prefs(&mut self) {
+        let mut p = system::query();
+        p.dark = self.window.as_ref().and_then(|w| w.theme()).map(|t| t == winit::window::Theme::Dark);
+        if p != self.ui.system() {
+            self.ui.set_system(p);
+            if self.app.follow_reduced_motion {
+                if let Some(r) = p.reduced_motion {
+                    self.ui.set_reduced_motion(r);
+                }
+            }
+        }
+    }
+
     fn request_redraw(&self) {
         if let Some(w) = &self.window {
             w.request_redraw();
@@ -205,12 +245,24 @@ impl<S> Runner<S> {
             gpu.config.height = size.height;
             gpu.surface.configure(&gpu.device, &gpu.config);
         }
-        if !self.followed_system_theme && self.app.mode.is_none() {
-            if let Some(t) = window.theme() {
-                let mode = if t == winit::window::Theme::Dark { Mode::Dark } else { Mode::Light };
-                self.ui.theme = lumen_core::theme::Theme::new(mode, self.app.accent);
+        if !self.followed_system_theme {
+            if self.app.mode.is_none() {
+                if let Some(t) = window.theme() {
+                    let mode = if t == winit::window::Theme::Dark { Mode::Dark } else { Mode::Light };
+                    let (accent, look) = (self.ui.accent(), *self.ui.theme.target_look());
+                    self.ui.theme = lumen_core::theme::Theme::with_look(mode, accent, look);
+                }
             }
             self.followed_system_theme = true;
+            self.refresh_system_prefs();
+            // The first frame shows the OS accent without a blend.
+            let (mode, accent, look) = (self.ui.mode(), self.ui.accent(), *self.ui.theme.target_look());
+            let native = self.ui.system().accent;
+            let reduced = self.ui.theme.reduced_motion;
+            self.ui.theme = lumen_core::theme::Theme::with_look(mode, accent, look);
+            self.ui.theme.reduced_motion = reduced;
+            self.ui.set_native_accent(native);
+            self.ui.theme.settle();
         }
         let scale = self.scale;
         let input = RawInput {
@@ -325,7 +377,14 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
                 self.scale = scale_factor as f32;
                 self.request_redraw();
             }
-            WindowEvent::ThemeChanged(_) => self.request_redraw(),
+            WindowEvent::ThemeChanged(t) => {
+                // Follow the OS live, with the usual blend.
+                if self.app.mode.is_none() {
+                    self.ui.set_mode(if t == winit::window::Theme::Dark { Mode::Dark } else { Mode::Light });
+                }
+                self.refresh_system_prefs();
+                self.request_redraw();
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.events.push(Event::PointerMoved(vec2(position.x as f32 / scale, position.y as f32 / scale)));
                 self.request_redraw();
@@ -382,6 +441,10 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
                 self.request_redraw();
             }
             WindowEvent::Focused(f) => {
+                if f {
+                    // Accent and motion settings may have changed meanwhile.
+                    self.refresh_system_prefs();
+                }
                 self.events.push(Event::WindowFocused(f));
                 self.request_redraw();
             }

@@ -4,7 +4,7 @@ use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Style};
 use crate::math::{vec2, Rect};
-use crate::theme::{springs, Accent, Token};
+use crate::theme::{Accent, Token};
 use crate::ui::{Placement, Response, Sense, TooltipSpec, Ui};
 use crate::Color;
 
@@ -17,8 +17,17 @@ impl Ui {
         let ring_focus = self.color(Token::FocusRing);
         let group = self.make_id("accent_picker");
         self.begin(Style { dir: Dir::Row, gap: 0.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        let ids: Vec<_> = Accent::ALL.iter().map(|a| group.with(a.name())).collect();
-        for (i, &acc) in Accent::ALL.iter().enumerate() {
+        let show_native = self.theme.native_accent().is_some() || self.look().platform != crate::look::Platform::Lumen || current == Accent::Native;
+        let mut list: Vec<Accent> = Vec::with_capacity(9);
+        if show_native {
+            list.push(Accent::Native);
+        }
+        list.extend_from_slice(&Accent::ALL);
+        let ids: Vec<_> = list.iter().map(|a| group.with(a.name())).collect();
+        let look = *self.theme.target_look();
+        let native = self.theme.native_accent();
+        let overrides = *self.theme.overrides();
+        for (i, &acc) in list.iter().enumerate() {
             let id = ids[i];
             let ix = self.interact(id, Sense::CLICK, false);
             let (act, held) = super::key_activate(self, &ix, true);
@@ -37,11 +46,12 @@ impl Ui {
             let selected = self.accent() == acc;
             let pressed = ix.pressed || held;
             let target = if pressed { 18.0 } else if ix.hovered { 22.0 } else { 20.0 };
-            let size = self.spring(id, 0, target, if target > 20.0 { springs::BOUNCY } else { springs::SNAPPY });
+            let size = self.spring(id, 0, target, if target > 20.0 { self.motion().bouncy } else { self.motion().snappy });
             let sel_t = self.spring_ring(id, selected);
-            let wipe = self.spring(id, 2, if selected { 1.0 } else { 0.0 }, springs::SNAPPY);
+            let wipe = self.spring(id, 2, if selected { 1.0 } else { 0.0 }, self.motion().snappy);
             let (focus_a, focus_gap) = self.focus_anim(&ix);
-            let [fill, _, _, fg] = acc.colors(mode);
+            let pal = crate::theme::Palette::build(mode, acc, &look, native, &overrides);
+            let (fill, fg) = (pal.get(Token::Accent), pal.get(Token::AccentForeground));
             // Swatches follow the theme blend: mix with the live palette for
             // the current accent so mode changes animate too.
             let fill = if acc == current { self.color(Token::Accent) } else { fill };
@@ -82,7 +92,7 @@ impl Ui {
     /// Selection ring animation like the focus ring: (alpha, gap).
     fn spring_ring(&mut self, id: crate::Id, on: bool) -> (f32, f32) {
         let a = self.fade(id, 10, on, 0.0, 0.1, Ease::Linear);
-        let t = self.anims.spring_from(id, 11, 0.0, if on { 1.0 } else { 0.0 }, springs::SNAPPY).clamp(0.0, 1.0);
+        let t = self.anims.spring_from(id, 11, 0.0, if on { 1.0 } else { 0.0 }, self.motion().snappy).clamp(0.0, 1.0);
         if on {
             (t, 4.0 - 2.0 * t)
         } else {

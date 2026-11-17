@@ -8,7 +8,7 @@ use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
 use crate::math::{vec2, Corners, Rect};
-use crate::theme::{springs, Elevation, TextRole, Token};
+use crate::theme::{Elevation, TextRole, Token};
 use crate::ui::{Response, Sense, Ui};
 use crate::Color;
 
@@ -72,7 +72,10 @@ impl<'u> Slider<'u> {
         let (lo, hi) = (*self.range.start(), *self.range.end());
         let span = (hi - lo).abs().max(f32::EPSILON);
         let old = *self.value;
-        let rail = |r: Rect| (r.min.x + 8.0, r.max.x - 8.0);
+        let lk = ui.look().slider;
+        let mo = ui.motion();
+        let half = lk.thumb / 2.0;
+        let rail = |r: Rect| (r.min.x + half, r.max.x - half);
         let mut new = old;
         let mut jump = false;
         if !self.disabled {
@@ -84,7 +87,7 @@ impl<'u> Slider<'u> {
                     new = from_x(p.x);
                     // Click away from the thumb animates there.
                     let thumb_x = x0 + ((old - lo) / span) * (x1 - x0);
-                    jump = (p.x - thumb_x).abs() > 8.0;
+                    jump = (p.x - thumb_x).abs() > half;
                     ui.mem::<DragState>(id).tracking = !jump;
                 }
             } else if ix.held {
@@ -120,19 +123,28 @@ impl<'u> Slider<'u> {
             ui.anims.set_spring(id, 0, norm);
             norm
         } else {
-            ui.spring(id, 0, norm, springs::SNAPPY)
+            ui.spring(id, 0, norm, mo.snappy)
         };
         let hot = (ix.hovered || ix.held) && !self.disabled;
-        let size = ui.spring(id, 1, if hot { 18.0 } else { 16.0 }, if hot { springs::BOUNCY } else { springs::SNAPPY });
-        let halo = ui.fade(id, 2, ix.held && !self.disabled, 0.06, 0.16, Ease::Linear);
+        let size = ui.spring(id, 1, if hot { lk.thumb + lk.hover_grow } else { lk.thumb }, if hot { mo.bouncy } else { mo.snappy });
+        // Windows: the accent dot inside the thumb grows on hover and
+        // shrinks while dragging.
+        let dot_target = if ix.held && !self.disabled { 0.5 } else if hot { 0.7 } else { 0.6 };
+        let dot = ui.spring(id, 3, dot_target, if hot { mo.bouncy } else { mo.snappy });
+        let halo = ui.fade(id, 2, ix.held && !self.disabled, 0.06, 0.16, Ease::Linear) * lk.halo;
         let (ring_a, ring_gap) = ui.focus_anim(&ix);
         let c = |t| ui.color(t);
         let (rail_c, fill_c, knob, knob_border, readout_c) = if self.disabled {
             (c(Token::Border), c(Token::TextDisabled), c(Token::SurfaceMuted), c(Token::BorderStrong), c(Token::TextDisabled))
         } else {
             let rc = if ix.held { c(Token::Foreground) } else { c(Token::TextSecondary) };
-            (c(Token::Track), c(Token::Accent), c(Token::Knob), Color::TRANSPARENT, rc)
+            let kb = c(Token::BorderStrong).multiply_alpha(0.6 * lk.thumb_border);
+            let knob = c(Token::Knob).mix(c(Token::Control), lk.inner_dot * ui.theme.darkness());
+            (c(Token::Track), c(Token::Accent), knob, kb, rc)
         };
+        let dot_c = if self.disabled { c(Token::TextDisabled) } else { c(Token::Accent).mix(c(Token::AccentHover), if hot { 1.0 } else { 0.0 }) };
+        let inner_dot = lk.inner_dot;
+        let track_h = lk.track;
         let shadows = if self.disabled { vec![] } else { Elevation::Knob.shadows(ui.theme.darkness(), c(Token::ShadowInk)) };
         let halo_c = c(Token::FocusHalo);
         let ring = c(Token::FocusRing);
@@ -142,39 +154,45 @@ impl<'u> Slider<'u> {
         let _ = col;
         if !self.label.is_empty() {
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
-            ui.text_leaf(self.label.clone(), TextRole::Label.style(), lc, false, true, Style::default());
+            let st = ui.text_style(TextRole::Label);
+            ui.text_leaf(self.label.clone(), st, lc, false, true, Style::default());
         }
         ui.begin(Style { dir: Dir::Row, gap: 12.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         let cursor = if self.disabled { CursorIcon::Default } else { CursorIcon::Pointer };
         ui.leaf(
             Style { width: Size::Fixed(width), ..Default::default() },
-            vec2(width, 20.0),
+            vec2(width, (lk.thumb + 4.0).max(20.0)),
             Some(id),
             Sense::DRAG,
             cursor,
             Some(Box::new(move |cx, r| {
-                let rail_r = cx.painter.snap_rect(Rect::from_xywh(r.min.x, r.center().y - 2.0, r.width(), 4.0));
-                cx.painter.rrect(rail_r, Corners::all(2.0), rail_c, 0.0, Color::TRANSPARENT);
-                let (x0, x1) = (r.min.x + 8.0, r.max.x - 8.0);
+                let tr = track_h / 2.0;
+                let rail_r = cx.painter.snap_rect(Rect::from_xywh(r.min.x, r.center().y - tr, r.width(), track_h));
+                cx.painter.rrect(rail_r, Corners::all(tr), rail_c, 0.0, Color::TRANSPARENT);
+                let (x0, x1) = (r.min.x + half, r.max.x - half);
                 let cxp = x0 + pos * (x1 - x0);
                 let fill = Rect { min: rail_r.min, max: vec2(cxp, rail_r.max.y) };
-                cx.painter.rrect_unsnapped(fill, Corners([2.0, 0.0, 0.0, 2.0]), [fill_c; 2], 0.0, Color::TRANSPARENT);
+                cx.painter.rrect_unsnapped(fill, Corners([tr, 0.0, 0.0, tr]), [fill_c; 2], 0.0, Color::TRANSPARENT);
                 let center = vec2(cxp, r.center().y);
                 if halo > 0.0 {
-                    cx.painter.circle(center, 13.0, halo_c.multiply_alpha(halo), 0.0, Color::TRANSPARENT);
+                    cx.painter.circle(center, half + 5.0, halo_c.multiply_alpha(halo), 0.0, Color::TRANSPARENT);
                 }
                 let tr = Rect::from_center_size(center, vec2(size, size));
                 cx.painter.shadows(tr, Corners::all(size / 2.0), &shadows);
                 let bw = if knob_border.a > 0.0 { 1.0 } else { 0.0 };
                 cx.painter.circle(center, size / 2.0, knob, bw, knob_border);
+                if inner_dot > 0.0 {
+                    let d = size * dot;
+                    cx.painter.circle(center, d / 2.0, dot_c.multiply_alpha(inner_dot), 0.0, Color::TRANSPARENT);
+                }
                 if ring_a > 0.0 {
-                    let thumb = Rect::from_center_size(center, vec2(16.0, 16.0));
-                    cx.defer(thumb, Box::new(move |cx, r| cx.focus_ring(r, 8.0, ring_a, ring_gap, ring)));
+                    let thumb = Rect::from_center_size(center, vec2(size, size));
+                    cx.defer(thumb, Box::new(move |cx, r| cx.focus_ring(r, r.width() / 2.0, ring_a, ring_gap, ring)));
                 }
             })),
         );
         if let Some(text) = self.readout.take() {
-            let mut st = TextRole::Label.style();
+            let mut st = ui.text_style(TextRole::Label);
             st.tabular = true;
             let n = ui.text_leaf(text, st, readout_c, false, false, Style { width: Size::Fixed(44.0), ..Default::default() });
             ui.set_text_align(n, TextAlign::End);

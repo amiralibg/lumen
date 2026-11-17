@@ -19,7 +19,8 @@ use crate::input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
 use crate::layout::{Align, Content, Dir, Justify, NodeId, Size, Style, Tree};
 use crate::math::{vec2, Corners, Rect, Sides, Vec2};
 use crate::paint::{DrawData, Painter};
-use crate::theme::{durations, springs, Accent, Elevation, Mode, TextRole, Theme, Token};
+use crate::look::{Fonts, Look, Motion};
+use crate::theme::{durations, Accent, ControlMetrics, ControlSize, Elevation, Mode, TextRole, Theme, Token};
 use crate::FastMap;
 
 /// What a widget wants from the pointer and keyboard.
@@ -139,13 +140,20 @@ impl PaintCx<'_> {
     }
 
     /// Standard focus ring around `r` (DESIGN.md 6). `t` is the animation
-    /// value (0 hidden .. 1 shown); `gap` animates from 4 to 2.
+    /// value (0 hidden .. 1 shown); `gap` comes from [`Ui::focus_anim`].
+    /// Width follows the look.
     pub fn focus_ring(&mut self, r: Rect, radius: f32, t: f32, gap: f32, color: Color) {
         if t <= 0.0 {
             return;
         }
-        let ring = r.expand(gap + 2.0);
-        self.painter.ring(ring, Corners::all(radius + gap + 2.0), 2.0, color.multiply_alpha(t));
+        let w = self.theme.look().focus.width;
+        let ring = r.expand(gap + w);
+        self.painter.ring(ring, Corners::all((radius + gap + w).max(w)), w, color.multiply_alpha(t));
+    }
+
+    /// Current look (blended).
+    pub fn look(&self) -> &crate::look::Look {
+        self.theme.look()
     }
 }
 
@@ -254,6 +262,15 @@ pub struct FrameOutput {
     pub animating: bool,
 }
 
+/// What the OS reports about the user's preferences, filled in by the app
+/// layer (`None` = unknown).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SystemPrefs {
+    pub dark: Option<bool>,
+    pub accent: Option<Color>,
+    pub reduced_motion: Option<bool>,
+}
+
 /// The UI context. Persistent across frames.
 pub struct Ui {
     /// Blink the text caret (on by default; screenshots turn it off).
@@ -317,6 +334,8 @@ pub struct Ui {
     root: NodeId,
     frame_started: bool,
     pub(crate) nav: Option<crate::widgets::nav::NavCtx>,
+    applied_fonts: Option<Fonts>,
+    system: SystemPrefs,
 }
 
 impl Default for Ui {
@@ -382,6 +401,8 @@ impl Ui {
             root: 0,
             frame_started: false,
             nav: None,
+            applied_fonts: None,
+            system: SystemPrefs::default(),
         }
     }
 
@@ -399,6 +420,10 @@ impl Ui {
         self.anims.time_scale = self.theme.motion_scale;
         self.anims.begin_frame(dt);
         self.theme.update(self.time);
+        let fonts = self.theme.target_look().fonts;
+        if self.applied_fonts != Some(fonts) {
+            self.apply_fonts(fonts);
+        }
 
         self.clicked.clear();
         self.press_started = None;
@@ -709,6 +734,83 @@ impl Ui {
         let m = self.theme.mode();
         self.theme.set(m, a, self.time);
     }
+    /// Switch to a look; colors, geometry and motion blend to it. Cheap to
+    /// call every frame with the same look.
+    pub fn set_look(&mut self, look: Look) {
+        self.theme.set_look(look, self.time);
+        if self.applied_fonts != Some(look.fonts) {
+            self.apply_fonts(look.fonts);
+        }
+    }
+
+    /// The look on screen (blended while a change animates).
+    pub fn look(&self) -> &Look {
+        self.theme.look()
+    }
+
+    /// The current motion: springs and durations widgets animate with.
+    pub fn motion(&self) -> Motion {
+        self.theme.look().motion
+    }
+
+    fn apply_fonts(&mut self, f: Fonts) {
+        use lumen_text::FontFamily;
+        self.applied_fonts = Some(f);
+        for (role, c) in [(FontFamily::Sans, f.sans), (FontFamily::Display, f.display), (FontFamily::Mono, f.mono)] {
+            self.text.choose_family(role, c);
+        }
+    }
+
+    /// The OS accent color used by [`Accent::Native`] (set by the app layer).
+    pub fn set_native_accent(&mut self, c: Option<Color>) {
+        self.theme.set_native_accent(c, self.time);
+    }
+
+    /// Override one token's color in one mode (`None` restores it).
+    pub fn override_color(&mut self, mode: Mode, t: Token, c: Option<Color>) {
+        self.theme.set_override(mode, t, c, self.time);
+    }
+
+    /// OS preferences reported by the app layer.
+    pub fn system(&self) -> SystemPrefs {
+        self.system
+    }
+    pub fn set_system(&mut self, p: SystemPrefs) {
+        self.system = p;
+        self.set_native_accent(p.accent);
+    }
+
+    /// A text role's style, scaled for the current look.
+    pub fn text_style(&self, role: TextRole) -> TextStyle {
+        let mut st = role.style();
+        let k = self.look().text_scale;
+        if (k - 1.0).abs() > 1e-3 {
+            st.size = (st.size * k * 4.0).round() / 4.0;
+            st.line_height = (st.line_height * k).round();
+        }
+        st
+    }
+
+    /// Sizes for a control size class in the current look.
+    pub fn control_metrics(&self, size: ControlSize) -> ControlMetrics {
+        let c = self.look().control;
+        let i = size as usize;
+        let mut text = TextRole::BodyStrong.style();
+        text.size = (c.text_size[i] * 4.0).round() / 4.0;
+        text.line_height = (text.size * 1.45).round();
+        let height = c.height[i];
+        ControlMetrics {
+            height,
+            pad_x: c.pad_x[i],
+            pad_icon: (c.pad_x[i] - 2.0).max(4.0),
+            icon: (height * 0.5).clamp(13.0, 18.0).round(),
+            gap: c.gap[i],
+            radius: c.radius[i].min(height / 2.0),
+            text,
+            inset: self.look().button.press_inset * [1.0, 1.0, 1.5][i],
+        }
+    }
+
     pub fn set_reduced_motion(&mut self, on: bool) {
         self.theme.reduced_motion = on;
     }
@@ -1092,7 +1194,7 @@ impl Ui {
             self.request_repaint_after(0.0);
         }
         let tip_id = Id::new("lumen-tooltip");
-        let slide = if warm { 0.0 } else { self.anims.spring_from(tip_id.with(anchor), 0, 4.0, 0.0, springs::SNAPPY) };
+        let slide = if warm { 0.0 } else { self.anims.spring_from(tip_id.with(anchor), 0, 4.0, 0.0, self.motion().snappy) };
         let root = self.build_tooltip(&spec);
         self.overlays.push(Overlay { root, anchor, placement: spec.placement, gap: spec.gap, slide, alpha });
     }
@@ -1113,7 +1215,7 @@ impl Ui {
         let fill = self.color(Token::InverseSurface);
         let fg = self.color(Token::InverseForeground);
         let shadows = Elevation::Level1.shadows(self.theme.darkness(), self.color(Token::ShadowInk));
-        let style_text = TextRole::Label.style();
+        let style_text = self.text_style(TextRole::Label);
         let multiline = {
             let g = self.text.layout(&spec.text, &style_text, None, TextAlign::Start);
             g.width > 240.0 - 16.0
@@ -1135,7 +1237,7 @@ impl Ui {
         );
         self.text_leaf(spec.text.clone(), style_text, fg, true, false, Style { width: Size::Hug, ..Default::default() });
         if let Some(sc) = &spec.shortcut {
-            let mut mono = TextRole::Mono.style();
+            let mut mono = self.text_style(TextRole::Mono);
             mono.size = 11.0;
             mono.line_height = 16.0;
             let chip = fg.with_alpha(0.16 * fg.a);
@@ -1174,18 +1276,21 @@ impl Ui {
 
     /// Hover/press color weights per DESIGN.md 7.2: returns (hover_t, press_t).
     pub fn state_weights(&mut self, ix: &Interact, key_held: bool) -> (f32, f32) {
-        let h = self.fade(ix.id, 900, ix.hovered || ix.held, durations::HOVER_IN, durations::HOVER_OUT, Ease::Linear);
-        let p = self.fade(ix.id, 901, ix.pressed || key_held, 0.0, durations::PRESSED_OUT, Ease::Out);
+        let m = self.motion();
+        let h = self.fade(ix.id, 900, ix.hovered || ix.held, m.hover_in, m.hover_out, Ease::Linear);
+        let p = self.fade(ix.id, 901, ix.pressed || key_held, 0.0, m.press_out, Ease::Out);
         (h, p)
     }
 
     /// Focus ring animation per DESIGN.md 6: returns (alpha, gap).
     pub fn focus_anim(&mut self, ix: &Interact) -> (f32, f32) {
         let on = ix.focus_visible;
-        let a = self.fade(ix.id, 902, on, 0.0, durations::FADE_OUT, Ease::Linear);
-        let a_in = self.anims.spring_from(ix.id, 903, 0.0, if on { 1.0 } else { 0.0 }, springs::SNAPPY);
+        let m = self.motion();
+        let f = self.look().focus;
+        let a = self.fade(ix.id, 902, on, 0.0, m.fade_out, Ease::Linear);
+        let a_in = self.anims.spring_from(ix.id, 903, 0.0, if on { 1.0 } else { 0.0 }, m.snappy);
         let alpha = if on { a_in.clamp(0.0, 1.0) } else { a };
-        let gap = if on { 4.0 - 2.0 * a_in.clamp(0.0, 1.0) } else { 2.0 };
+        let gap = if on { f.gap_from + (f.gap - f.gap_from) * a_in.clamp(0.0, 1.0) } else { f.gap };
         (alpha, gap)
     }
 
@@ -1511,7 +1616,8 @@ impl ScrollArea<'_> {
             if ui.anims.spring_state(key, 0).is_none_or(|s| s.target != target) && ui.anims.spring_state(key, 0).is_none() {
                 ui.anims.set_spring(key, 0, st.offset);
             }
-            let v = if reduced { target } else { ui.anims.spring(key, 0, target, springs::GENTLE) };
+            let gentle = ui.motion().gentle;
+            let v = if reduced { target } else { ui.anims.spring(key, 0, target, gentle) };
             next.offset = v.clamp(0.0, max);
             if (v - target).abs() < 0.5 {
                 next.offset = target;

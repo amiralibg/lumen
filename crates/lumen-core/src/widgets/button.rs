@@ -2,8 +2,8 @@
 
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Justify, Size, Style};
-use crate::math::{vec2, Corners, Sides};
-use crate::theme::{springs, ControlSize, Token};
+use crate::math::{vec2, Corners, Rect, Sides};
+use crate::theme::{ControlSize, Shadow, Token};
 use crate::ui::{Placement, Response, Sense, TooltipSpec, Ui};
 use crate::Color;
 
@@ -112,9 +112,11 @@ impl<'u> Button<'u> {
         let (key_act, key_held) = key_activate(ui, &ix, true);
         let clicked = (ix.clicked || key_act) && !self.disabled;
         let (h, p) = ui.state_weights(&ix, key_held);
-        let m = self.size.metrics();
+        let m = ui.control_metrics(self.size);
+        let look = ui.look().button;
+        let mo = ui.motion();
         let pressed = ix.pressed || key_held;
-        let inset = ui.spring(id, 0, if pressed { m.inset } else { 0.0 }, if pressed { springs::SNAPPY } else { springs::BOUNCY });
+        let inset = ui.spring(id, 0, if pressed { m.inset } else { 0.0 }, if pressed { mo.snappy } else { mo.bouncy });
         let (ring_a, ring_gap) = ui.focus_anim(&ix);
 
         let c = |t| ui.color(t);
@@ -134,9 +136,10 @@ impl<'u> Button<'u> {
                     (f, Color::TRANSPARENT, c(Token::DangerForeground), c(Token::DangerForeground))
                 }
                 Variant::Secondary => {
-                    let base = c(Token::SurfaceRaised);
+                    let base = c(Token::Control);
                     let (hv, pr) = neutral_layers(ui, base);
-                    let b = c(Token::Border).mix(c(Token::BorderStrong), h.max(p));
+                    let cb = c(Token::ControlBorder);
+                    let b = if cb.a > 0.0 { cb.mix(c(Token::BorderStrong), h.max(p) * (1.0 - look.press_dim)) } else { cb };
                     let ic = c(Token::TextSecondary).mix(c(Token::Foreground), h.max(p));
                     (blend3(base, hv, pr, h, p), b, c(Token::Foreground), ic)
                 }
@@ -146,6 +149,44 @@ impl<'u> Button<'u> {
                     (blend3(Color::TRANSPARENT, hv, pr, h, p), Color::TRANSPARENT, t, t)
                 }
             }
+        };
+        // Windows dims the label while pressed.
+        let dim = look.press_dim * p;
+        let (text, icon) = if dim > 0.0 && !self.disabled {
+            match self.variant {
+                Variant::Primary | Variant::Danger => (text.multiply_alpha(1.0 - 0.2 * dim), icon.multiply_alpha(1.0 - 0.2 * dim)),
+                _ => (text.mix(c(Token::TextSecondary), dim), icon.mix(c(Token::TextSecondary), dim)),
+            }
+        } else {
+            (text, icon)
+        };
+        let filled = matches!(self.variant, Variant::Primary | Variant::Danger) && !self.disabled;
+        let neutral = self.variant == Variant::Secondary && !self.disabled;
+        // macOS: a light top-to-bottom gradient on filled buttons and a hairline
+        // drop shadow under bordered ones.
+        let bevel = look.bevel * (1.0 - p);
+        let grad = if filled && bevel > 0.0 {
+            [fill.shift_lightness(0.035 * bevel), fill.shift_lightness(-0.015 * bevel)]
+        } else {
+            [fill; 2]
+        };
+        let shadow_a = if (filled || neutral) && look.shadow > 0.0 { look.shadow * (0.10 + 0.25 * ui.theme.darkness()) } else { 0.0 };
+        let shadows = if shadow_a > 0.0 {
+            vec![Shadow { x: 0.0, y: 0.5, blur: 1.5, spread: 0.0, color: c(Token::ShadowInk).with_alpha(shadow_a) }]
+        } else {
+            vec![]
+        };
+        // Windows: a darker bottom edge.
+        let edge = if look.bottom_edge > 0.0 && !self.disabled {
+            if filled {
+                fill.shift_lightness(-0.10).multiply_alpha(look.bottom_edge)
+            } else if neutral {
+                c(Token::ControlEdge).multiply_alpha(look.bottom_edge)
+            } else {
+                Color::TRANSPARENT
+            }
+        } else {
+            Color::TRANSPARENT
         };
         let ring_color = if self.variant == Variant::Danger { c(Token::DangerStrong) } else { c(Token::FocusRing) };
         let radius = m.radius;
@@ -187,8 +228,18 @@ impl<'u> Button<'u> {
             cursor,
             false,
             Some(Box::new(move |cx, r| {
-                let bg = r.expand(-inset);
-                cx.painter.rrect_unsnapped(cx.painter.snap_rect(bg), Corners::all(radius - inset), [fill; 2], bw, border);
+                let bg = cx.painter.snap_rect(r.expand(-inset));
+                let corners = Corners::all((radius - inset).max(0.0));
+                if !shadows.is_empty() {
+                    cx.painter.shadows(bg, corners, &shadows);
+                }
+                cx.painter.rrect_unsnapped(bg, corners, grad, bw, border);
+                if edge.a > 0.0 {
+                    let band = (radius * 0.6).max(1.5);
+                    cx.painter.push_clip(Rect::from_xywh(bg.min.x, bg.max.y - band, bg.width(), band));
+                    cx.painter.ring(bg, corners, 1.0, edge);
+                    cx.painter.pop_clip();
+                }
                 if ring_a > 0.0 {
                     cx.defer(r, Box::new(move |cx, r| cx.focus_ring(r, radius, ring_a, ring_gap, ring_color)));
                 }

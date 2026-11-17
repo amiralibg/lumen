@@ -1,6 +1,6 @@
 # lumen
 
-**A polished-by-default immediate-mode UI kit for Rust.** As easy as egui, but it looks like a top-tier product out of the box: spring motion, Inter and Geist type, Lucide icons, named theme tokens, and animated light/dark with eight accents.
+**A polished-by-default immediate-mode UI kit for Rust.** As easy as egui, but it looks like a top-tier product out of the box: spring motion, Inter and Geist type, Lucide icons, named theme tokens, and animated light/dark with eight accents. One line switches it to look at home on macOS, Windows or GNOME instead.
 
 ```rust
 #[derive(Default)]
@@ -53,15 +53,45 @@ cargo run -p lumen-gallery -- --screenshot out.png --dark --accent blue --scroll
 | Card | `ui.card().title(..).description(..).action(|ui| ..).footer(hint, |ui| ..).show(|ui| ..)` plus `ui.settings(|rows| rows.row(title, desc, |ui| control))` |
 | Sidebar nav | `ui.sidebar().collapsed(b).show(|ui| { ui.nav_header(..); ui.nav_section(..); ui.nav_item(icon, label).badge(3).selected(b) })` |
 | Tooltip | `.tooltip(..)` / `.tooltip_shortcut(..)` on buttons, or `ui.tooltip_for(id, spec)` |
+| Segmented | `ui.segmented(&mut value, &[(A, "A"), (B, "B")])`: a sliding pill, arrow-key navigable |
 | Theme | `ui.set_mode(Mode::Dark)`, `ui.set_accent(Accent::Blue)`, `ui.accent_picker()`, `ui.color(Token::Surface)` |
+| Look | `ui.set_look(Look::mac())`, `ui.look()`, `ui.motion()`, `ui.override_color(mode, token, color)` |
 
 Layout uses `ui.row()`, `ui.column()` and `ui.stack()`, with `.pad` `.gap` `.align` `.justify` `.fill()` `.width` `.max_width`. Also `ui.scroll(key)`, `ui.spacer()`, `ui.space(px)` and `ui.divider()`.
 
 Text inputs support caret, selection, double- and triple-click, word jumps, Cmd/Ctrl+A/C/X/V/Z, and undo. Everything is keyboard reachable: Tab and Shift+Tab move focus, Space and Enter activate, arrows drive sliders and the nav, and the focus ring shows only for keyboard focus.
 
+## Looks and customization
+
+A `Look` is the whole visual language: neutrals, control sizes and radii, per-widget shapes, type scale, fonts and motion. Four ship:
+
+```rust
+lumen::App::new("Settings").native()            // the OS's look, accent and fonts
+lumen::App::new("Settings").look(Look::windows()) // or pick one: lumen(), mac(), windows(), gnome()
+```
+
+Switch looks at runtime with `ui.set_look(look)`. Colors, corners, sizes and motion all blend to the new look together. Every field is public. The builders handle the common tweaks:
+
+```rust
+let look = Look::mac()
+    .rounded(1.5)                    // 150% corner radii
+    .density(Density::Compact)       // shorter controls
+    .motion(Motion::playful())       // bouncier springs; also calm(), or .slower(2.0)
+    .text_scale(1.1)
+    .with_neutrals(Mode::Dark, |n| n.background = Color::hex(0x101418));
+ui.set_look(look);
+ui.set_accent(Accent::from_hue(160.0));   // any hue or Accent::Custom(0xRRGGBB); shades are derived for contrast
+ui.set_accent(Accent::Native);            // follow the OS accent color
+ui.override_color(Mode::Light, Token::Background, Some(Color::hex(0xFFFDF8)));
+```
+
+With `.native()` or the default settings, the app follows the OS: dark mode live (the change animates), the accent color (macOS `controlAccentColor`, the Windows DWM accent, GNOME `accent-color`), and reduce motion (on the web too, via `prefers-reduced-motion`). Platform looks use the system font when one is installed (SF Pro, Segoe UI Variable, Adwaita Sans or Cantarell) and fall back to Inter. `Look::bundled_fonts()` turns that off.
+
+The gallery's Appearance section has all of this live. For screenshots: `--look mac|windows|gnome`, `--system-accent`, `--native-accent RRGGBB`, `--round PCT`, `--bundled-fonts`.
+
 ## Design
 
-All visuals come from [`DESIGN.md`](DESIGN.md) (tokens) and [`docs/widgets-batch1.md`](docs/widgets-batch1.md) (per-widget specs). Widgets read named tokens only. Color transitions blend in OKLab. Springs are solved in closed form, so they're frame-rate independent and keep their velocity when retargeted. An idle UI requests no frames.
+All visuals come from [`DESIGN.md`](DESIGN.md) (tokens, and section 9 for looks) and [`docs/widgets-batch1.md`](docs/widgets-batch1.md) (per-widget specs). Widgets read named tokens only. Color transitions blend in OKLab. Springs are solved in closed form, so they're frame-rate independent and keep their velocity when retargeted. An idle UI requests no frames.
 
 ## Architecture
 

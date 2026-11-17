@@ -4,7 +4,15 @@
 //! Run: `cargo run -p lumen-gallery`
 //! Screenshot: `cargo run -p lumen-gallery -- --screenshot out.png --dark --accent blue`
 
-use lumen::{Align, ControlSize, Id, Justify, Key, Mode, Rect, Token, Ui};
+use lumen::{Accent, Align, ControlSize, Density, Id, Justify, Key, Look, Mode, Motion, Platform, Rect, Token, Ui};
+
+/// Motion style picked in Appearance.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum MotionStyle {
+    Platform,
+    Playful,
+    Calm,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
@@ -88,8 +96,14 @@ struct Gallery {
     sms: bool,
     text_size: f32,
     density: f32,
-    reduce_motion: bool,
+    reduce_motion: Option<bool>,
     anim_speed: f32,
+    platform: Platform,
+    roundness: f32,
+    ui_density: Density,
+    motion: MotionStyle,
+    custom_hue: f32,
+    system_fonts: bool,
     confirm: String,
     saved: u32,
 }
@@ -118,12 +132,37 @@ impl Default for Gallery {
             sms: false,
             text_size: 13.0,
             density: 64.0,
-            reduce_motion: false,
+            reduce_motion: None,
             anim_speed: 100.0,
+            platform: Platform::Lumen,
+            roundness: 100.0,
+            ui_density: Density::Regular,
+            motion: MotionStyle::Platform,
+            custom_hue: 250.0,
+            system_fonts: true,
             confirm: String::new(),
             saved: 0,
         }
     }
+}
+
+/// The look built from the Appearance settings.
+fn look_for(s: &Gallery) -> Look {
+    let base = s.platform.look();
+    let motion = match s.motion {
+        MotionStyle::Platform => base.motion,
+        MotionStyle::Playful => Motion::playful(),
+        MotionStyle::Calm => Motion::calm(),
+    };
+    let mut look = base
+        .rounded(s.roundness / 100.0)
+        .density(s.ui_density)
+        .motion(motion.slower(100.0 / s.anim_speed.max(25.0)))
+        .text_scale(base.text_scale * s.text_size / 13.0);
+    if !s.system_fonts {
+        look = look.bundled_fonts();
+    }
+    look
 }
 
 fn section_id(ui: &Ui, scroll: Id, s: Section) -> Id {
@@ -137,7 +176,10 @@ fn view(ui: &mut Ui, s: &mut Gallery) {
         let m = ui.mode().toggled();
         ui.set_mode(m);
     }
-    ui.set_reduced_motion(s.reduce_motion);
+    // Reduce motion follows the OS until the user flips the switch.
+    let reduce = *s.reduce_motion.get_or_insert_with(|| ui.system().reduced_motion.unwrap_or(false));
+    ui.set_reduced_motion(reduce);
+    ui.set_look(look_for(s));
 
     ui.row().fill().show(|ui| {
         sidebar(ui, s);
@@ -399,8 +441,52 @@ fn notifications(ui: &mut Ui, s: &mut Gallery) {
 }
 
 fn appearance(ui: &mut Ui, s: &mut Gallery) {
+    ui.card().title("Style").description("Pick a visual language. Everything blends to it: colors, corners, sizes and motion.").show(|ui| {
+        ui.settings(|rows| {
+            rows.row("Look", "Lumen's own, or match the platform conventions.", |ui| {
+                let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
+                ui.segmented(&mut s.platform, &opts);
+            });
+            let native = Platform::current();
+            rows.row("Match this device", "Use this OS's look and its accent color.", |ui| {
+                let mut on = s.platform == native && ui.accent() == Accent::Native;
+                if ui.switch("", &mut on).changed() {
+                    if on {
+                        s.platform = native;
+                        ui.set_accent(Accent::Native);
+                    } else {
+                        s.platform = Platform::Lumen;
+                        ui.set_accent(Accent::Violet);
+                    }
+                }
+            });
+            rows.row("System fonts", "Use the platform font (SF Pro, Segoe UI, Adwaita Sans) when installed.", |ui| {
+                ui.switch("", &mut s.system_fonts);
+            });
+        });
+    });
+    ui.card().title("Accent").show(|ui| {
+        ui.settings(|rows| {
+            rows.row("Preset", "Eight tuned accents, or the system one.", |ui| {
+                ui.accent_picker();
+            });
+            let hue = format!("{}°", s.custom_hue.round() as i32);
+            rows.row("Custom hue", "Any hue. Hover, pressed and text shades are derived for contrast.", |ui| {
+                if ui.slider("", &mut s.custom_hue, 0.0..=359.0).step(1.0).readout(hue).changed() {
+                    ui.set_accent(Accent::from_hue(s.custom_hue));
+                }
+            });
+        });
+    });
     ui.card().title("Interface").show(|ui| {
         ui.settings(|rows| {
+            let r = format!("{}%", s.roundness.round() as i32);
+            rows.row("Corner roundness", "Scales every radius. 0% is square.", |ui| {
+                ui.slider("", &mut s.roundness, 0.0..=200.0).step(5.0).readout(r);
+            });
+            rows.row("Density", "Control heights and card padding.", |ui| {
+                ui.segmented(&mut s.ui_density, &[(Density::Compact, "Compact"), (Density::Regular, "Regular"), (Density::Comfortable, "Roomy")]);
+            });
             let ts = format!("{} px", s.text_size as i32);
             rows.row("Text size", "Scales interface text. The default is 13 px.", |ui| {
                 ui.slider("", &mut s.text_size, 11.0..=16.0).step(1.0).readout(ts);
@@ -409,17 +495,26 @@ fn appearance(ui: &mut Ui, s: &mut Gallery) {
             rows.row("Sidebar density", "How tightly navigation items are packed.", |ui| {
                 ui.slider("", &mut s.density, 0.0..=100.0).readout(d);
             });
+        });
+    });
+    ui.card().title("Motion").show(|ui| {
+        ui.settings(|rows| {
+            rows.row("Style", "Platform springs, bouncier, or calmer with no overshoot.", |ui| {
+                ui.segmented(&mut s.motion, &[(MotionStyle::Platform, "Platform"), (MotionStyle::Playful, "Playful"), (MotionStyle::Calm, "Calm")]);
+            });
+            let mut reduce = s.reduce_motion.unwrap_or(false);
             rows.row("Reduce motion", "Replace movement with fades. Follows your system setting by default.", |ui| {
-                ui.switch("", &mut s.reduce_motion);
+                if ui.switch("", &mut reduce).changed() {
+                    s.reduce_motion = Some(reduce);
+                }
             });
             let sp = format!("{}%", s.anim_speed.round() as i32);
-            let locked = s.reduce_motion;
+            let locked = reduce;
             rows.row("Animation speed", "Locked while Reduce motion is on.", |ui| {
                 ui.slider("", &mut s.anim_speed, 25.0..=200.0).readout(sp).disabled(locked);
             });
         });
     });
-    ui.theme.motion_scale = 100.0 / s.anim_speed.max(25.0);
 }
 
 fn api_keys(ui: &mut Ui, _s: &mut Gallery) {
@@ -547,7 +642,7 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 mod cli {
     use super::*;
-    use lumen::{vec2, Accent, Modifiers, Shot, ShotStep};
+    use lumen::{vec2, Modifiers, Shot, ShotStep};
 
     fn accent(s: &str) -> Option<Accent> {
         Accent::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s))
@@ -617,6 +712,28 @@ mod cli {
                     i += 1;
                 }
                 "--collapsed" => state.collapsed = true,
+                "--look" => {
+                    let v = next().to_lowercase();
+                    state.platform = match v.as_str() {
+                        "mac" | "macos" => Platform::Mac,
+                        "windows" | "win" => Platform::Windows,
+                        "gnome" | "linux" => Platform::Gnome,
+                        _ => Platform::Lumen,
+                    };
+                    shot.look = state.platform.look();
+                    i += 1;
+                }
+                "--native-accent" => {
+                    shot.accent = Accent::Native;
+                    shot.native_accent = Some(lumen::Color::hex(u32::from_str_radix(next().trim_start_matches('#'), 16).expect("hex")));
+                    i += 1;
+                }
+                "--system-accent" => shot.accent = Accent::Native,
+                "--round" => {
+                    state.roundness = next().parse().unwrap();
+                    i += 1;
+                }
+                "--bundled-fonts" => state.system_fonts = false,
                 _ => {}
             }
             i += 1;

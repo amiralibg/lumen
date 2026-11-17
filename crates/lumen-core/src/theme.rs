@@ -6,6 +6,7 @@
 
 use crate::anim::{Ease, SpringParams};
 use crate::color::Color;
+use crate::look::{Lerp, Look, Neutrals};
 use lumen_text::{FontFamily, TextStyle};
 
 macro_rules! tokens {
@@ -26,6 +27,7 @@ tokens!(
     Foreground, TextSecondary, TextMuted, TextDisabled,
     BorderSubtle, Border, BorderStrong, Knob,
     Hover, Pressed, Scrim, FocusRing, FocusHalo, Selection, ShadowInk,
+    Control, ControlBorder, ControlEdge,
     Accent, AccentStrong, AccentSubtle, AccentForeground, AccentHover, AccentPressed,
     Success, SuccessStrong, SuccessSubtle, SuccessForeground,
     Warning, WarningStrong, WarningSubtle, WarningForeground,
@@ -50,7 +52,7 @@ impl Mode {
     }
 }
 
-/// The eight accent colors.
+/// The accent color: eight tuned presets, any custom color, or the OS one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Accent {
     Neutral,
@@ -62,6 +64,12 @@ pub enum Accent {
     Orange,
     Coral,
     Rose,
+    /// Any color as `0xRRGGBB`; hover, strong, subtle and foreground
+    /// shades are derived from it.
+    Custom(u32),
+    /// The OS accent when the app layer reports one, else the look's own
+    /// accent (system blue on macOS, Windows and GNOME; violet for lumen).
+    Native,
 }
 
 impl Accent {
@@ -78,13 +86,26 @@ impl Accent {
             Accent::Orange => "Orange",
             Accent::Coral => "Coral",
             Accent::Rose => "Rose",
+            Accent::Custom(_) => "Custom",
+            Accent::Native => "System",
         }
     }
 
+    /// A custom accent from OKLCH hue (degrees), at a lightness and chroma
+    /// that work as a button fill.
+    pub fn from_hue(hue: f32) -> Accent {
+        Accent::Custom(Color::oklch(0.60, 0.17, hue).to_hex())
+    }
+
     /// `[ACCENT, ACCENT_STRONG, ACCENT_SUBTLE, ACCENT_FOREGROUND]` (DESIGN.md 2.2).
+    ///
+    /// Custom and native accents are derived against lumen's neutrals here;
+    /// the theme derives them against the current look's.
     pub fn colors(self, mode: Mode) -> [Color; 4] {
         let h = |a, b, c, d| [Color::hex(a), Color::hex(b), Color::hex(c), Color::hex(d)];
         match (mode, self) {
+            (_, Accent::Custom(v)) => derive_accent(Color::hex(v), mode, Look::lumen().neutrals(mode), 0.0),
+            (_, Accent::Native) => Accent::Violet.colors(mode),
             (Mode::Light, Accent::Neutral) => h(0x14171D, 0x14171D, 0xE8E9EC, 0xFFFFFF),
             (Mode::Light, Accent::Violet) => h(0x7D55EC, 0x6849C4, 0xF0EFFE, 0xFFFFFF),
             (Mode::Light, Accent::Blue) => h(0x0E6EE6, 0x125DC0, 0xE9F2FF, 0xFFFFFF),
@@ -101,6 +122,61 @@ impl Accent {
             (Mode::Dark, Accent::Orange) => h(0xFE821E, 0xEF9963, 0x3C2314, 0x2B1405),
             (Mode::Dark, Accent::Coral) => h(0xFB7365, 0xF79285, 0x3E211D, 0x2C120E),
             (Mode::Dark, Accent::Rose) => h(0xDD226C, 0xF48FA7, 0x401E26, 0xFFFFFF),
+        }
+    }
+}
+
+/// `[ACCENT, ACCENT_STRONG, ACCENT_SUBTLE, ACCENT_FOREGROUND]` for an
+/// arbitrary color against a set of neutrals.
+pub fn derive_accent(c: Color, mode: Mode, n: &Neutrals, dark_min_l: f32) -> [Color; 4] {
+    let light = mode == Mode::Light;
+    let c = c.with_alpha(1.0);
+    let mut a = c;
+    if !light {
+        let min_l = dark_min_l.max(0.45);
+        if a.lightness() < min_l {
+            a = a.shift_lightness(min_l - a.lightness());
+        }
+    }
+    // White text when it reads (3:1, like the platforms), else a dark tint.
+    let fg = if Color::WHITE.contrast(a) >= 3.0 { Color::WHITE } else { a.shift_lightness(0.20 - a.lightness()) };
+    // Text-safe shade against the surface.
+    let surface = n.surface;
+    let mut strong = a;
+    for _ in 0..30 {
+        if strong.contrast(surface) >= 4.5 {
+            break;
+        }
+        strong = strong.shift_lightness(if light { -0.02 } else { 0.02 });
+    }
+    let subtle = surface.mix(a, if light { 0.12 } else { 0.22 });
+    [a, strong, subtle, fg]
+}
+
+/// Per-token color overrides for each mode.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Overrides {
+    light: [Option<Color>; TOKEN_COUNT],
+    dark: [Option<Color>; TOKEN_COUNT],
+}
+
+impl Default for Overrides {
+    fn default() -> Self {
+        Overrides { light: [None; TOKEN_COUNT], dark: [None; TOKEN_COUNT] }
+    }
+}
+
+impl Overrides {
+    pub fn set(&mut self, mode: Mode, t: Token, c: Option<Color>) {
+        match mode {
+            Mode::Light => self.light[t as usize] = c,
+            Mode::Dark => self.dark[t as usize] = c,
+        }
+    }
+    pub fn get(&self, mode: Mode, t: Token) -> Option<Color> {
+        match mode {
+            Mode::Light => self.light[t as usize],
+            Mode::Dark => self.dark[t as usize],
         }
     }
 }
@@ -123,34 +199,67 @@ impl Palette {
         self.0[t as usize]
     }
 
+    /// lumen's own palette for a mode and accent.
     pub fn new(mode: Mode, accent: Accent) -> Palette {
+        Palette::build(mode, accent, &Look::lumen(), None, &Overrides::default())
+    }
+
+    /// The palette for a look. `native` is the OS accent (for
+    /// [`Accent::Native`]).
+    pub fn build(mode: Mode, accent: Accent, look: &Look, native: Option<Color>, overrides: &Overrides) -> Palette {
         use Token::*;
         let mut p = [Color::TRANSPARENT; TOKEN_COUNT];
         let mut set = |t: Token, c: Color| p[t as usize] = c;
         let light = mode == Mode::Light;
-        let pick = |l: u32, d: u32| Color::hex(if light { l } else { d });
-        set(Background, pick(0xF9FAFB, 0x0B0C0F));
-        set(Surface, pick(0xFFFFFF, 0x121417));
-        set(SurfaceRaised, pick(0xFFFFFF, 0x1A1C20));
-        set(SurfaceMuted, pick(0xF3F4F6, 0x1F2024));
-        set(Track, pick(0xD4D6DA, 0x35383D));
-        set(InverseSurface, pick(0x191C21, 0xE6E8EB));
-        set(InverseForeground, pick(0xF4F5F7, 0x14171D));
-        set(Foreground, pick(0x14171D, 0xEFF0F3));
-        set(TextSecondary, pick(0x51555D, 0xA8ABB1));
-        set(TextMuted, pick(0x686C74, 0x888C94));
-        set(TextDisabled, pick(0xA1A5AB, 0x4D5055));
-        set(BorderSubtle, pick(0xEAEBEE, 0x212327));
-        set(Border, pick(0xDEE0E3, 0x2A2D31));
-        set(BorderStrong, pick(0xC2C4C9, 0x3E4147));
+        let n = look.neutrals(mode);
+        set(Background, n.background);
+        set(Surface, n.surface);
+        set(SurfaceRaised, n.surface_raised);
+        set(SurfaceMuted, n.surface_muted);
+        set(Track, n.track);
+        set(InverseSurface, n.inverse_surface);
+        set(InverseForeground, n.inverse_foreground);
+        set(Foreground, n.foreground);
+        set(TextSecondary, n.text_secondary);
+        set(TextMuted, n.text_muted);
+        set(TextDisabled, n.text_disabled);
+        set(BorderSubtle, n.border_subtle);
+        set(Border, n.border);
+        set(BorderStrong, n.border_strong);
+        set(Control, n.control);
+        set(ControlBorder, n.control_border);
+        set(ControlEdge, n.control_edge);
         set(Knob, Color::WHITE);
-        let ink = pick(0x0F121C, 0x000000);
+        let ink = n.ink;
         set(ShadowInk, ink);
         set(Hover, if light { ink.with_alpha(0.05) } else { Color::WHITE.with_alpha(0.06) });
         set(Pressed, if light { ink.with_alpha(0.09) } else { Color::WHITE.with_alpha(0.10) });
         set(Scrim, if light { ink.with_alpha(0.40) } else { Color::BLACK.with_alpha(0.60) });
 
-        let [a, a_strong, a_subtle, a_fg] = accent.colors(mode);
+        let mi = if light { 0 } else { 1 };
+        let derive = |c: Color| derive_accent(c, mode, n, look.dark_accent_min_lightness);
+        let [a, a_strong, a_subtle, a_fg] = match accent {
+            self::Accent::Custom(v) => derive(Color::hex(v)),
+            self::Accent::Native => match native {
+                Some(c) => derive(c),
+                None if look.platform == crate::look::Platform::Lumen => self::Accent::Violet.colors(mode),
+                None => derive(look.accent[mi]),
+            },
+            named if look.platform == crate::look::Platform::Lumen => named.colors(mode),
+            // Named accents on platform looks keep their hue, re-derived
+            // against the look's neutrals.
+            named => {
+                let tuned = named.colors(mode);
+                if named == self::Accent::Neutral {
+                    let fg = n.foreground;
+                    [fg, fg, n.surface_muted, n.surface]
+                } else {
+                    let mut d = derive(tuned[0]);
+                    d[3] = tuned[3];
+                    d
+                }
+            }
+        };
         set(Accent, a);
         set(AccentStrong, a_strong);
         set(AccentSubtle, a_subtle);
@@ -159,10 +268,15 @@ impl Palette {
         set(AccentHover, ah);
         set(AccentPressed, ap);
 
-        let focus = if accent == self::Accent::Neutral { self::Accent::Blue.colors(mode)[1] } else { a_strong };
-        set(FocusRing, focus);
-        set(FocusHalo, focus.with_alpha(if light { 0.24 } else { 0.32 }));
-        set(Selection, focus.with_alpha(if light { 0.22 } else { 0.36 }));
+        let focus = match n.focus {
+            Some(f) => f,
+            None if accent == self::Accent::Neutral => self::Accent::Blue.colors(mode)[1],
+            None => a_strong,
+        };
+        let focus_alpha = look.focus.alpha;
+        set(FocusRing, focus.with_alpha(focus_alpha));
+        set(FocusHalo, a_strong.with_alpha(if light { 0.24 } else { 0.32 }));
+        set(Selection, a_strong.with_alpha(if light { 0.22 } else { 0.36 }));
 
         let status = |acc: self::Accent| acc.colors(mode);
         for (base, acc) in [(Success, self::Accent::Green), (Warning, self::Accent::Amber), (Info, self::Accent::Blue)] {
@@ -179,6 +293,9 @@ impl Palette {
         for (i, v) in d.iter().enumerate() {
             p[Danger as usize + i] = Color::hex(*v);
         }
+        if look.platform != crate::look::Platform::Lumen {
+            p[DangerSubtle as usize] = n.surface.mix(Color::hex(d[0]), if light { 0.10 } else { 0.20 });
+        }
         let (dh, dp) = filled_states(Color::hex(d[0]));
         p[DangerHover as usize] = dh;
         p[DangerPressed as usize] = dp;
@@ -190,6 +307,11 @@ impl Palette {
         };
         for (i, v) in series.iter().enumerate() {
             p[Series0 as usize + i] = Color::hex(*v);
+        }
+        for (i, c) in p.iter_mut().enumerate() {
+            if let Some(o) = overrides.get(mode, Token::ALL[i]) {
+                *c = o;
+            }
         }
         Palette(p)
     }
@@ -345,16 +467,23 @@ impl ControlSize {
     }
 }
 
-/// Live theme: the current palette, plus an in-flight blend.
+/// Live theme: mode, accent and look, plus an in-flight blend between
+/// what was on screen and the new target. Colors blend per token in OKLab;
+/// the look's geometry and motion blend on the same timeline.
 pub struct Theme {
     mode: Mode,
     accent: Accent,
+    target: Look,
+    native_accent: Option<Color>,
+    overrides: Overrides,
     from: Palette,
     to: Palette,
-    /// Blend progress for the palette, 0..1.
+    current: Palette,
+    look_from: Look,
+    look_current: Look,
+    blending: bool,
     start: f64,
     duration: f32,
-    current: Palette,
     /// 0 = light, 1 = dark, blended (used for shadow alpha).
     dark_from: f32,
     dark_t: f32,
@@ -365,16 +494,27 @@ pub struct Theme {
 
 impl Theme {
     pub fn new(mode: Mode, accent: Accent) -> Self {
-        let p = Palette::new(mode, accent);
+        Self::with_look(mode, accent, Look::lumen())
+    }
+
+    pub fn with_look(mode: Mode, accent: Accent, look: Look) -> Self {
+        let overrides = Overrides::default();
+        let p = Palette::build(mode, accent, &look, None, &overrides);
         let d = if mode == Mode::Dark { 1.0 } else { 0.0 };
         Self {
             mode,
             accent,
+            target: look,
+            native_accent: None,
+            overrides,
             from: p,
             to: p,
+            current: p,
+            look_from: look,
+            look_current: look,
+            blending: false,
             start: 0.0,
             duration: 0.0,
-            current: p,
             dark_from: d,
             dark_t: d,
             reduced_motion: false,
@@ -387,6 +527,20 @@ impl Theme {
     }
     pub fn accent(&self) -> Accent {
         self.accent
+    }
+    /// The target look (what [`Ui::set_look`](crate::Ui::set_look) set).
+    pub fn target_look(&self) -> &Look {
+        &self.target
+    }
+    /// The look on screen right now, blended while a change animates.
+    pub fn look(&self) -> &Look {
+        &self.look_current
+    }
+    pub fn native_accent(&self) -> Option<Color> {
+        self.native_accent
+    }
+    pub fn overrides(&self) -> &Overrides {
+        &self.overrides
     }
 
     /// Blended color for a token.
@@ -404,26 +558,64 @@ impl Theme {
     }
 
     pub fn is_animating(&self) -> bool {
-        self.from != self.to
+        self.blending
+    }
+
+    fn retarget(&mut self, now: f64, dur: f32) {
+        // Start from what is on screen right now.
+        self.from = self.current;
+        self.look_from = self.look_current;
+        self.dark_from = self.dark_t;
+        self.to = Palette::build(self.mode, self.accent, &self.target, self.native_accent, &self.overrides);
+        self.start = now;
+        self.duration = if self.reduced_motion { 0.1 } else { dur * self.motion_scale };
+        self.blending = true;
     }
 
     pub(crate) fn set(&mut self, mode: Mode, accent: Accent, now: f64) {
         if mode == self.mode && accent == self.accent {
             return;
         }
-        let dur = if mode != self.mode { durations::THEME_BLEND } else { durations::ACCENT_BLEND };
+        let blend = self.target.motion.theme_blend;
+        let dur = if mode != self.mode { blend } else { blend * (2.0 / 3.0) };
         self.mode = mode;
         self.accent = accent;
-        // Start from what is on screen right now.
-        self.from = self.current;
-        self.dark_from = self.dark_t;
-        self.to = Palette::new(mode, accent);
-        self.start = now;
-        self.duration = if self.reduced_motion { 0.1 } else { dur * self.motion_scale };
+        self.retarget(now, dur);
+    }
+
+    pub(crate) fn set_look(&mut self, look: Look, now: f64) {
+        if look == self.target {
+            return;
+        }
+        self.target = look;
+        self.retarget(now, look.motion.theme_blend * 1.5);
+    }
+
+    pub(crate) fn set_native_accent(&mut self, c: Option<Color>, now: f64) {
+        if c == self.native_accent {
+            return;
+        }
+        self.native_accent = c;
+        if self.accent == Accent::Native {
+            self.retarget(now, self.target.motion.theme_blend);
+        }
+    }
+
+    pub(crate) fn set_override(&mut self, mode: Mode, t: Token, c: Option<Color>, now: f64) {
+        if self.overrides.get(mode, t) == c {
+            return;
+        }
+        self.overrides.set(mode, t, c);
+        self.retarget(now, self.target.motion.theme_blend * (2.0 / 3.0));
+    }
+
+    /// Jump to the end of any blend in flight.
+    pub fn settle(&mut self) {
+        self.update(f64::INFINITY);
     }
 
     pub(crate) fn update(&mut self, now: f64) {
-        if self.from == self.to {
+        if !self.blending {
             return;
         }
         let t = if self.duration <= 0.0 { 1.0 } else { ((now - self.start) as f32 / self.duration).clamp(0.0, 1.0) };
@@ -433,9 +625,13 @@ impl Theme {
         if t >= 1.0 {
             self.current = self.to;
             self.from = self.to;
+            self.look_current = self.target;
+            self.look_from = self.target;
             self.dark_t = target_dark;
+            self.blending = false;
         } else {
             self.current = self.from.mix(&self.to, e);
+            self.look_current = self.look_from.lerp(self.target, e);
         }
     }
 }
@@ -491,6 +687,53 @@ mod tests {
         assert!(!th.is_animating());
         assert_eq!(th.color(Token::Background).to_hex(), 0x0B0C0F);
         assert_eq!(th.darkness(), 1.0);
+    }
+
+    #[test]
+    fn look_change_blends_geometry_and_colors() {
+        let mut th = Theme::new(Mode::Light, Accent::Native);
+        th.set_look(Look::windows(), 0.0);
+        th.update(0.2);
+        let r = th.look().card.radius;
+        assert!(r < 12.0 && r > 8.0, "{r}");
+        th.update(5.0);
+        assert!(!th.is_animating());
+        assert_eq!(th.look().card.radius, 8.0);
+        assert_eq!(th.color(Token::Background).to_hex(), 0xF3F3F3);
+        assert_eq!(th.color(Token::Accent).to_hex(), 0x005FB8);
+    }
+
+    #[test]
+    fn native_accent_follows_os() {
+        let mut th = Theme::with_look(Mode::Light, Accent::Native, Look::mac());
+        assert_eq!(th.color(Token::Accent).to_hex(), 0x007AFF);
+        th.set_native_accent(Some(Color::hex(0xE0383E)), 0.0);
+        th.update(5.0);
+        assert_eq!(th.color(Token::Accent).to_hex(), 0xE0383E);
+    }
+
+    #[test]
+    fn derived_accents_are_readable() {
+        for hue in (0..360).step_by(15) {
+            for mode in [Mode::Light, Mode::Dark] {
+                for look in [Look::lumen(), Look::mac(), Look::windows(), Look::gnome()] {
+                    let p = Palette::build(mode, Accent::from_hue(hue as f32), &look, None, &Overrides::default());
+                    let fg = p.get(Token::AccentForeground);
+                    let a = p.get(Token::Accent);
+                    assert!(fg.contrast(a) >= 3.0, "hue {hue} {mode:?} fg on accent {}", fg.contrast(a));
+                    let s = p.get(Token::AccentStrong);
+                    assert!(s.contrast(p.get(Token::Surface)) >= 4.4, "hue {hue} {mode:?} strong {}", s.contrast(p.get(Token::Surface)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overrides_apply() {
+        let mut o = Overrides::default();
+        o.set(Mode::Dark, Token::Background, Some(Color::hex(0x101820)));
+        let p = Palette::build(Mode::Dark, Accent::Blue, &Look::lumen(), None, &o);
+        assert_eq!(p.get(Token::Background).to_hex(), 0x101820);
     }
 
     #[test]

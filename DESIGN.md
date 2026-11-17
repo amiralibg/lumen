@@ -372,3 +372,30 @@ Minimum window 960 x 600. Window fill `BACKGROUND`.
 | Scrollbar | 8px wide overlay, 2px inset, thumb `BORDER_STRONG`, radius full, visible while scrolling or hovered, fades out over 400ms after 1s idle |
 
 The contents of the top bar, sidebar and page are specified in the "Gallery page" section of `docs/widgets-batch1.md`.
+
+## 9. Looks
+
+Everything above describes the **Lumen** look, which is the default. A look (`lumen_core::look::Look`) bundles the parts of the design that are not mode or accent: neutrals for each mode, control heights, radii and padding, per-widget shape parameters, the type scale, preferred fonts, and motion. Widgets read their geometry from the current look, never from constants.
+
+| | Lumen | macOS | Windows | GNOME |
+|---|---|---|---|---|
+| Control height sm/md/lg | 28/32/40 | 20/24/30 | 24/32/40 | 28/34/42 |
+| Control radius md | 8 | 6 | 4 | 6 |
+| Card | r12, border | r10, faint border | r8, border | r12, soft shadow |
+| Secondary button | raised + border | white, hairline shadow, bevel on filled | bottom edge | flat filled |
+| Switch | 36×20 | 38×22, white knob | 40×20, outlined when off | 46×26, white knob |
+| Checkbox | 16, r4 | 14, r3.5 | 20, r4 | 16, r4, 2px border |
+| Slider thumb | 16, halo | 20 | 20, accent dot | 20, outline |
+| Text input | outline + halo | outline + halo | accent underline | filled |
+| Focus ring | 2px, gap 4→2 | 3.5px, 60%, hugging | 2px foreground | 2px, 50% |
+| Sidebar selection | accent-subtle | neutral | neutral + accent bar | neutral |
+| Fonts | Inter, Geist | SF Pro | Segoe UI Variable | Adwaita Sans, Cantarell |
+| Native accent | violet | #007AFF / #0A84FF | #005FB8 / #60CDFF | #3584E4 |
+
+Rules:
+
+- **Blending.** Changing look blends every numeric field over `1.5 × motion.theme_blend` with the standard ease, on the same timeline as the palette blend, so corners, sizes and colors morph together. Fonts and the platform tag switch at the start.
+- **Accents.** The eight named accents keep their tuned values on Lumen. On platform looks, and for `Accent::Custom` and `Accent::Native`, the four accent tokens are derived: the foreground is white when it reaches 3:1 on the accent, otherwise a dark tint of the hue. `ACCENT_STRONG` is shifted in OKLCH lightness until it reaches 4.5:1 on `SURFACE`. `ACCENT_SUBTLE` is `SURFACE` mixed 12% (light) or 22% (dark) toward the accent. On Windows dark, accents are lifted to L ≥ 0.78, as Fluent does.
+- **New tokens.** `CONTROL`, `CONTROL_BORDER` and `CONTROL_EDGE` are the resting fill, outline and bottom edge of neutral controls. On Lumen they equal `SURFACE_RAISED` and `BORDER`.
+- **Native.** `Look::native()` picks macOS, Windows or GNOME from the build target (Lumen on the web). The app layer reports the OS accent, the reduce-motion setting and live dark-mode changes.
+- **Customizing.** `rounded(f)` scales radii (pills stay pills, checkbox radius is capped at half its size). `density(..)` adds ±4 to control heights. `text_scale(s)` scales text and control labels. `motion(..)` swaps springs and durations, and `Motion::slower(f)` scales them all while keeping each spring's damping ratio. `Ui::override_color(mode, token, color)` replaces a single token.

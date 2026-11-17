@@ -8,7 +8,7 @@ use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
 use crate::math::{vec2, Corners, Rect};
-use crate::theme::{springs, ControlSize, TextRole, Token};
+use crate::theme::{ControlSize, TextRole, Token};
 use crate::ui::{Response, Sense, Ui};
 use crate::Color;
 
@@ -89,22 +89,25 @@ impl<'u> TextInput<'u> {
         self
     }
 
-    fn text_style(&self) -> TextStyle {
-        let mut st = if self.mono { TextRole::Mono.style() } else { TextRole::Body.style() };
+    fn text_style(&self, ui: &Ui) -> TextStyle {
+        let mut st = ui.text_style(if self.mono { TextRole::Mono } else { TextRole::Body });
+        let k = ui.look().text_scale;
         if self.size == ControlSize::Lg && !self.mono {
-            st.size = 14.0;
+            st.size = (14.0 * k * 4.0).round() / 4.0;
         }
-        st.line_height = 20.0;
+        st.line_height = (20.0 * k).round();
         st
     }
 
     fn show_inner(&mut self) -> Response {
         let key = self.id_key.clone().or_else(|| self.label.clone()).unwrap_or_else(|| self.placeholder.clone());
-        let style = self.text_style();
+        let style = self.text_style(self.ui);
         let ui = &mut *self.ui;
         let id = ui.make_id(("text_input", key));
         let mut ix = ui.interact(id, Sense { click: true, drag: true, focusable: true, scroll: false }, self.disabled);
-        let m = self.size.metrics();
+        let m = ui.control_metrics(self.size);
+        let lk = ui.look().input;
+        let mo = ui.motion();
         let now = ui.time();
         let text_left = if self.icon.is_some() { 34.0 } else { 12.0 };
         let old = self.value.clone();
@@ -199,7 +202,7 @@ impl<'u> TextInput<'u> {
         let hovered = ix.hovered && !self.disabled;
         let h = ui.fade(id, 1, hovered, 0.06, 0.16, Ease::Linear);
         let f = ui.fade(id, 2, ix.focused, 0.06, 0.16, Ease::Linear);
-        let halo_w = ui.spring(id, 3, if ix.focused { 3.0 } else { 0.0 }, springs::SNAPPY);
+        let halo_w = ui.spring(id, 3, if ix.focused { 3.0 * lk.halo } else { 0.0 }, mo.snappy);
         let halo_a = ui.fade(id, 4, ix.focused, 0.0, 0.1, Ease::Linear);
         let has_error = self.error.is_some();
         let c = |t| ui.color(t);
@@ -211,8 +214,16 @@ impl<'u> TextInput<'u> {
             } else {
                 c(Token::Border).mix(c(Token::BorderStrong), h).mix(c(Token::FocusRing), f)
             };
-            (c(Token::Surface), b, c(Token::Foreground), c(Token::TextMuted).mix(c(Token::TextSecondary), f), c(Token::TextMuted))
+            // GNOME fills the field and drops the outline; Windows fills it
+            // with the control color until focused.
+            let rest = c(Token::Surface).mix(c(Token::Control), lk.filled.max(lk.underline * (1.0 - f)));
+            let fill = rest.mix(c(Token::Control).mix(c(Token::Control).over(c(Token::Hover)), h), lk.filled * (1.0 - f));
+            let b = if has_error { b } else { b.mix(c(Token::FocusRing).multiply_alpha(f), lk.filled) };
+            (fill, b, c(Token::Foreground), c(Token::TextMuted).mix(c(Token::TextSecondary), f), c(Token::TextMuted))
         };
+        let border_w = 1.0 + lk.filled * f;
+        let under_c = if has_error { c(Token::Danger) } else { c(Token::BorderStrong).mix(c(Token::Accent), f) };
+        let under_h = (1.0 + f) * lk.underline;
         let halo_c = if has_error { c(Token::Danger).with_alpha(c(Token::FocusHalo).a) } else { c(Token::FocusHalo) };
         let sel_c = c(Token::Selection);
         let caret_c = c(Token::FocusRing);
@@ -286,7 +297,8 @@ impl<'u> TextInput<'u> {
         );
         if let Some(l) = self.label.take() {
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
-            ui.text_leaf(l, TextRole::Label.style(), lc, false, true, Style::default());
+            let st = ui.text_style(TextRole::Label);
+            ui.text_leaf(l, st, lc, false, true, Style::default());
         }
         let cursor_icon = if self.disabled { CursorIcon::Default } else { CursorIcon::Text };
         let galley2 = galley.clone();
@@ -302,7 +314,13 @@ impl<'u> TextInput<'u> {
                 if halo_w > 0.01 && halo_a > 0.0 {
                     cx.painter.ring(r.expand(halo_w), Corners::all(radius + halo_w), halo_w, halo_c.multiply_alpha(halo_a));
                 }
-                cx.painter.rrect(r, Corners::all(radius), fill, 1.0, border);
+                cx.painter.rrect(r, Corners::all(radius), fill, if border.a > 0.0 { border_w } else { 0.0 }, border);
+                if under_h > 0.01 {
+                    // Windows: the bottom edge, thickening to an accent line.
+                    cx.painter.push_clip(Rect::from_xywh(r.min.x, r.max.y - under_h, r.width(), under_h));
+                    cx.painter.rrect(r, Corners::all(radius), Color::TRANSPARENT, under_h, under_c);
+                    cx.painter.pop_clip();
+                }
                 if let Some(i) = &icon {
                     cx.icon(i, vec2(r.min.x + 10.0 + 8.0, r.center().y), 16.0, icon_c);
                 }
@@ -337,11 +355,11 @@ impl<'u> TextInput<'u> {
         // Height of the message (6 gap + wrapped text), measured at the
         // field's previous width so the reveal animates to the right size.
         let msg = ui.mem::<EditState>(id).last_error.clone();
-        let mut msg_style = TextRole::Label.style();
+        let mut msg_style = ui.text_style(TextRole::Label);
         msg_style.weight = 400;
         let wrap_w = (field_w_prev - 20.0).max(100.0);
         let msg_h = 6.0 + ui.text.layout(&msg, &msg_style, Some(wrap_w), TextAlign::Start).height;
-        let reveal = ui.anims.spring_from(id, 5, 0.0, if has_error { 1.0 } else { 0.0 }, if has_error { springs::SMOOTH } else { springs::SNAPPY });
+        let reveal = ui.anims.spring_from(id, 5, 0.0, if has_error { 1.0 } else { 0.0 }, if has_error { mo.smooth } else { mo.snappy });
         let err_a = ui.fade(id, 6, has_error, 0.12, 0.10, Ease::Linear);
         if reveal > 0.001 || err_a > 0.0 {
             let dc = ui.color(Token::DangerStrong).multiply_alpha(err_a);
@@ -355,7 +373,7 @@ impl<'u> TextInput<'u> {
             ui.end();
             ui.end();
         } else if let Some(hp) = self.helper.take() {
-            let mut st = TextRole::Label.style();
+            let mut st = ui.text_style(TextRole::Label);
             st.weight = 400;
             let hc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::TextMuted) };
             let n = ui.text_leaf(hp, st, hc, true, false, Style { margin_top: 6.0, ..Default::default() });
