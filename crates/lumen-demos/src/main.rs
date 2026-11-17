@@ -8,6 +8,7 @@ use lumen::{Accent, Align, Date, Justify, Look, Mode, Platform, Series, Sides, T
 
 /// Every demo: url name, title.
 pub const DEMOS: &[(&str, &str)] = &[
+    ("bento", "Overview bento"),
     ("hero", "Dashboard"),
     ("button", "Button"),
     ("switch", "Switch"),
@@ -23,6 +24,10 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("dialog", "Dialog"),
     ("toast", "Toast"),
     ("tooltip", "Tooltip"),
+    ("chips", "Filter chips"),
+    ("stepper", "Stepper"),
+    ("toggle-group", "Toggle group"),
+    ("avatar", "Avatar"),
     ("card", "Card and settings"),
     ("badge", "Badge and status"),
     ("progress", "Progress and spinner"),
@@ -76,6 +81,12 @@ struct State {
     progress: f32,
     t: u32,
     search: String,
+    os: u8,
+    runner: String,
+    labels: [bool; 5],
+    jobs: i64,
+    slot: u8,
+    reduced: bool,
 }
 
 impl State {
@@ -102,6 +113,12 @@ impl State {
             progress: 0.42,
             t: 0,
             search: String::new(),
+            os: 0,
+            runner: "linux-arm64-02".into(),
+            labels: [true, true, false, false, false],
+            jobs: 4,
+            slot: 1,
+            reduced: false,
         }
     }
 }
@@ -128,9 +145,12 @@ fn frame_at(ui: &mut Ui, justify: Justify, f: impl FnOnce(&mut Ui)) {
 }
 
 fn view(ui: &mut Ui, s: &mut State) {
+    if s.reduced {
+        ui.set_reduced_motion(true);
+    }
     let demo = s.demo.clone();
     // Embedded component demos sit on the host page's white card.
-    if s.embed && !matches!(demo.as_str(), "hero" | "vault") {
+    if s.embed && !matches!(demo.as_str(), "hero" | "vault" | "bento") {
         for m in [Mode::Light, Mode::Dark] {
             let surf = ui.theme.target_look().neutrals(m).surface;
             ui.override_color(m, lumen::Token::Background, Some(surf));
@@ -138,9 +158,10 @@ fn view(ui: &mut Ui, s: &mut State) {
     }
     match demo.as_str() {
         "hero" => hero(ui, s),
+        "bento" => bento(ui, s),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
-        "menu" | "popover" | "select" | "date-picker" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        "menu" | "popover" | "select" | "date-picker" | "stepper" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -289,6 +310,45 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 }
             });
         }
+        "chips" => {
+            ui.column().gap(12).align(Align::Center).show(|ui| {
+                ui.row().gap(8).show(|ui| {
+                    for (i, l) in ["arm64", "gpu", "docker", "nightly", "macos-14"].iter().enumerate() {
+                        ui.chip(l, &mut s.labels[i]);
+                    }
+                });
+                let n = s.labels.iter().filter(|x| **x).count();
+                ui.label(format!("{n} of 5 labels: runners must match all of them.")).muted();
+            });
+        }
+        "stepper" => {
+            ui.column().gap(16).fill_width().max_width(320.0).show(|ui| {
+                ui.row().fill_width().align(Align::Center).show(|ui| {
+                    ui.label("Concurrent jobs");
+                    ui.spacer();
+                    ui.stepper("jobs", &mut s.jobs, 1, 16);
+                });
+                ui.label("Click − and +, or focus a button and use the arrow keys. The number rolls the way it moved.").muted();
+            });
+        }
+        "toggle-group" => {
+            ui.column().gap(12).fill_width().max_width(360.0).show(|ui| {
+                ui.label("Release window").strong();
+                ui.toggle_group("slots", &mut s.slot, &[(0, "09:00"), (1, "11:30"), (2, "14:00"), (3, "16:30")]);
+            });
+        }
+        "avatar" => {
+            ui.column().gap(18).align(Align::Center).show(|ui| {
+                ui.row().gap(12).align(Align::Center).show(|ui| {
+                    ui.avatar("JB", 0, 40.0, Some(true));
+                    ui.avatar("PN", 1, 40.0, Some(false));
+                    ui.avatar("TR", 2, 40.0, None);
+                    ui.avatar("LF", 3, 32.0, None);
+                    ui.avatar("SW", 4, 24.0, None);
+                });
+                ui.avatar_group(&["JB", "PN", "TR", "LF", "SW", "DM", "AK"], 4, 32.0);
+            });
+        }
         "tooltip" => {
             ui.row().gap(8).show(|ui| {
                 ui.icon_button("bold").ghost().tooltip_shortcut("Bold", "⌘B");
@@ -404,6 +464,87 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ui.label(format!("Unknown demo “{demo}”.")).secondary();
         }
     }
+}
+
+/// The overview bento on the site: one scene of everyday components, all of
+/// them live. Mirrors the Ethereal concept in site/concepts.
+fn bento(ui: &mut Ui, s: &mut State) {
+    ui.row().fill().pad(24).gap(16).align(Align::Start).show(|ui| {
+        ui.column().fill_width().gap(16).show(|ui| {
+            ui.card().title("Add a runner").description("Runners pick up jobs for the platforms you choose.").show(|ui| {
+                ui.segmented(&mut s.os, &[(0, "Linux"), (1, "macOS"), (2, "Windows")]);
+                ui.text_input(&mut s.runner).label("Name").fill_width();
+                ui.select(&mut s.region, &[(Region::Frankfurt, "Frankfurt"), (Region::Virginia, "Virginia"), (Region::Tokyo, "Tokyo"), (Region::Sydney, "Sydney")]).label("Region").fill_width();
+                ui.column().gap(6).show(|ui| {
+                    ui.label("Labels").strong();
+                    ui.row().gap(6).show(|ui| {
+                        for (i, l) in ["arm64", "gpu", "docker", "nightly"].iter().enumerate() {
+                            ui.chip(l, &mut s.labels[i]);
+                        }
+                    });
+                });
+                ui.row().fill_width().align(Align::Center).show(|ui| {
+                    ui.label("Concurrent jobs").strong();
+                    ui.spacer();
+                    ui.stepper("jobs", &mut s.jobs, 1, 16);
+                });
+                ui.row().fill_width().gap(8).show(|ui| {
+                    ui.spacer();
+                    ui.button("Cancel").ghost();
+                    if ui.button("Add runner").primary().clicked() {
+                        let d = format!("{} is online and taking jobs.", s.runner);
+                        ui.toast(Toast::new("Runner added").description(d).success());
+                    }
+                });
+            });
+            ui.card().title("Traffic").show(|ui| {
+                ui.donut_sized("bento-traffic", &[("Search", 42.0), ("Direct", 26.0), ("Social", 17.0), ("Other", 15.0)], 120.0);
+            });
+        });
+        ui.column().fill_width().gap(16).show(|ui| {
+            ui.card().show(|ui| ui.stat("Deploys", "1,284", Some(12.4), Some(&[9.0, 8.6, 9.4, 10.8, 10.0, 11.1, 11.3, 12.4, 12.6, 13.8, 15.1])));
+            ui.card().title("Quick settings").show(|ui| {
+                ui.settings(|rows| {
+                    rows.row("Wi-Fi", "", |ui| {
+                        ui.switch("", &mut s.on[0]);
+                    });
+                    rows.row("Bluetooth", "", |ui| {
+                        ui.switch("", &mut s.on[1]);
+                    });
+                    rows.row("Focus", "", |ui| {
+                        ui.switch("", &mut s.on[2]);
+                    });
+                });
+                let v = format!("{:.0}%", s.vol * 100.0);
+                ui.slider("Volume", &mut s.vol, 0.0..=1.0).readout(v).width(f32::INFINITY);
+            });
+            ui.card().title("Reviewers").show(|ui| {
+                for (i, (ini, name, mail, req)) in [("JB", "Jonas Berg", "jonas@northlight.io", "Required"), ("PN", "Priya Nair", "priya@harbor.dev", "Required"), ("TR", "Tomas Rivera", "tomas@kiln.app", "Optional")].iter().enumerate() {
+                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                        ui.avatar(ini, i, 34.0, [Some(true), Some(false), None][i]);
+                        ui.column().gap(1).fill_width().show(|ui| {
+                            ui.label(*name).strong();
+                            ui.label(*mail).muted();
+                        });
+                        ui.badge(*req, if i < 2 { Tone::Accent } else { Tone::Neutral });
+                    });
+                }
+                ui.progress(Some(0.66));
+            });
+        });
+        ui.column().fill_width().gap(16).show(|ui| {
+            ui.card().show(|ui| ui.stat("Active users", "8,214", Some(4.1), Some(&[3.0, 3.4, 3.2, 4.1, 4.0, 4.8, 5.2, 5.0, 6.1, 6.4, 7.2])));
+            ui.card().show(|ui| {
+                ui.calendar_range(&mut s.span);
+                ui.divider();
+                ui.column().gap(2).show(|ui| {
+                    ui.label("Release 2.4").strong();
+                    ui.label("Pick a window while the freeze holds.").muted();
+                });
+                ui.toggle_group("slots", &mut s.slot, &[(0, "09:00"), (1, "11:30"), (2, "14:00"), (3, "16:30")]);
+            });
+        });
+    });
 }
 
 /// The landing-page hero: a compact analytics dashboard.
@@ -569,10 +710,12 @@ struct Params {
     scale: f32,
     embed: bool,
     open: bool,
+    speed: f32,
+    reduced: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -585,6 +728,8 @@ fn params() -> Params {
                 "look" => p.look = parse_look(&v),
                 "accent" => p.accent = parse_accent(&v),
                 "embed" => p.embed = v == "1",
+                "speed" => p.speed = v.parse().unwrap_or(1.0),
+                "reduced" => p.reduced = v == "1",
                 _ => {}
             }
         }
@@ -645,7 +790,13 @@ fn main() {
     state.force_open = p.open;
     state.look = p.look;
     let mode = if p.dark { Mode::Dark } else { Mode::Light };
-    let look: Look = p.look.look();
+    let mut look: Look = p.look.look();
+    if p.speed > 0.0 && p.speed != 1.0 {
+        look.motion = look.motion.slower(1.0 / p.speed);
+    }
+    if p.reduced {
+        state.reduced = true;
+    }
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(out) = &p.screenshot {
         let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, ..Default::default() };

@@ -49,6 +49,7 @@ impl<'u> Slider<'u> {
         self.readout = Some(if v.fract() == 0.0 { format!("{v:.0}") } else { format!("{v:.2}") });
         self
     }
+    /// Track width; `f32::INFINITY` fills the container.
     pub fn width(mut self, w: f32) -> Self {
         self.width = Some(w.max(120.0));
         self
@@ -149,19 +150,21 @@ impl<'u> Slider<'u> {
         let halo_c = c(Token::FocusHalo);
         let ring = c(Token::FocusRing);
         let width = self.width.unwrap_or(240.0);
+        let fill = !width.is_finite();
+        let fw = if fill { Size::FILL } else { Size::Hug };
 
-        let col = ui.begin(Style { gap: 6.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        let col = ui.begin(Style { gap: 6.0, width: fw, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         let _ = col;
         if !self.label.is_empty() {
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
             let st = ui.text_style(TextRole::Label);
             ui.text_leaf(self.label.clone(), st, lc, false, true, Style::default());
         }
-        ui.begin(Style { dir: Dir::Row, gap: 12.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        ui.begin(Style { dir: Dir::Row, gap: 12.0, width: fw, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         let cursor = if self.disabled { CursorIcon::Default } else { CursorIcon::Pointer };
         ui.leaf(
-            Style { width: Size::Fixed(width), ..Default::default() },
-            vec2(width, (lk.thumb + 4.0).max(20.0)),
+            Style { width: if fill { Size::FILL } else { Size::Fixed(width) }, ..Default::default() },
+            vec2(if fill { 120.0 } else { width }, (lk.thumb + 4.0).max(20.0)),
             Some(id),
             Sense::DRAG,
             cursor,

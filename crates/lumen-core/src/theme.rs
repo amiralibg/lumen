@@ -685,7 +685,7 @@ mod tests {
         assert_ne!(mid.to_hex(), 0x0B0C0F);
         th.update(0.31);
         assert!(!th.is_animating());
-        assert_eq!(th.color(Token::Background).to_hex(), 0x0B0C0F);
+        assert_eq!(th.color(Token::Background).to_hex(), 0x07080C);
         assert_eq!(th.darkness(), 1.0);
     }
 

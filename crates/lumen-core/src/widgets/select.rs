@@ -1,6 +1,6 @@
 //! Select: pick one value from a list in a popover.
 
-use crate::anim::Ease;
+use crate::anim::{Ease, SpringParams};
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
 use crate::math::{vec2, Corners, Sides};
@@ -118,8 +118,36 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
                 }
             })),
         );
+        // A new value rolls in from above.
+        let roll = {
+            #[derive(Default)]
+            struct Shown(Option<String>);
+            let changed = {
+                let m = ui.mem::<Shown>(id.with("shown"));
+                let c = m.0.as_deref().is_some_and(|t| t != text);
+                m.0 = Some(text.clone());
+                c
+            };
+            if changed {
+                ui.anims.set_spring(id, 4, 0.0);
+            }
+            ui.anims.spring_from(id, 4, 1.0, 1.0, mo.bouncy)
+        };
         let st = ui.text_style(TextRole::Body);
-        ui.text_leaf(text, st, text_c, false, true, Style { width: Size::FILL, ..Default::default() });
+        let g = ui.galley(&text, &st);
+        ui.leaf(
+            Style { width: Size::FILL, ..Default::default() },
+            vec2(g.width.min(160.0), g.height),
+            None,
+            Sense::NONE,
+            CursorIcon::Default,
+            Some(Box::new(move |cx, r| {
+                cx.painter.push_clip(r.expand(2.0));
+                let y = r.center().y - g.height / 2.0 - (1.0 - roll) * 8.0;
+                cx.painter.text(cx.text, &g, vec2(r.min.x, y.round()), text_c.multiply_alpha(roll.clamp(0.0, 1.0)));
+                cx.painter.pop_clip();
+            })),
+        );
         let icon_sz = m.icon;
         ui.leaf(
             Style::default(),
@@ -168,8 +196,11 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
                 let hot = oix.hovered || oix.focused;
                 let hh = ui.fade(oid, 1, hot, 0.0, mo.hover_out, Ease::Linear);
                 let hl = ui.color(Token::Hover).over(ui.color(Token::Hover)).multiply_alpha(hh);
-                let fg = ui.color(Token::Foreground);
-                let check = ui.color(Token::AccentStrong);
+                // Rows arrive one after another; the check springs in.
+                let enter = ui.anims.spring_from(oid, 2, 0.0, 1.0, SpringParams::from_response(0.2 + 0.035 * i.min(8) as f32, 1.0)).clamp(0.0, 1.0);
+                let tick = ui.anims.spring_from(oid, 3, 0.0, if selected { 1.0 } else { 0.0 }, mo.bouncy).max(0.0);
+                let fg = ui.color(Token::Foreground).multiply_alpha(enter);
+                let check = ui.color(Token::AccentStrong).multiply_alpha(enter);
                 let r_opt = (radius - 2.0).max(0.0);
                 ui.begin(
                     Style { dir: Dir::Row, width: Size::FILL, height: Size::Fixed(ch), pad: Sides::xy(8.0, 0.0), gap: 8.0, align: Align::Center, ..Default::default() },
@@ -183,7 +214,6 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
                         }
                     })),
                 );
-                ui.text_leaf(label, body, fg, false, true, Style { width: Size::FILL, ..Default::default() });
                 ui.leaf(
                     Style::default(),
                     vec2(16.0, 16.0),
@@ -191,11 +221,12 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
                     Sense::NONE,
                     CursorIcon::Default,
                     Some(Box::new(move |cx, r| {
-                        if selected {
-                            cx.icon("check", r.center(), 15.0, check);
+                        if tick > 0.01 {
+                            cx.icon("check", r.center(), 15.0 * tick, check.multiply_alpha(tick.min(1.0)));
                         }
                     })),
                 );
+                ui.text_leaf(label, body, fg, false, true, Style { width: Size::FILL, ..Default::default() });
                 ui.end();
             }
             // Keyboard opening lands on the selected option.

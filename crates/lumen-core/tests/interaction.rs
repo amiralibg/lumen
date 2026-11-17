@@ -72,7 +72,7 @@ fn btn_view(ui: &mut Ui, s: &mut Btn) {
 #[test]
 fn button_geometry_and_click_on_release() {
     let mut h = Harness::new(Btn::default(), btn_view);
-    assert_eq!(h.s.rect, Rect::from_xywh(24.0, 24.0, 64.0, 32.0), "md button: 32 tall, min width 2x height");
+    assert_eq!(h.s.rect, Rect::from_xywh(24.0, 24.0, 72.0, 36.0), "md button: 36 tall, min width 2x height");
     let c = h.s.rect.center();
     h.frame(vec![Event::PointerMoved(c), press(c)]);
     assert_eq!(h.s.clicks, 0, "no click on press");
@@ -239,7 +239,7 @@ fn text_view(ui: &mut Ui, s: &mut Txt) {
 fn text_input_editing_copy_undo() {
     let mut h = Harness::new(Txt { s: "Northwind".into(), ..Default::default() }, text_view);
     let r = h.s.rect;
-    assert_eq!((r.width(), r.height()), (280.0, 32.0));
+    assert_eq!((r.width(), r.height()), (280.0, 36.0));
     h.click(vec2(r.max.x - 20.0, r.center().y));
     h.frame(vec![Event::Text(" Labs".into())]);
     assert_eq!(h.s.s, "Northwind Labs");
@@ -331,10 +331,10 @@ fn theme_switch_animates_then_settles() {
     h.ui.set_mode(Mode::Dark);
     let out = h.frame(vec![]);
     assert_eq!(out.repaint_after, Some(0.0));
-    assert_ne!(out.draw.clear.to_hex(), 0x0B0C0F);
+    assert_ne!(out.draw.clear.to_hex(), 0x07080C);
     h.idle(25);
     let out = h.frame(vec![]);
-    assert_eq!(out.draw.clear.to_hex(), 0x0B0C0F);
+    assert_eq!(out.draw.clear.to_hex(), 0x07080C);
     assert_eq!(out.repaint_after, None);
 }
 
@@ -398,11 +398,11 @@ fn look_view(ui: &mut Ui, s: &mut LookState) {
 fn look_switch_morphs_control_size() {
     let mut h = Harness::new(LookState::default(), look_view);
     h.idle(2);
-    assert_eq!(h.s.btn.height(), 32.0);
+    assert_eq!(h.s.btn.height(), 36.0);
     h.s.look = 1;
     h.idle(8);
     let mid = h.s.btn.height();
-    assert!(mid > 32.0 && mid < 34.0, "mid-blend height {mid}");
+    assert!(mid > 34.0 && mid < 36.0, "mid-blend height {mid}");
     let out = h.frame(vec![]);
     assert!(out.animating);
     h.idle(60);

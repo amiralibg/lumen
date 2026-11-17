@@ -70,6 +70,19 @@ impl<'u, 'a> Card<'u, 'a> {
         let key = title.clone().unwrap_or_default();
         let id = ui.make_id(("card", key));
         let rect = ui.rect_of(id).unwrap_or_default();
+        // Glass: a light top edge, and an accent glow that trails the pointer.
+        let dark = ui.theme.darkness();
+        let highlight = Color::WHITE.with_alpha(0.06 * lk.highlight * dark);
+        let mo = ui.motion();
+        let pointer = ui.pointer().filter(|p| lk.glow > 0.0 && rect.contains(*p));
+        let glow_a = ui.fade(id, 70, pointer.is_some(), mo.hover_in * 3.0, mo.hover_out * 2.0, crate::anim::Ease::Linear);
+        let (gx, gy) = match pointer {
+            Some(p) => (p.x - rect.min.x, p.y - rect.min.y),
+            None => (ui.anims.spring_state(id, 71).map_or(rect.width() / 2.0, |s| s.value), ui.anims.spring_state(id, 72).map_or(0.0, |s| s.value)),
+        };
+        let gx = ui.spring(id, 71, gx, mo.smooth);
+        let gy = ui.spring(id, 72, gy, mo.smooth);
+        let glow = ui.color(Token::Accent).with_alpha(lk.glow * glow_a * (0.22 + 0.2 * dark));
         ui.begin(
             Style { width: Size::FILL, ..Default::default() },
             Some(id),
@@ -80,7 +93,23 @@ impl<'u, 'a> Card<'u, 'a> {
                 if !shadows.is_empty() {
                     cx.painter.shadows(r, Corners::all(radius), &shadows);
                 }
-                cx.painter.rrect(r, Corners::all(radius), fill, 0.0, Color::TRANSPARENT)
+                if highlight.a > 0.0 {
+                    cx.painter.rrect(r, Corners::all(radius), fill.over(highlight), 0.0, Color::TRANSPARENT);
+                    let body = crate::math::Rect { min: r.min + crate::math::vec2(0.0, 1.0), max: r.max };
+                    cx.painter.rrect(body, Corners::all(radius), fill, 0.0, Color::TRANSPARENT);
+                } else {
+                    cx.painter.rrect(r, Corners::all(radius), fill, 0.0, Color::TRANSPARENT);
+                }
+                if glow.a > 0.0 {
+                    let c = r.min + crate::math::vec2(gx, gy);
+                    cx.painter.push_clip(r.expand(-1.0));
+                    cx.painter.shadow(
+                        crate::math::Rect::from_center_size(c, crate::math::vec2(120.0, 120.0)),
+                        Corners::all(60.0),
+                        &Shadow { x: 0.0, y: 0.0, blur: 180.0, spread: 0.0, color: glow },
+                    );
+                    cx.painter.pop_clip();
+                }
             })),
         );
         let card_node = ui.last_node();

@@ -20,6 +20,7 @@ pub mod tabs;
 pub mod misc;
 pub mod calendar;
 pub mod chart;
+pub mod choice;
 
 pub use button::{Button, Variant};
 pub use card::Card;

@@ -237,8 +237,12 @@ pub struct CardLook {
     /// 0..1: soft drop shadow (GNOME).
     pub shadow: f32,
     pub pad: f32,
+    /// A 1px light edge along the top inside the card, like glass catching light.
+    pub highlight: f32,
+    /// A soft accent glow that follows the pointer across the card.
+    pub glow: f32,
 }
-lerp_struct!(CardLook { radius, border, shadow, pad });
+lerp_struct!(CardLook { radius, border, shadow, pad, highlight, glow });
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NavLook {
@@ -479,45 +483,47 @@ impl Look {
     pub const fn lumen() -> Look {
         Look {
             platform: Platform::Lumen,
+            // Ethereal: a cool night-sky canvas, glassy surfaces and light as
+            // the only material (site/DESIGN.md).
             light: Neutrals {
-                background: h(0xF9FAFB),
-                surface: h(0xFFFFFF),
+                background: h(0xEEF0F5),
+                surface: h(0xF9FAFC),
                 surface_raised: h(0xFFFFFF),
-                surface_muted: h(0xF3F4F6),
-                track: h(0xD4D6DA),
-                inverse_surface: h(0x191C21),
-                inverse_foreground: h(0xF4F5F7),
-                foreground: h(0x14171D),
-                text_secondary: h(0x51555D),
-                text_muted: h(0x686C74),
-                text_disabled: h(0xA1A5AB),
-                border_subtle: h(0xEAEBEE),
-                border: h(0xDEE0E3),
-                border_strong: h(0xC2C4C9),
+                surface_muted: h(0xF0F2F6),
+                track: h(0xD5D8E1),
+                inverse_surface: h(0x1A1D28),
+                inverse_foreground: h(0xF3F4F8),
+                foreground: h(0x11131C),
+                text_secondary: h(0x5B6072),
+                text_muted: h(0x666B7C),
+                text_disabled: h(0xA5A9B6),
+                border_subtle: h(0xE6E8EE),
+                border: h(0xDDE0E8),
+                border_strong: h(0xC3C7D2),
                 control: h(0xFFFFFF),
-                control_border: h(0xDEE0E3),
-                control_edge: h(0xDEE0E3),
-                ink: h(0x0F121C),
+                control_border: h(0xDADDE5),
+                control_edge: h(0xDADDE5),
+                ink: h(0x101428),
                 focus: None,
             },
             dark: Neutrals {
-                background: h(0x0B0C0F),
-                surface: h(0x121417),
-                surface_raised: h(0x1A1C20),
-                surface_muted: h(0x1F2024),
-                track: h(0x35383D),
-                inverse_surface: h(0xE6E8EB),
-                inverse_foreground: h(0x14171D),
-                foreground: h(0xEFF0F3),
-                text_secondary: h(0xA8ABB1),
-                text_muted: h(0x888C94),
-                text_disabled: h(0x4D5055),
-                border_subtle: h(0x212327),
-                border: h(0x2A2D31),
-                border_strong: h(0x3E4147),
-                control: h(0x1A1C20),
-                control_border: h(0x2A2D31),
-                control_edge: h(0x2A2D31),
+                background: h(0x07080C),
+                surface: h(0x10121A),
+                surface_raised: h(0x151821),
+                surface_muted: h(0x1C1E26),
+                track: h(0x262832),
+                inverse_surface: h(0xE6E9F2),
+                inverse_foreground: h(0x11131C),
+                foreground: h(0xEEF0F6),
+                text_secondary: h(0x9AA0B2),
+                text_muted: h(0x80869B),
+                text_disabled: h(0x444857),
+                border_subtle: h(0x1C1E25),
+                border: h(0x24262E),
+                border_strong: h(0x363844),
+                control: h(0x161821),
+                control_border: h(0x2A2C35),
+                control_edge: h(0x2A2C35),
                 ink: h(0x000000),
                 focus: None,
             },
@@ -526,28 +532,28 @@ impl Look {
             fonts: Fonts::BUNDLED,
             text_scale: 1.0,
             control: ControlLook {
-                height: [28.0, 32.0, 40.0],
-                radius: [6.0, 8.0, 10.0],
+                height: [30.0, 36.0, 42.0],
+                radius: [8.0, 10.0, 12.0],
                 pad_x: [10.0, 12.0, 16.0],
                 text_size: [12.0, 13.0, 14.0],
                 gap: [6.0, 6.0, 8.0],
             },
             button: ButtonLook { press_inset: 1.0, press_dim: 0.0, bevel: 0.0, shadow: 0.0, bottom_edge: 0.0 },
             switch: SwitchLook {
-                width: 36.0,
-                height: 20.0,
-                knob: 16.0,
+                width: 40.0,
+                height: 24.0,
+                knob: 20.0,
                 hover_grow: 0.0,
-                press_widen: 4.0,
+                press_widen: 5.0,
                 outline_off: 0.0,
                 knob_shadow: 1.0,
                 knob_tint_on: 1.0,
             },
             checkbox: CheckboxLook { size: 16.0, radius: 4.0, border: 1.0 },
-            slider: SliderLook { track: 4.0, thumb: 16.0, hover_grow: 2.0, inner_dot: 0.0, halo: 1.0, thumb_border: 0.0 },
+            slider: SliderLook { track: 4.0, thumb: 18.0, hover_grow: 3.0, inner_dot: 0.0, halo: 1.0, thumb_border: 0.0 },
             input: InputLook { filled: 0.0, underline: 0.0, halo: 1.0 },
             focus: FocusLook { width: 2.0, gap: 2.0, gap_from: 4.0, alpha: 1.0 },
-            card: CardLook { radius: 12.0, border: 1.0, shadow: 0.0, pad: 20.0 },
+            card: CardLook { radius: 16.0, border: 1.0, shadow: 0.0, pad: 20.0, highlight: 1.0, glow: 1.0 },
             nav: NavLook { item_height: 32.0, radius: 8.0, indicator: 0.0, accent_selection: 1.0 },
             motion: Motion::lumen(),
         }
@@ -630,7 +636,7 @@ impl Look {
             slider: SliderLook { track: 4.0, thumb: 20.0, hover_grow: 0.0, inner_dot: 0.0, halo: 0.0, thumb_border: 0.0 },
             input: InputLook { filled: 0.0, underline: 0.0, halo: 1.0 },
             focus: FocusLook { width: 3.5, gap: 0.0, gap_from: 6.0, alpha: 0.6 },
-            card: CardLook { radius: 10.0, border: 0.7, shadow: 0.0, pad: 16.0 },
+            card: CardLook { radius: 10.0, border: 0.7, shadow: 0.0, pad: 16.0, highlight: 0.0, glow: 0.0 },
             nav: NavLook { item_height: 28.0, radius: 6.0, indicator: 0.0, accent_selection: 0.0 },
             motion: Motion::mac(),
         }
@@ -713,7 +719,7 @@ impl Look {
             slider: SliderLook { track: 4.0, thumb: 20.0, hover_grow: 0.0, inner_dot: 1.0, halo: 0.0, thumb_border: 1.0 },
             input: InputLook { filled: 0.0, underline: 1.0, halo: 0.0 },
             focus: FocusLook { width: 2.0, gap: 1.0, gap_from: 1.0, alpha: 1.0 },
-            card: CardLook { radius: 8.0, border: 1.0, shadow: 0.0, pad: 16.0 },
+            card: CardLook { radius: 8.0, border: 1.0, shadow: 0.0, pad: 16.0, highlight: 0.0, glow: 0.0 },
             nav: NavLook { item_height: 36.0, radius: 4.0, indicator: 1.0, accent_selection: 0.0 },
             motion: Motion::windows(),
         }
@@ -796,7 +802,7 @@ impl Look {
             slider: SliderLook { track: 4.0, thumb: 20.0, hover_grow: 0.0, inner_dot: 0.0, halo: 0.0, thumb_border: 1.0 },
             input: InputLook { filled: 1.0, underline: 0.0, halo: 0.0 },
             focus: FocusLook { width: 2.0, gap: 0.0, gap_from: 3.0, alpha: 0.5 },
-            card: CardLook { radius: 12.0, border: 0.0, shadow: 1.0, pad: 18.0 },
+            card: CardLook { radius: 12.0, border: 0.0, shadow: 1.0, pad: 18.0, highlight: 0.0, glow: 0.0 },
             nav: NavLook { item_height: 36.0, radius: 6.0, indicator: 0.0, accent_selection: 0.0 },
             motion: Motion::gnome(),
         }
@@ -909,7 +915,7 @@ mod tests {
         let b = Look::windows();
         assert_eq!(a.lerp(b, 1.0), b);
         let mid = a.lerp(b, 0.5);
-        assert_eq!(mid.card.radius, 10.0);
+        assert_eq!(mid.card.radius, 12.0);
         assert_eq!(mid.platform, Platform::Windows);
         assert_eq!(a.lerp(b, 0.0).platform, Platform::Lumen);
     }
@@ -918,7 +924,7 @@ mod tests {
     fn rounded_and_density() {
         let l = Look::lumen().rounded(0.0).density(Density::Compact);
         assert_eq!(l.control.radius, [0.0; 3]);
-        assert_eq!(l.control.height[1], 28.0);
+        assert_eq!(l.control.height[1], 32.0);
         let r = Look::lumen().rounded(10.0);
         assert_eq!(r.checkbox.radius, 8.0, "capped at half the box");
     }

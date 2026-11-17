@@ -8,7 +8,7 @@ use std::f32::consts::{PI, TAU};
 
 use lumen_text::TextStyle;
 
-use crate::anim::Ease;
+use crate::anim::{Ease, SpringParams};
 use crate::color::Color;
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Size, Style};
@@ -361,6 +361,8 @@ impl Chart<'_> {
             l.0
         };
         let cross_x = ui.spring(id, 90_001, last_idx as f32, mo.snappy);
+        // First appearance: lines draw in from the left as the points rise.
+        let reveal = ui.anims.spring_from(id, 90_002, 0.0, 1.0, SpringParams::from_response(0.9, 1.0)).clamp(0.0, 1.0);
         let bar_focus: Vec<f32> = (0..n).map(|i| ui.fade(id.with(("bar", i)), 0, hover_idx == Some(i), mo.hover_in, mo.hover_out, Ease::Linear)).collect();
 
         let grid = ui.color(Token::BorderSubtle);
@@ -417,6 +419,8 @@ impl Chart<'_> {
                 match kind {
                     ChartKind::Line | ChartKind::Area => {
                         let base = y_of(0.0f32.clamp(y0, y1));
+                        let reveal_x = plot.min.x - 6.0 + (plot.width() + 12.0) * reveal;
+                        cx.painter.push_clip(Rect { min: vec2(r.min.x, r.min.y), max: vec2(reveal_x.min(r.max.x), r.max.y) });
                         for (si, v) in vals.iter().enumerate().rev() {
                             let pts: Vec<Vec2> = v.iter().enumerate().map(|(i, &y)| vec2(x_of(plot, i), y_of(y))).collect();
                             let line = if smooth { monotone(&pts, 10) } else { pts.clone() };
@@ -433,6 +437,7 @@ impl Chart<'_> {
                                 }
                             }
                         }
+                        cx.painter.pop_clip();
                         if hov_a > 0.0 && n > 0 {
                             // Crosshair glides between points.
                             let i0 = cross_x.floor().clamp(0.0, (n - 1) as f32) as usize;
@@ -564,6 +569,10 @@ impl Ui {
         let (lo, hi) = values.iter().fold((f32::MAX, f32::MIN), |(a, b), &v| (a.min(v), b.max(v)));
         let span = (hi - lo).max(1e-6);
         let grow = self.anims.spring_from(id, 10_000, 0.0, 1.0, mo.smooth).clamp(0.0, 1.0);
+        // The line draws itself in, the fill fades up behind it, and the end
+        // dot pops once the line reaches it.
+        let reveal = self.anims.spring_from(id, 10_001, 0.0, 1.0, SpringParams::from_response(0.9, 1.0)).clamp(0.0, 1.0);
+        let dot = self.spring(id, 10_002, if reveal > 0.92 { 1.0 } else { 0.0 }, mo.bouncy).max(0.0);
         let w = width.unwrap_or(96.0);
         let st = if w.is_finite() { Style::default() } else { Style { width: Size::FILL, ..Default::default() } };
         self.leaf(
@@ -585,9 +594,17 @@ impl Ui {
                     .collect();
                 let line = monotone(&pts, 6);
                 let lower: Vec<Vec2> = line.iter().map(|p| vec2(p.x, r.max.y + 2.0)).collect();
-                cx.painter.fill_between(&line, &lower, col.multiply_alpha(0.22), col.multiply_alpha(0.0));
-                cx.painter.polyline(&line, 1.5, col);
-                cx.painter.circle(*pts.last().unwrap(), 2.5, col, 0.0, Color::TRANSPARENT);
+                let fill_a = reveal * reveal;
+                cx.painter.fill_between(&line, &lower, col.multiply_alpha(0.22 * fill_a), col.multiply_alpha(0.0));
+                let rx = r.min.x - 2.0 + (r.width() + 4.0) * reveal;
+                cx.painter.push_clip(Rect { min: vec2(r.min.x - 4.0, r.min.y - 4.0), max: vec2(rx, r.max.y + 4.0) });
+                cx.painter.polyline(&line, 1.75, col);
+                cx.painter.pop_clip();
+                if dot > 0.01 {
+                    let end = *pts.last().unwrap();
+                    cx.painter.circle(end, 6.0 * dot, col.multiply_alpha(0.18), 0.0, Color::TRANSPARENT);
+                    cx.painter.circle(end, 3.0 * dot, col, 0.0, Color::TRANSPARENT);
+                }
             })),
         );
         Response { id, ..Default::default() }

@@ -7,7 +7,7 @@ All sizes are logical pixels. Hex is the canonical value; the OKLCH triple (`L C
 ## 1. Principles
 
 1. **Neutral first.** The UI is a cool gray ramp (hue ~265, chroma <= 0.014). Color means something: accent marks selected, primary, progress and focus; status colors mark status. Nothing else is tinted.
-2. **Borders at rest, shadows in flight.** Cards, inputs and buttons sit on a 1px border and cast no shadow. Only floating layers (tooltip, menu, dialog) cast shadows. The one exception is the knob shadow on switch and slider thumbs.
+2. **Borders at rest, shadows in flight.** Cards, inputs and buttons sit on a 1px border and cast no shadow. In the Lumen look a card also catches light: a 1px glass edge along its top (dark mode) and a soft accent glow that trails the pointer. Only floating layers (tooltip, menu, dialog) cast shadows. The one exception is the knob shadow on switch and slider thumbs.
 3. **Three text grades, three line grades.** If a fourth seems needed, the layout is wrong.
 4. **State is never color alone.** Checked has a glyph, on has a thumb position, error has an icon and a message.
 5. **Values settle, touches bounce.** A value moving to a new position (switch thumb, slider, selection pill) never overshoots. Press release and hover growth may.
@@ -21,20 +21,20 @@ Opaque unless the Kind column says overlay. Overlays are straight (non-premultip
 
 | Token | Light | Dark | Kind / use |
 |---|---|---|---|
-| `BACKGROUND` | 0.985 0.002 248 `#F9FAFB` | 0.155 0.007 271 `#0B0C0F` | opaque; window and sidebar |
-| `SURFACE` | 1.000 0.000 0 `#FFFFFF` | 0.190 0.007 258 `#121417` | opaque; cards, inputs |
-| `SURFACE_RAISED` | 1.000 0.000 0 `#FFFFFF` | 0.226 0.008 264 `#1A1C20` | opaque; floating layers, secondary button |
-| `SURFACE_MUTED` | 0.967 0.003 265 `#F3F4F6` | 0.244 0.008 275 `#1F2024` | opaque; card footers, disabled fills, badges |
-| `TRACK` | 0.876 0.006 265 `#D4D6DA` | 0.340 0.010 261 `#35383D` | opaque; unfilled control tracks |
-| `INVERSE_SURFACE` | 0.225 0.011 261 `#191C21` | 0.930 0.005 258 `#E6E8EB` | opaque; tooltip fill |
-| `INVERSE_FOREGROUND` | 0.970 0.003 265 `#F4F5F7` | 0.204 0.013 264 `#14171D` | opaque; tooltip text |
-| `FOREGROUND` | 0.204 0.013 264 `#14171D` | 0.955 0.004 271 `#EFF0F3` | opaque; primary text |
-| `TEXT_SECONDARY` | 0.449 0.014 264 `#51555D` | 0.741 0.009 265 `#A8ABB1` | opaque; descriptions, resting nav items |
-| `TEXT_MUTED` | 0.531 0.013 264 `#686C74` | 0.639 0.013 264 `#888C94` | opaque; placeholders, captions, resting icons |
-| `TEXT_DISABLED` | 0.721 0.010 258 `#A1A5AB` | 0.430 0.009 261 `#4D5055` | opaque; disabled text and icons |
-| `BORDER_SUBTLE` | 0.940 0.004 271 `#EAEBEE` | 0.256 0.008 264 `#212327` | opaque; dividers inside surfaces |
-| `BORDER` | 0.906 0.005 258 `#DEE0E3` | 0.296 0.008 256 `#2A2D31` | opaque; default control and card border |
-| `BORDER_STRONG` | 0.820 0.007 269 `#C2C4C9` | 0.375 0.011 264 `#3E4147` | opaque; hovered border, unchecked box |
+| `BACKGROUND` | 0.955 0.007 269 `#EEF0F5` | 0.135 0.009 273 `#07080C` | opaque; window and sidebar |
+| `SURFACE` | 0.985 0.003 265 `#F9FAFC` | 0.184 0.017 274 `#10121A` | opaque; cards, inputs |
+| `SURFACE_RAISED` | 1.000 0.000 0 `#FFFFFF` | 0.210 0.018 270 `#151821` | opaque; floating layers, secondary button |
+| `SURFACE_MUTED` | 0.961 0.006 265 `#F0F2F6` | 0.237 0.016 274 `#1C1E26` | opaque; card footers, disabled fills, badges |
+| `TRACK` | 0.883 0.013 271 `#D5D8E1` | 0.279 0.019 276 `#262832` | opaque; unfilled control tracks |
+| `INVERSE_SURFACE` | 0.233 0.022 273 `#1A1D28` | 0.934 0.013 271 `#E6E9F2` | opaque; tooltip fill |
+| `INVERSE_FOREGROUND` | 0.968 0.005 275 `#F3F4F8` | 0.189 0.019 275 `#11131C` | opaque; tooltip text |
+| `FOREGROUND` | 0.189 0.019 275 `#11131C` | 0.955 0.008 271 `#EEF0F6` | opaque; primary text |
+| `TEXT_SECONDARY` | 0.491 0.029 273 `#5B6072` | 0.707 0.027 271 `#9AA0B2` | opaque; descriptions, resting nav items |
+| `TEXT_MUTED` | 0.530 0.027 272 `#666B7C` | 0.622 0.032 273 `#80869B` | opaque; placeholders, captions, resting icons |
+| `TEXT_DISABLED` | 0.736 0.019 272 `#A5A9B6` | 0.404 0.026 273 `#444857` | opaque; disabled text and icons |
+| `BORDER_SUBTLE` | 0.931 0.008 271 `#E6E8EE` | 0.236 0.014 273 `#1C1E25` | opaque; dividers inside surfaces |
+| `BORDER` | 0.907 0.011 270 `#DDE0E8` | 0.270 0.015 274 `#24262E` | opaque; default control and card border |
+| `BORDER_STRONG` | 0.830 0.016 270 `#C3C7D2` | 0.344 0.021 278 `#363844` | opaque; hovered border, unchecked box |
 | `KNOB` | 1.000 0.000 0 `#FFFFFF` | 1.000 0.000 0 `#FFFFFF` | opaque; switch and slider thumb |
 | `HOVER` | `#0F121C` at 5% | `#FFFFFF` at 6% | overlay; hover on neutral and transparent controls |
 | `PRESSED` | `#0F121C` at 9% | `#FFFFFF` at 10% | overlay; pressed on neutral and transparent controls |
@@ -146,18 +146,18 @@ Text on surfaces. AA needs 4.5 for body text.
 
 | Text token | Mode | BACKGROUND | SURFACE | SURFACE_RAISED | SURFACE_MUTED |
 |---|---|---|---|---|---|
-| `FOREGROUND` | Light | 17.17 | 17.95 | 17.95 | 16.31 |
-| `FOREGROUND` | Dark | 17.16 | 16.19 | 14.97 | 14.28 |
-| `TEXT_SECONDARY` | Light | 7.16 | 7.48 | 7.48 | 6.80 |
-| `TEXT_SECONDARY` | Dark | 8.50 | 8.02 | 7.41 | 7.07 |
-| `TEXT_MUTED` | Light | 5.04 | 5.27 | 5.27 | 4.79 |
-| `TEXT_MUTED` | Dark | 5.80 | 5.47 | 5.06 | 4.82 |
-| `TEXT_DISABLED` | Light | 2.37 | 2.47 | 2.47 | 2.25 |
-| `TEXT_DISABLED` | Dark | 2.42 | 2.28 | 2.11 | 2.01 |
+| `FOREGROUND` | Light | 16.25 | 17.74 | 18.52 | 16.53 |
+| `FOREGROUND` | Dark | 17.57 | 16.40 | 15.56 | 14.59 |
+| `TEXT_SECONDARY` | Light | 5.48 | 5.98 | 6.25 | 5.57 |
+| `TEXT_SECONDARY` | Dark | 7.67 | 7.16 | 6.79 | 6.37 |
+| `TEXT_MUTED` | Light | 4.65 | 5.08 | 5.30 | 4.73 |
+| `TEXT_MUTED` | Dark | 5.53 | 5.16 | 4.90 | 4.59 |
+| `TEXT_DISABLED` | Light | 2.06 | 2.25 | 2.35 | 2.09 |
+| `TEXT_DISABLED` | Dark | 2.20 | 2.06 | 1.95 | 1.83 |
 
 - `TEXT_DISABLED` is below AA by design (disabled content is exempt). Never use it for anything a user must read.
-- `TEXT_MUTED` passes AA on the four surfaces only. On a `HOVER` or `PRESSED` overlay use `TEXT_SECONDARY` or `FOREGROUND` (worst case `TEXT_SECONDARY` on `PRESSED` over `SURFACE_MUTED`: 5.65 light, 5.24 dark).
-- Tooltip: `INVERSE_FOREGROUND` on `INVERSE_SURFACE` is 15.66 light, 14.62 dark.
+- `TEXT_MUTED` passes AA on the four surfaces only. On a `HOVER` or `PRESSED` overlay use `TEXT_SECONDARY` or `FOREGROUND` (worst case `TEXT_SECONDARY` on `PRESSED` over `SURFACE_MUTED`: 4.64 light, 4.74 dark).
+- Tooltip: `INVERSE_FOREGROUND` on `INVERSE_SURFACE` is 15.28 light, 15.26 dark.
 
 Accent pairs. "Worst state" is the lower of the hover and pressed fills against the foreground.
 
@@ -185,7 +185,7 @@ Accent pairs. "Worst state" is the lower of the hover and pressed fills against 
 Every text pair above is AA or better. Two known non-text gaps, both accepted:
 
 - In light mode the AMBER, ORANGE and CORAL fills are below 3:1 against `SURFACE` (1.90, 2.68, 2.93). Every control that uses them also shows a glyph or a thumb position, and focus uses `ACCENT_STRONG`, so no state depends on that edge alone. Never use `ACCENT` as a text color.
-- Resting borders are decorative (`BORDER` 1.32 light, 1.33 dark on `SURFACE`; `BORDER_STRONG` 1.75 / 1.80). A future high-contrast theme should map `BORDER_STRONG` to `TEXT_MUTED`.
+- Resting borders are decorative (`BORDER` 1.26 light, 1.24 dark on `SURFACE`; `BORDER_STRONG` 1.62 / 1.61). A future high-contrast theme should map `BORDER_STRONG` to `TEXT_MUTED`.
 
 ## 3. Shape and space
 
@@ -379,11 +379,11 @@ Everything above describes the **Lumen** look, which is the default. A look (`lu
 
 | | Lumen | macOS | Windows | GNOME |
 |---|---|---|---|---|
-| Control height sm/md/lg | 28/32/40 | 20/24/30 | 24/32/40 | 28/34/42 |
+| Control height sm/md/lg | 30/36/42 | 20/24/30 | 24/32/40 | 28/34/42 |
 | Control radius md | 8 | 6 | 4 | 6 |
-| Card | r12, border | r10, faint border | r8, border | r12, soft shadow |
+| Card | r16, border, glass top edge, pointer glow | r10, faint border | r8, border | r12, soft shadow |
 | Secondary button | raised + border | white, hairline shadow, bevel on filled | bottom edge | flat filled |
-| Switch | 36×20 | 38×22, white knob | 40×20, outlined when off | 46×26, white knob |
+| Switch | 40×24 | 38×22, white knob | 40×20, outlined when off | 46×26, white knob |
 | Checkbox | 16, r4 | 14, r3.5 | 20, r4 | 16, r4, 2px border |
 | Slider thumb | 16, halo | 20 | 20, accent dot | 20, outline |
 | Text input | outline + halo | outline + halo | accent underline | filled |
