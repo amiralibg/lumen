@@ -25,6 +25,9 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("select", "Select"),
     ("segmented", "Segmented control"),
     ("tabs", "Tabs"),
+    ("breadcrumb", "Breadcrumb"),
+    ("pagination", "Pagination"),
+    ("steps", "Steps"),
     ("menu", "Menu"),
     ("popover", "Popover"),
     ("dialog", "Dialog"),
@@ -42,6 +45,10 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("card", "Card and settings"),
     ("badge", "Badge and status"),
     ("progress", "Progress and spinner"),
+    ("alert", "Alert"),
+    ("skeleton", "Skeleton"),
+    ("empty-state", "Empty state"),
+    ("kbd", "Keycap"),
     ("calendar", "Calendar"),
     ("date-picker", "Date picker"),
     ("combobox", "Combobox"),
@@ -122,6 +129,11 @@ struct State {
     new_pw: String,
     confirm_pw: String,
     deploy_query: String,
+    banner_open: bool,
+    skeleton_loading: bool,
+    crumb_depth: usize,
+    page: usize,
+    wizard_step: usize,
 }
 
 impl State {
@@ -173,6 +185,11 @@ impl State {
             new_pw: "Northwind42".into(),
             confirm_pw: String::new(),
             deploy_query: String::new(),
+            banner_open: true,
+            skeleton_loading: true,
+            crumb_depth: 4,
+            page: 4,
+            wizard_step: 1,
         }
     }
 }
@@ -733,6 +750,172 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 ui.row().gap(16).align(Align::Center).show(|ui| {
                     ui.spinner(20.0);
                     ui.label("Syncing").secondary();
+                });
+            });
+        }
+        "alert" => {
+            ui.column().fill_width().max_width(480.0).gap(12).show(|ui| {
+                ui.alert("Scheduled maintenance")
+                    .description("eu-central upgrades at 02:00 UTC.")
+                    .warning()
+                    .banner()
+                    .dismissible(&mut s.banner_open);
+                if ui
+                    .alert("Certificate renewal delayed")
+                    .description("DNS propagation timed out for acme-challenge.northwind.io.")
+                    .danger()
+                    .action("Retry")
+                    .clicked()
+                {
+                    ui.toast(Toast::new("Renewal queued").tone(Tone::Info));
+                }
+                if !s.banner_open {
+                    if ui.button("Restore maintenance banner").ghost().small().clicked() {
+                        s.banner_open = true;
+                    }
+                }
+            });
+        }
+        "skeleton" => {
+            ui.column().fill_width().max_width(420.0).gap(12).show(|ui| {
+                ui.row().fill_width().align(Align::Center).show(|ui| {
+                    ui.label("Loading state").strong();
+                    ui.spacer();
+                    ui.switch("", &mut s.skeleton_loading);
+                });
+                ui.card().pad(16.0).show(|ui| {
+                    if s.skeleton_loading {
+                        ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                            ui.skeleton_circle(40.0);
+                            ui.column().fill_width().gap(6).show(|ui| {
+                                ui.skeleton(140.0, 14.0);
+                                ui.skeleton(200.0, 11.0);
+                            });
+                            ui.skeleton(56.0, 20.0).radius(10.0);
+                        });
+                        ui.divider();
+                        ui.skeleton_lines(3);
+                    } else {
+                        ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                            ui.avatar("LF", 3, 40.0, Some(true));
+                            ui.column().fill_width().gap(2).show(|ui| {
+                                ui.label("Lena Fischer").strong();
+                                ui.label("Runtime · Berlin · 18 commits this week").small().secondary();
+                            });
+                            ui.badge("Active", Tone::Success);
+                        });
+                        ui.divider();
+                        ui.label("Shipped per-corner SDF gradients and reduced idle wakeups across WebGPU surfaces.").secondary();
+                    }
+                });
+            });
+        }
+        "empty-state" => {
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.empty_state("inbox", "No self-hosted runners yet")
+                    .description("Install the lightweight daemon on any Linux or macOS machine to start picking up builds.")
+                    .action(|ui| {
+                        if ui.button("Copy install script").primary().icon("terminal").clicked() {
+                            ui.set_copied_text("curl -fsSL https://lumen.dev/agent.sh | sh".into());
+                            ui.toast(Toast::new("Install command copied").success());
+                        }
+                        ui.button("Read docs").ghost();
+                    });
+            });
+        }
+        "breadcrumb" => {
+            const TRAIL: [&str; 4] = ["Northwind", "Infrastructure", "Frankfurt", "linux-arm64-02"];
+            const DEEP: [&str; 6] = ["Workspace", "Platform", "Networking", "Ingress", "Certificates", "wildcard-prod"];
+            ui.column().fill_width().max_width(480.0).gap(16).align(Align::Start).show(|ui| {
+                let depth = s.crumb_depth.clamp(1, TRAIL.len());
+                if let Some(i) = ui.breadcrumb("main", &TRAIL[..depth]).root_icon("layers").show() {
+                    s.crumb_depth = i + 1;
+                }
+                if depth < TRAIL.len() {
+                    if ui.button(format!("Open “{}” →", TRAIL[depth])).ghost().small().clicked() {
+                        s.crumb_depth += 1;
+                    }
+                }
+                ui.divider();
+                ui.column().gap(4).align(Align::Start).show(|ui| {
+                    ui.label("Collapsed middle crumbs (click …)").small().muted();
+                    if let Some(i) = ui.breadcrumb("deep", &DEEP).max_items(4).show() {
+                        ui.toast(Toast::new(format!("Navigated to {}", DEEP[i])));
+                    }
+                });
+            });
+        }
+        "pagination" => {
+            ui.column().fill_width().max_width(500.0).gap(16).show(|ui| {
+                ui.card().pad(14.0).show(|ui| {
+                    ui.column().fill_width().gap(8).show(|ui| {
+                        let base = s.page * 10;
+                        for k in 0..2 {
+                            let idx = base + k + 1;
+                            if idx <= 174 {
+                                ui.row().fill_width().align(Align::Center).show(|ui| {
+                                    ui.label(format!("Build #{:04}", 1200 + idx)).strong();
+                                    ui.spacer();
+                                    ui.badge("Passed", Tone::Success);
+                                });
+                            }
+                        }
+                    });
+                });
+                ui.pagination("builds", &mut s.page, 18).summary(174, 10);
+            });
+        }
+        "steps" => {
+            const WIZ: [(&str, &str); 3] = [("Build", "Image signed"), ("Canary", "10% traffic"), ("Promote", "All regions")];
+            ui.column().fill_width().max_width(500.0).gap(16).show(|ui| {
+                ui.steps("rollout", &mut s.wizard_step, &WIZ);
+                let desc = [
+                    "Container digest sha256:9f4c…81a2 verified and pushed to registry.",
+                    "Canary error rate is 0.01% across 2,400 requests in eu-central.",
+                    "Ready to shift 100% of production traffic across all 4 regions.",
+                ][s.wizard_step];
+                ui.card().pad(14.0).show(|ui| {
+                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                        ui.column().fill_width().show(|ui| {
+                            ui.label(desc).secondary();
+                        });
+                        if s.wizard_step > 0 && ui.button("Back").ghost().small().clicked() {
+                            s.wizard_step -= 1;
+                        }
+                        if s.wizard_step + 1 < WIZ.len() {
+                            if ui.button("Continue").primary().small().clicked() {
+                                s.wizard_step += 1;
+                            }
+                        } else if ui.button("Finish").primary().small().clicked() {
+                            ui.toast(Toast::new("Rollout complete").success());
+                        }
+                    });
+                });
+            });
+        }
+        "kbd" => {
+            ui.column().fill_width().max_width(420.0).gap(14).show(|ui| {
+                ui.card().pad(14.0).show(|ui| {
+                    ui.column().fill_width().gap(10).show(|ui| {
+                        for (label, chord) in [
+                            ("Command palette", &["⌘", "K"][..]),
+                            ("Deploy to production", &["⌘", "Shift", "D"][..]),
+                            ("Filter current view", &["/"][..]),
+                        ] {
+                            ui.row().fill_width().align(Align::Center).show(|ui| {
+                                ui.label(label);
+                                ui.spacer();
+                                ui.shortcut_keys(chord);
+                            });
+                        }
+                    });
+                });
+                ui.row().fill_width().gap(8).align(Align::Center).justify(Justify::Center).show(|ui| {
+                    ui.label("Try holding arrow keys:").small().muted();
+                    ui.keycap("←").large().live_key(lumen::Key::ArrowLeft);
+                    ui.keycap("↑").large().live_key(lumen::Key::ArrowUp);
+                    ui.keycap("↓").large().live_key(lumen::Key::ArrowDown);
+                    ui.keycap("→").large().live_key(lumen::Key::ArrowRight);
                 });
             });
         }

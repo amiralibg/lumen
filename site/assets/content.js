@@ -265,6 +265,48 @@ match s.tab {
     keys: [["← →", "Previous / next tab"]],
   },
   {
+    slug: "breadcrumb", name: "Breadcrumb", group: "Navigation", demo: "breadcrumb",
+    summary: "A path trail ending at the active page, with an optional root icon and middle truncation into an interactive … menu.",
+    code: `const TRAIL: &[&str] = &["Northwind", "Infrastructure", "Frankfurt", "linux-arm64-02"];
+if let Some(i) = ui.breadcrumb("path", TRAIL).root_icon("layers").max_items(4).show() {
+    navigate(i);
+}`,
+    options: [
+      [".root_icon(name) .slash()", "Optional leading icon and / separator instead of chevrons."],
+      [".max_items(n)", "Collapses middle crumbs into an ellipsis button that opens a menu of hidden ancestors."],
+      [".show() -> Option<usize>", "Returns the clicked ancestor index."],
+    ],
+    keys: [["← → Home End", "Move focus across ancestor crumbs"], ["Space / Enter", "Navigate or open the collapsed menu"]],
+  },
+  {
+    slug: "pagination", name: "Pagination", group: "Navigation", demo: "pagination",
+    summary: "Page bar with a sliding accent pill, stable ellipsis window, item-range counter and a compact rolling-number mode.",
+    code: `ui.pagination("builds", &mut s.page, 18)
+    .summary(174, 10);`,
+    options: [
+      [".siblings(n)", "Neighboring page buttons around the active page (default 1)."],
+      [".summary(total_items, per_page)", "Shows “41–50 of 174” to the left of the controls."],
+      [".compact()", "Compact ← Page n of total → bar with a vertically rolling number."],
+    ],
+    keys: [["← →", "Step previous / next page"], ["Home / End", "Jump to first / last page"], ["Space / Enter", "Activate focused button"]],
+  },
+  {
+    slug: "steps", name: "Steps", group: "Navigation", demo: "steps",
+    summary: "Multi-step wizard header or vertical checklist. Completed steps grow a bouncy check mark while connector lines fill on a smooth spring.",
+    code: `const STEPS: &[(&str, &str)] = &[
+    ("Build", "Image signed"),
+    ("Canary", "10% traffic"),
+    ("Promote", "All regions"),
+];
+ui.steps("rollout", &mut s.step, STEPS);`,
+    options: [
+      [".linear(bool)", "Restrict clicks to steps up to the furthest step reached so far."],
+      [".vertical()", "Vertical step timeline with vertical spring-filled connectors."],
+      [".changed() .show()", ""],
+    ],
+    keys: [["← → (or ↑ ↓ vertical)", "Move between reachable steps"], ["Space / Enter", "Jump to focused step"]],
+  },
+  {
     slug: "sidebar", name: "Sidebar", group: "Navigation", demo: "hero",
     summary: "Navigation with sections, badges and a selection pill that slides between items. Collapses to icons.",
     code: `ui.sidebar().collapsed(s.collapsed).show(|ui| {
@@ -437,6 +479,70 @@ ui.progress(None);   // indeterminate
 ui.spinner(20.0);`,
     options: [["progress(Option<f32>)", "0..1, or None for indeterminate."], ["spinner(size)", ""]],
     keys: [],
+  },
+  {
+    slug: "alert", name: "Alert and banner", group: "Feedback", demo: "alert",
+    summary: "Inline callouts and edge-accented banners across all six tones, with optional action buttons and spring-collapsed dismissal.",
+    code: `ui.alert("Scheduled maintenance")
+    .description("Frankfurt upgrades tonight at 02:00 UTC.")
+    .warning()
+    .banner()
+    .dismissible(&mut s.banner_open);
+
+if ui.alert("Renewal delayed").danger().action("Retry").clicked() {
+    retry();
+}`,
+    options: [
+      [".info() .success() .warning() .danger() .accent() .tone(Tone)", "Status tint, border and icon."],
+      [".banner()", "Compact horizontal strip with a leading 3.5 px accent bar."],
+      [".action(label) .dismissible(&mut bool) .icon(name)", "Action button and spring collapse on close."],
+    ],
+    keys: [["Tab + Space / Enter", "Trigger action or dismiss"]],
+  },
+  {
+    slug: "skeleton", name: "Skeleton", group: "Feedback", demo: "skeleton",
+    summary: "Placeholder blocks, circles and tapered paragraphs with a continuous spatial shimmer across SDF-clipped corners (static under reduced motion).",
+    code: `ui.row().gap(12).align(Align::Center).show(|ui| {
+    ui.skeleton_circle(40.0);
+    ui.column().fill_width().gap(6).show(|ui| {
+        ui.skeleton(140.0, 14.0);
+        ui.skeleton(200.0, 11.0);
+    });
+});
+ui.skeleton_lines(3);`,
+    options: [
+      ["ui.skeleton(w, h)", ".fill_width() .radius(px) .circle()"],
+      ["ui.skeleton_circle(size)", "Circular avatar placeholder."],
+      ["ui.skeleton_lines(n)", "Paragraph lines whose last line tapers to 62% width."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "empty-state", name: "Empty state", group: "Feedback", demo: "empty-state",
+    summary: "Centered placeholder panel with a 20 px icon tile, heading, wrapped description and an optional action slot.",
+    code: `ui.empty_state("inbox", "No self-hosted runners yet")
+    .description("Install the daemon on a Linux or macOS machine to start.")
+    .action(|ui| {
+        ui.button("Copy install script").primary().icon("terminal");
+        ui.button("Read docs").ghost();
+    });`,
+    options: [
+      [".description(t) .bordered(bool) .compact()", "Card chrome and tighter padding for popovers."],
+      [".action(|ui| ..) .show()", "Centered call-to-action controls."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "kbd", name: "Keycap", group: "Layout and surfaces", demo: "kbd",
+    summary: "Sculpted monospace keycaps and multi-key shortcut chords that physically depress on click or while the matching keyboard key is held.",
+    code: `ui.kbd("⌘K");
+ui.shortcut_keys(&["⌘", "Shift", "D"]);
+ui.keycap("↑").large().live_key(Key::ArrowUp);`,
+    options: [
+      ["ui.kbd(label) / ui.shortcut_keys(&[&str])", "Inline keycap or chord row."],
+      ["ui.keycap(label)", ".large() .pressed(bool) .live_key(Key) .interactive()"],
+    ],
+    keys: [["Matching physical key", "Depresses any keycap configured with .live_key(..)"]],
   },
   {
     slug: "calendar", name: "Calendar", group: "Dates", demo: "calendar",

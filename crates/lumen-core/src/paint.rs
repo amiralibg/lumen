@@ -171,8 +171,19 @@ impl Painter {
         self.rrect_unsnapped(r, radii, [top, bottom], 0.0, Color::TRANSPARENT);
     }
 
+    /// Rounded rect with a horizontal two-stop gradient fill (clipped to SDF corners).
+    pub fn rrect_horiz(&mut self, r: Rect, radii: Corners, left: Color, right: Color) {
+        let r = self.snap_rect(r);
+        self.rrect_corners(r, radii, [left, right, right, left], 0.0, Color::TRANSPARENT);
+    }
+
     /// Rounded rect at exact (fractional) coordinates, e.g. a moving thumb.
     pub fn rrect_unsnapped(&mut self, r: Rect, radii: Corners, fill: [Color; 2], border: f32, border_color: Color) {
+        self.rrect_corners(r, radii, [fill[0], fill[0], fill[1], fill[1]], border, border_color);
+    }
+
+    /// Rounded rect with per-corner colors `[top_left, top_right, bottom_right, bottom_left]`.
+    pub fn rrect_corners(&mut self, r: Rect, radii: Corners, fill: [Color; 4], border: f32, border_color: Color) {
         if r.width() <= 0.0 || r.height() <= 0.0 {
             return;
         }
@@ -197,9 +208,9 @@ impl Painter {
         };
         self.push_quad([
             corner(q.min, fill[0]),
-            corner(vec2(q.max.x, q.min.y), fill[0]),
-            corner(q.max, fill[1]),
-            corner(vec2(q.min.x, q.max.y), fill[1]),
+            corner(vec2(q.max.x, q.min.y), fill[1]),
+            corner(q.max, fill[2]),
+            corner(vec2(q.min.x, q.max.y), fill[3]),
         ]);
     }
 

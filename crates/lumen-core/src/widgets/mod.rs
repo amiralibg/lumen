@@ -30,6 +30,8 @@ pub mod palette;
 pub mod inputs;
 pub mod number_field;
 pub mod otp;
+pub mod feedback;
+pub mod navigation;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -53,6 +55,8 @@ pub use palette::{Command, CommandPalette};
 pub use inputs::{password_strength, PasswordInput, SearchField, TagInput, TextArea};
 pub use number_field::NumberField;
 pub use otp::OtpInput;
+pub use feedback::{Alert, EmptyState, Keycap, Skeleton};
+pub use navigation::{Breadcrumb, Pagination, Steps};
 
 use crate::color::Color;
 use crate::theme::Token;

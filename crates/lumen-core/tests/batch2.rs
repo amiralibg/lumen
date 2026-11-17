@@ -598,3 +598,130 @@ fn search_field_focuses_on_slash_and_clears_on_escape() {
     h.frame(vec![Event::Text("prod".into())]);
     assert_eq!(h.s.q, "prod");
 }
+
+// -------------------------------------------------- Feedback and Navigation
+
+struct AlertState {
+    open: bool,
+    retried: u32,
+}
+
+fn alert_view(ui: &mut Ui, s: &mut AlertState) {
+    ui.column().pad(24).gap(10).show(|ui| {
+        if ui.alert("Quota warning").warning().action("Upgrade").dismissible(&mut s.open).clicked() {
+            s.retried += 1;
+        }
+    });
+}
+
+#[test]
+fn alert_triggers_action_and_dismisses_cleanly() {
+    let mut h = Harness::new(AlertState { open: true, retried: 0 }, alert_view);
+    // First Tab lands on the Upgrade action button; Enter triggers it.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.retried, 1);
+    assert!(h.s.open);
+
+    // Second Tab lands on the dismiss × button; Enter closes the alert.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    assert!(!h.s.open);
+}
+
+#[test]
+fn skeleton_requests_no_frames_under_reduced_motion() {
+    let mut ui = Ui::new();
+    ui.set_reduced_motion(true);
+    let mut t = 1.0;
+    for _ in 0..5 {
+        t += 1.0 / 60.0;
+        let out = ui.run(RawInput { time: t, ..Default::default() }, |ui| {
+            ui.skeleton_circle(36.0);
+            ui.skeleton_lines(3);
+        });
+        assert_eq!(out.repaint_after, None, "reduced-motion skeleton must be idle");
+    }
+}
+
+#[derive(Default)]
+struct CrumbState {
+    picked: Option<usize>,
+}
+
+fn crumb_view(ui: &mut Ui, s: &mut CrumbState) {
+    const ITEMS: [&str; 5] = ["Root", "Org", "Team", "Repo", "main.rs"];
+    ui.column().pad(24).show(|ui| {
+        if let Some(i) = ui.breadcrumb("trail", &ITEMS).max_items(4).show() {
+            s.picked = Some(i);
+        }
+    });
+}
+
+#[test]
+fn breadcrumb_navigates_ancestors_and_overflow_menu() {
+    let mut h = Harness::new(CrumbState::default(), crumb_view);
+    // Tab focuses Root (index 0); Enter selects it.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.picked, Some(0));
+
+    // ArrowRight moves to ellipsis button; Enter opens collapsed menu ("Org", "Team"); Enter picks "Org" (index 1).
+    h.frame(key(Key::ArrowRight));
+    h.idle(1);
+    h.frame(key(Key::Enter));
+    h.idle(2);
+    h.frame(key(Key::Enter));
+    h.idle(1);
+    assert_eq!(h.s.picked, Some(1));
+}
+
+#[derive(Default)]
+struct PageState {
+    page: usize,
+}
+
+fn page_view(ui: &mut Ui, s: &mut PageState) {
+    ui.column().pad(24).show(|ui| {
+        ui.pagination("p", &mut s.page, 12);
+    });
+}
+
+#[test]
+fn pagination_steps_and_jumps_with_keyboard() {
+    let mut h = Harness::new(PageState { page: 0 }, page_view);
+    // At page 0, prev is disabled so first Tab focuses page 1 button (index 0).
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.page, 1);
+    h.frame(key(Key::End));
+    assert_eq!(h.s.page, 11);
+    h.frame(key(Key::Home));
+    assert_eq!(h.s.page, 0);
+}
+
+#[derive(Default)]
+struct WizState {
+    step: usize,
+}
+
+fn wiz_view(ui: &mut Ui, s: &mut WizState) {
+    const STEPS: [(&str, &str); 3] = [("Build", ""), ("Test", ""), ("Ship", "")];
+    ui.column().pad(24).show(|ui| {
+        ui.steps("w", &mut s.step, &STEPS).linear(true);
+    });
+}
+
+#[test]
+fn linear_steps_unlock_as_progress_advances() {
+    let mut h = Harness::new(WizState { step: 1 }, wiz_view);
+    // Step 0 and Step 1 are unlocked; Step 2 is locked until reached.
+    h.frame(key(Key::Tab)); // focuses Step 0
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.step, 0, "can return to completed step 0");
+    // Step 1 is still remembered in max_reached, so ArrowRight + Enter returns to Step 1.
+    h.frame(key(Key::ArrowRight));
+    h.idle(1);
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.step, 1);
+}
