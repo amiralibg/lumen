@@ -17,7 +17,7 @@ lumen-app = { path = "crates/lumen-app", version = "0.1.0" }
 lumen = { path = "crates/lumen", version = "0.1.0" }
 
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "swash"] }
-ahash = "0.8"
+ahash = { version = "0.8", default-features = false, features = ["std"] }
 unicode-segmentation = "1.12"
 wgpu = { version = "30", default-features = false, features = ["wgsl", "metal", "vulkan", "dx12", "gles", "webgpu", "webgl", "std"] }
 bytemuck = { version = "1.25", features = ["derive"] }
