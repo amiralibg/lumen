@@ -40,7 +40,7 @@ pub struct Shot {
 
 impl Default for Shot {
     fn default() -> Self {
-        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Violet, look: Look::lumen(), native_accent: None, steps: vec![] }
+        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Blue, look: Look::lumen(), native_accent: None, steps: vec![] }
     }
 }
 

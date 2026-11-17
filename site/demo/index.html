@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lumen demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #F9FAFB; }
+    html.dark, html.dark body { background: #0B0C0F; }
+    html.embed, html.embed body { background: #FFFFFF; }
+    html.embed.dark, html.embed.dark body { background: #121417; }
+    canvas#lumen { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+    .err { position: fixed; inset: 0; display: grid; place-items: center; font: 14px/1.5 system-ui, sans-serif; color: #888; padding: 24px; text-align: center; }
+  </style>
+  <script>
+    var q = new URLSearchParams(location.search);
+    if (q.get("dark") === "1") document.documentElement.classList.add("dark");
+    if (q.get("embed") === "1") document.documentElement.classList.add("embed");
+  </script>
+</head>
+<body>
+  <canvas id="lumen" tabindex="0" aria-label="Interactive lumen demo"></canvas>
+  <script type="module">
+    import init from "./lumen-demos.js";
+    const tell = (m) => { try { parent.postMessage(m, "*"); } catch (e) {} };
+    init().then(() => {
+      // Two frames: the GPU device is ready and the first frame is on screen.
+      requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => tell("lumen-ready"))));
+    }).catch((e) => {
+      document.body.insertAdjacentHTML("beforeend", '<div class="err">This demo needs WebGPU or WebGL2.<br>' + String(e).slice(0, 160) + "</div>");
+    });
+  </script>
+</body>
+</html>

@@ -390,7 +390,7 @@ Everything above describes the **Lumen** look, which is the default. A look (`lu
 | Focus ring | 2px, gap 4→2 | 3.5px, 60%, hugging | 2px foreground | 2px, 50% |
 | Sidebar selection | accent-subtle | neutral | neutral + accent bar | neutral |
 | Fonts | Inter, Geist | SF Pro | Segoe UI Variable | Adwaita Sans, Cantarell |
-| Native accent | violet | #007AFF / #0A84FF | #005FB8 / #60CDFF | #3584E4 |
+| Native accent | blue (#0E6EE6) | #007AFF / #0A84FF | #005FB8 / #60CDFF | #3584E4 |
 
 Rules:
 

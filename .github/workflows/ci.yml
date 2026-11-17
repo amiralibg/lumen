@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Test core and text
+        run: cargo test -p lumen-core -p lumen-text
+      - name: Check everything
+        run: cargo check --workspace --all-targets
+      - name: Check the web build
+        run: cargo check -p lumen-gallery -p lumen-demos --target wasm32-unknown-unknown

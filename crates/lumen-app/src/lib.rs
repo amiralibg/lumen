@@ -47,7 +47,7 @@ impl App {
             size: (960, 640),
             min_size: None,
             mode: None,
-            accent: Accent::Violet,
+            accent: Accent::Blue,
             look: Look::lumen(),
             follow_reduced_motion: true,
             canvas_id: None,

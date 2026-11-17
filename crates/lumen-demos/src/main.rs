@@ -56,6 +56,9 @@ enum Range {
 
 struct State {
     demo: String,
+    embed: bool,
+    /// Screenshots: show overlays (menus, dialogs) open.
+    force_open: bool,
     on: [bool; 4],
     checks: [bool; 4],
     plan: u8,
@@ -80,6 +83,8 @@ impl State {
         let today = Date::today();
         State {
             demo,
+            embed: false,
+            force_open: false,
             on: [true, false, true, false],
             checks: [true, false, true, false],
             plan: 1,
@@ -112,17 +117,30 @@ fn costs() -> Vec<f32> {
 }
 
 fn frame(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
-    ui.column().fill().pad(28).align(Align::Center).justify(Justify::Center).show(|ui| {
+    frame_at(ui, Justify::Center, f)
+}
+
+/// Demos whose overlays open downward start near the top.
+fn frame_at(ui: &mut Ui, justify: Justify, f: impl FnOnce(&mut Ui)) {
+    ui.column().fill().pad(40).align(Align::Center).justify(justify).show(|ui| {
         ui.column().fill_width().max_width(760.0).gap(16).align(Align::Center).show(f);
     });
 }
 
 fn view(ui: &mut Ui, s: &mut State) {
     let demo = s.demo.clone();
+    // Embedded component demos sit on the host page's white card.
+    if s.embed && !matches!(demo.as_str(), "hero" | "vault") {
+        for m in [Mode::Light, Mode::Dark] {
+            let surf = ui.theme.target_look().neutrals(m).surface;
+            ui.override_color(m, lumen::Token::Background, Some(surf));
+        }
+    }
     match demo.as_str() {
         "hero" => hero(ui, s),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
+        "menu" | "popover" | "select" | "date-picker" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -185,7 +203,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "text-input" => {
-            ui.column().gap(16).width(360.0).show(|ui| {
+            ui.column().gap(16).fill_width().max_width(360.0).show(|ui| {
                 ui.text_input(&mut s.name).label("Full name").fill_width();
                 let err = (!s.email.is_empty() && !s.email.contains('@')).then_some("Enter a valid email address.");
                 ui.text_input(&mut s.email).label("Email").icon("mail").placeholder("you@example.com").error(err).helper("We never share it.").fill_width();
@@ -193,7 +211,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "select" => {
-            ui.column().gap(16).width(280.0).show(|ui| {
+            ui.column().gap(16).fill_width().max_width(280.0).show(|ui| {
                 ui.select(&mut s.region, &[(Region::Frankfurt, "Frankfurt (eu-central)"), (Region::Virginia, "Virginia (us-east)"), (Region::Tokyo, "Tokyo (ap-northeast)"), (Region::Sydney, "Sydney (ap-southeast)")])
                     .label("Region")
                     .fill_width();
@@ -203,7 +221,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ui.segmented(&mut s.range, &[(Range::Day, "Day"), (Range::Week, "Week"), (Range::Month, "Month"), (Range::Year, "Year")]);
         }
         "tabs" => {
-            ui.column().width(480.0).gap(16).show(|ui| {
+            ui.column().fill_width().max_width(480.0).gap(16).show(|ui| {
                 ui.tabs(&mut s.tab, &[(0, "Overview"), (1, "Activity"), (2, "Settings"), (3, "Billing")]);
                 let text = ["Everything at a glance.", "What changed, and who did it.", "Preferences for this project.", "Invoices and payment methods."][s.tab as usize];
                 ui.label(text).secondary();
@@ -211,6 +229,9 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
         }
         "menu" => {
             let r = ui.button("Actions").trailing_icon("chevron-down").show();
+            if std::mem::take(&mut s.force_open) {
+                ui.set_popover_open(r.id, true);
+            }
             ui.menu(&r, |ui| {
                 ui.menu_label("Project");
                 ui.menu_item("pencil", "Rename").shortcut("⌘R");
@@ -239,7 +260,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "dialog" => {
-            if ui.button("Delete project").danger().icon("trash-2").clicked() {
+            if ui.button("Delete project").danger().icon("trash-2").clicked() || std::mem::take(&mut s.force_open) {
                 s.open = true;
             }
             ui.dialog("confirm", &mut s.open)
@@ -278,7 +299,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ui.label("Hover an icon. Tooltips open after a delay, then instantly while you move along.").muted();
         }
         "card" => {
-            ui.column().width(560.0).show(|ui| {
+            ui.column().fill_width().max_width(560.0).show(|ui| {
                 ui.card().title("Notifications").description("Choose what reaches you.").show(|ui| {
                     ui.settings(|rows| {
                         rows.row("Deploy failures", "When a production deploy fails.", |ui| {
@@ -307,7 +328,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "progress" => {
-            ui.column().width(360.0).gap(18).show(|ui| {
+            ui.column().fill_width().max_width(360.0).gap(18).show(|ui| {
                 s.t += 1;
                 if s.t % 90 == 0 {
                     s.progress = if s.progress > 0.9 { 0.1 } else { s.progress + 0.2 };
@@ -331,12 +352,15 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
         }
         "date-picker" => {
             ui.row().gap(16).align(Align::Start).show(|ui| {
-                ui.date_picker("Due date", &mut s.date);
+                let r = ui.date_picker("Due date", &mut s.date);
+                if std::mem::take(&mut s.force_open) {
+                    ui.set_popover_open(r.id, true);
+                }
                 ui.date_range_picker("Stay", &mut s.span);
             });
         }
         "chart-line" => {
-            ui.line_chart("rev", &MONTHS, vec![Series::new("Revenue", revenue()), Series::new("Costs", costs())]).smooth(true).height(260.0).format(|v| format!("${}k", lumen::widgets::chart::compact(v)));
+            ui.line_chart("rev", &MONTHS, vec![Series::new("Revenue", revenue()), Series::new("Costs", costs())]).smooth(true).height(260.0).format(|v| if v == 0.0 { "$0".into() } else { format!("${}k", lumen::widgets::chart::compact(v)) });
         }
         "chart-area" => {
             let v: Vec<f32> = (0..30).map(|i| 40.0 + 18.0 * ((i as f32) * 0.45).sin() + i as f32 * 1.6).collect();
@@ -386,7 +410,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
 fn hero(ui: &mut Ui, s: &mut State) {
     ui.row().fill().show(|ui| {
         ui.sidebar().width(208.0).show(|ui| {
-            ui.nav_header("L", "Lumen Analytics");
+            ui.nav_header("N", "Northwind");
             ui.nav_section("Workspace");
             ui.nav_item("layout-dashboard", "Overview").selected(true);
             ui.nav_item("chart-line", "Reports");
@@ -431,7 +455,7 @@ fn looks(ui: &mut Ui, s: &mut State) {
     frame(ui, |ui| {
         let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
         ui.segmented(&mut s.look, &opts);
-        ui.column().width(520.0).show(|ui| {
+        ui.column().fill_width().max_width(520.0).show(|ui| {
             ui.card().title("Sync").description("Everything blends when you switch looks.").show(|ui| {
                 ui.settings(|rows| {
                     rows.row("iCloud Drive", "Keep files up to date.", |ui| {
@@ -532,7 +556,7 @@ fn parse_accent(s: &str) -> Accent {
             return Accent::Custom(v);
         }
     }
-    Accent::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s)).unwrap_or(Accent::Violet)
+    Accent::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s)).unwrap_or(Accent::Blue)
 }
 
 struct Params {
@@ -543,10 +567,12 @@ struct Params {
     screenshot: Option<String>,
     size: (u32, u32),
     scale: f32,
+    embed: bool,
+    open: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Violet, screenshot: None, size: (960, 600), scale: 2.0 };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -558,6 +584,7 @@ fn params() -> Params {
                 "dark" => p.dark = v == "1" || v == "true",
                 "look" => p.look = parse_look(&v),
                 "accent" => p.accent = parse_accent(&v),
+                "embed" => p.embed = v == "1",
                 _ => {}
             }
         }
@@ -587,6 +614,8 @@ fn params() -> Params {
                     p.size = (w.parse().unwrap_or(960), h.parse().unwrap_or(600));
                     i += 1;
                 }
+                "--embed" => p.embed = true,
+                "--open" => p.open = true,
                 "--scale" => {
                     p.scale = next.parse().unwrap_or(2.0);
                     i += 1;
@@ -608,10 +637,12 @@ fn params() -> Params {
 
 fn main() {
     let mut p = params();
-    if p.look != Platform::Lumen && p.accent == Accent::Violet {
+    if p.look != Platform::Lumen && p.accent == Accent::Blue {
         p.accent = Accent::Native;
     }
     let mut state = State::new(p.demo.clone());
+    state.embed = p.embed;
+    state.force_open = p.open;
     state.look = p.look;
     let mode = if p.dark { Mode::Dark } else { Mode::Light };
     let look: Look = p.look.look();

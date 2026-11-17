@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lumen — Rust UI that looks finished</title>
+  <meta name="description" content="lumen is an immediate-mode UI kit for Rust that draws its own components: real type, spring motion, charts, date pickers, overlays, and looks for macOS, Windows and GNOME. Native and web.">
+  <meta property="og:title" content="lumen — Rust UI that looks finished">
+  <meta property="og:description" content="An immediate-mode UI kit for Rust with polished, animated components and native-feeling looks.">
+  <meta property="og:image" content="https://amiralibg.github.io/lumen/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#f6f5f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#191918" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/Geist-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="assets/style.css">
+  <script>
+    // Theme before first paint, to avoid a flash.
+    try { var t = localStorage.getItem("lumen-theme"); } catch (e) {}
+    document.documentElement.dataset.theme = t || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  </script>
+</head>
+<body>
+  <a class="skip" href="#view">Skip to content</a>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="#/" aria-label="lumen home"><img src="assets/logo-mark.svg" data-light="assets/logo-mark.svg" data-dark="assets/logo-mark-dark.svg" alt="">lumen</a>
+      <nav class="links" id="links" aria-label="Main">
+        <a href="#/guide/getting-started">Guide</a>
+        <a href="#/components">Components</a>
+        <a href="#/guide/looks">Looks</a>
+        <a href="#/showcase">Showcase</a>
+        <a href="#/apps">Apps</a>
+        <a href="#/changelog">Changelog</a>
+      </nav>
+      <div class="nav-end">
+        <button class="search" id="search" type="button" aria-label="Search the docs"><span>Search</span><kbd>⌘K</kbd></button>
+        <a class="icon" id="gh" href="https://github.com/amiralibg/lumen" aria-label="lumen on GitHub"></a>
+        <button class="icon" id="theme" type="button" aria-label="Switch theme"></button>
+        <button class="icon burger" id="burger" type="button" aria-label="Menu"></button>
+      </div>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1">
+    <noscript>
+      <div class="wrap" style="padding:96px 24px">
+        <h1 style="font-size:48px">lumen</h1>
+        <p>An immediate-mode UI kit for Rust that draws its own components. The live demos on this site need JavaScript and WebAssembly; the source and docs are readable without them:</p>
+        <ul>
+          <li><a href="https://github.com/amiralibg/lumen">Source and README on GitHub</a></li>
+          <li><a href="https://github.com/amiralibg/lumen/blob/main/DESIGN.md">Design tokens and looks</a></li>
+        </ul>
+      </div>
+    </noscript>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <a class="brand" href="#/" style="font-size:16px"><img src="assets/logo-mark.svg" data-light="assets/logo-mark.svg" data-dark="assets/logo-mark-dark.svg" alt="" style="width:22px;height:22px">lumen</a>
+      <span>MIT or Apache-2.0. Inter and Geist under the SIL OFL, Lucide under ISC.</span>
+      <nav aria-label="Footer"><a href="#/guide/getting-started">Guide</a><a href="#/components">Components</a><a href="#/guide/faq">FAQ</a><a href="https://github.com/amiralibg/lumen">GitHub</a></nav>
+    </div>
+  </footer>
+
+  <div class="pal" id="pal" hidden role="dialog" aria-modal="true" aria-label="Search">
+    <div class="box">
+      <input type="search" placeholder="Search components and guides" aria-label="Search" autocomplete="off" spellcheck="false">
+      <ul role="listbox" aria-label="Results"></ul>
+    </div>
+  </div>
+  <script type="module" src="assets/app.js"></script>
+</body>
+</html>

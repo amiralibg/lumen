@@ -12,7 +12,7 @@ use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Size, Style};
-use crate::math::{vec2, Corners, Rect, Sides, Vec2};
+use crate::math::{vec2, Corners, Rect, Vec2};
 use crate::theme::{Elevation, TextRole, Token};
 use crate::ui::{PaintCx, Response, Sense, Ui};
 
@@ -451,11 +451,12 @@ impl Chart<'_> {
                         let slot = plot.width() / n.max(1) as f32;
                         let group_w = (slot * 0.72).min(18.0 * ns.max(1) as f32 + 6.0 * (ns.max(1) - 1) as f32);
                         let base = y_of(0.0f32.clamp(y0, y1));
+                        #[allow(clippy::needless_range_loop)]
                         for i in 0..n {
                             let cxm = x_of(plot, i);
                             let dim = if hov_a > 0.0 { 1.0 - 0.45 * hov_a * (1.0 - bar_focus[i]) } else { 1.0 };
                             if stacked {
-                                let w = group_w.min(28.0).max(4.0);
+                                let w = group_w.clamp(4.0, 28.0);
                                 let (mut pos, mut neg) = (0.0f32, 0.0f32);
                                 let top_si = (0..vals.len()).rev().find(|&s| vals[s].get(i).copied().unwrap_or(0.0) > 0.0);
                                 for (si, v) in vals.iter().enumerate() {

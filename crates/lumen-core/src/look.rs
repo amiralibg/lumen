@@ -521,7 +521,7 @@ impl Look {
                 ink: h(0x000000),
                 focus: None,
             },
-            accent: [h(0x7D55EC), h(0x7F58EE)],
+            accent: [h(0x0E6EE6), h(0x1270E9)],
             dark_accent_min_lightness: 0.0,
             fonts: Fonts::BUNDLED,
             text_scale: 1.0,

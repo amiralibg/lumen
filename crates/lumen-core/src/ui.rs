@@ -379,7 +379,7 @@ impl Ui {
         Ui {
             caret_blink: true,
             text: TextSystem::new(),
-            theme: Theme::new(Mode::Light, Accent::Violet),
+            theme: Theme::new(Mode::Light, Accent::Blue),
             anims: AnimStore::new(),
             memory: FastMap::default(),
             frame: 0,

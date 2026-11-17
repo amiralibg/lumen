@@ -456,7 +456,7 @@ fn appearance(ui: &mut Ui, s: &mut Gallery) {
                         ui.set_accent(Accent::Native);
                     } else {
                         s.platform = Platform::Lumen;
-                        ui.set_accent(Accent::Violet);
+                        ui.set_accent(Accent::Blue);
                     }
                 }
             });

@@ -56,8 +56,8 @@ impl Mode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Accent {
     Neutral,
-    #[default]
     Violet,
+    #[default]
     Blue,
     Green,
     Amber,
@@ -105,7 +105,7 @@ impl Accent {
         let h = |a, b, c, d| [Color::hex(a), Color::hex(b), Color::hex(c), Color::hex(d)];
         match (mode, self) {
             (_, Accent::Custom(v)) => derive_accent(Color::hex(v), mode, Look::lumen().neutrals(mode), 0.0),
-            (_, Accent::Native) => Accent::Violet.colors(mode),
+            (_, Accent::Native) => Accent::Blue.colors(mode),
             (Mode::Light, Accent::Neutral) => h(0x14171D, 0x14171D, 0xE8E9EC, 0xFFFFFF),
             (Mode::Light, Accent::Violet) => h(0x7D55EC, 0x6849C4, 0xF0EFFE, 0xFFFFFF),
             (Mode::Light, Accent::Blue) => h(0x0E6EE6, 0x125DC0, 0xE9F2FF, 0xFFFFFF),
@@ -242,7 +242,7 @@ impl Palette {
             self::Accent::Custom(v) => derive(Color::hex(v)),
             self::Accent::Native => match native {
                 Some(c) => derive(c),
-                None if look.platform == crate::look::Platform::Lumen => self::Accent::Violet.colors(mode),
+                None if look.platform == crate::look::Platform::Lumen => self::Accent::Blue.colors(mode),
                 None => derive(look.accent[mi]),
             },
             named if look.platform == crate::look::Platform::Lumen => named.colors(mode),

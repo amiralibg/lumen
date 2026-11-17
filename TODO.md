@@ -21,3 +21,4 @@
 - [x] Gallery Appearance: look, system fonts, accent hue, roundness, density, motion style
 - [ ] Screenshot review of each look in both modes, then per-platform polish
 - [ ] Windows/Linux accent and reduce-motion queries are untested on real machines
+- [ ] Layout: rows narrower than their content shrink hugging children below their descendants' `min` widths (no min-content propagation), so siblings can overlap at very narrow widths
