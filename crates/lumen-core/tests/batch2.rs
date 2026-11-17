@@ -725,3 +725,68 @@ fn linear_steps_unlock_as_progress_advances() {
     h.frame(key(Key::Enter));
     assert_eq!(h.s.step, 1);
 }
+
+// ----------------------------------------- Selection, Actions & Chrome (G5)
+
+#[derive(Default)]
+struct G5State {
+    tier: u8,
+    stars: u8,
+    band: (f32, f32),
+    chord: Vec<String>,
+    purged: u32,
+}
+
+fn g5_view(ui: &mut Ui, s: &mut G5State) {
+    ui.column().pad(24).gap(10).show(|ui| {
+        ui.radio_card(&mut s.tier, 0, "Shared");
+        ui.radio_card(&mut s.tier, 1, "Dedicated");
+        ui.rating("r", &mut s.stars);
+        ui.range_slider("Band", &mut s.band, 0.0..=100.0).step(10.0);
+        ui.shortcut_recorder("rec", &mut s.chord);
+        if ui.hold_button("Purge", 0.5).confirmed() {
+            s.purged += 1;
+        }
+    });
+}
+
+#[test]
+fn radio_cards_rating_range_slider_recorder_and_hold_button() {
+    let mut h = Harness::new(G5State { tier: 0, stars: 3, band: (20.0, 80.0), chord: vec![], purged: 0 }, g5_view);
+    // Tab 1 -> card 0; Tab 2 -> card 1, Enter selects tier 1.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    assert_eq!(h.s.tier, 1);
+
+    // Tab 3 -> rating; ArrowRight steps 3 -> 4.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.stars, 4);
+
+    // Tab 4 -> range_slider low thumb (20 -> 30); Tab 5 -> high thumb (80 -> 70).
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowLeft));
+    assert_eq!(h.s.band, (30.0, 70.0));
+
+    // Tab 6 -> shortcut recorder: Enter arms, Cmd+Shift+K records ["⇧", "⌘", "K"].
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::Enter));
+    let mods = Modifiers { logo: true, shift: true, mac: true, ..Default::default() };
+    h.frame(vec![Event::Key { key: Key::Char('k'), pressed: true, repeat: false, modifiers: mods }]);
+    assert_eq!(h.s.chord, vec!["⇧", "⌘", "K"]);
+
+    // Tab 7 -> clear button of shortcut recorder, Tab 8? Note clear button has focusable: false!
+    // So Tab 7 lands directly on hold_button! Hold Space for 0.6s -> fires once!
+    h.frame(key(Key::Tab));
+    h.frame(vec![Event::Key { key: Key::Space, pressed: true, repeat: false, modifiers: Modifiers::default() }]);
+    h.t += 0.25;
+    h.frame(vec![]);
+    assert_eq!(h.s.purged, 0, "early hold has not fired yet");
+    h.t += 0.35;
+    h.frame(vec![]);
+    assert_eq!(h.s.purged, 1, "holding past duration fires confirmed()");
+    h.frame(vec![Event::Key { key: Key::Space, pressed: false, repeat: false, modifiers: Modifiers::default() }]);
+}

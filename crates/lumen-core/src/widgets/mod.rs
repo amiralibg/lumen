@@ -32,6 +32,8 @@ pub mod number_field;
 pub mod otp;
 pub mod feedback;
 pub mod navigation;
+pub mod selection;
+pub mod actions_chrome;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -57,6 +59,8 @@ pub use number_field::NumberField;
 pub use otp::OtpInput;
 pub use feedback::{Alert, EmptyState, Keycap, Skeleton};
 pub use navigation::{Breadcrumb, Pagination, Steps};
+pub use selection::{RadioCard, RangeSlider, Rating, ShortcutRecorder};
+pub use actions_chrome::{Dropzone, HoldButton, Meter, SplitButton, StatusBarScope, ToolbarScope};
 
 use crate::color::Color;
 use crate::theme::Token;

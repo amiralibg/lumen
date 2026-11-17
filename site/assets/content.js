@@ -29,11 +29,41 @@ ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");`,
       [".primary() .secondary() .ghost() .danger()", "Variant. Secondary is the default. Use one primary per view."],
       [".small() .large() .size(ControlSize)", "Height, padding and type size come from the current look."],
       [".icon(name) .trailing_icon(name)", "Any Lucide icon name."],
-      [".disabled(bool) .full_width()", "Disabled buttons ignore the pointer and keyboard."],
+      [".disabled(bool) .loading(bool) .full_width()", "Loading shows an inline spinner and prevents double activation."],
       [".tooltip(text) .tooltip_shortcut(text, keys)", "Shown after a delay; instant while moving between tooltips."],
       [".clicked() .show()", "Add the button and read its Response."],
     ],
     keys: [["Space / Enter", "Activate"], ["Tab", "Move focus; the ring shows only for keyboard focus"]],
+  },
+  {
+    slug: "split-button", name: "Split button", group: "Actions", demo: "split-button",
+    summary: "A main action joined seamlessly with a chevron trigger that opens a menu of alternate actions, plus inline loading buttons.",
+    code: `if ui.split_button("Deploy production").primary().icon("rocket").show(|ui| {
+    ui.menu_item("zap", "Deploy canary (10%)").shortcut("⌘⇧C");
+    ui.menu_item("play", "Dry-run validation");
+}).clicked() {
+    deploy();
+}
+ui.button("Deploying").primary().loading(true);`,
+    options: [
+      [".primary() .secondary() .danger() .small()", "Variant and size for both joined halves."],
+      [".icon(name) .disabled(bool)", "Leading icon on the main action half."],
+      [".show(|ui| ..) -> Response", "Builds the dropdown menu and returns the main half's Response."],
+    ],
+    keys: [["Tab", "Focus main action, then chevron trigger"], ["Space / Enter", "Fire main action or open menu"]],
+  },
+  {
+    slug: "hold-button", name: "Hold and copy buttons", group: "Actions", demo: "hold-button",
+    summary: "A destructive button that sweeps full while held to prevent accidental clicks without a modal, and a clipboard button that confirms with a check.",
+    code: `if ui.hold_button("Hold to purge cache", 0.9).icon("trash-2").confirmed() {
+    purge_cache();
+}
+ui.copy_button("Copy token", "rk_live_9d2f4b8c1e7a");`,
+    options: [
+      ["ui.hold_button(label, secs)", ".danger() (default), .primary(), .secondary(), .icon(name), .confirmed()"],
+      ["ui.copy_button(label, text)", "Copies text and switches its icon to a check for 1.4 s."],
+    ],
+    keys: [["Hold Space / Enter", "Fills and confirms; releasing early springs back to zero"]],
   },
   {
     slug: "text-input", name: "Text input", group: "Inputs", demo: "text-input",
@@ -216,6 +246,47 @@ ui.slider("Price", &mut s.price, 0.0..=100.0).step(5.0);`,
     keys: [["← → ↑ ↓", "One step (Shift for ten)"], ["Home / End", "Minimum / maximum"]],
   },
   {
+    slug: "range-slider", name: "Range slider", group: "Inputs", demo: "range-slider",
+    summary: "Dual-thumb interval slider with an active accent band, independent keyboard-focusable thumbs and look-matched knobs.",
+    code: `let txt = format!("\${:.0} – \${:.0}", s.band.0, s.band.1);
+ui.range_slider("Instance budget", &mut s.band, 0.0..=120.0)
+    .step(5.0)
+    .readout(txt)
+    .fill_width();`,
+    options: [
+      [".step(s) .readout(text)", "Quantize both thumbs and display the formatted span."],
+      [".width(px) .fill_width() .disabled(b)", ""],
+    ],
+    keys: [["Tab", "Focus low thumb, then high thumb"], ["← → ↑ ↓ (Shift 10×)", "Nudge focused thumb within bounds"], ["Home / End", "Snap to bound"]],
+  },
+  {
+    slug: "shortcut-recorder", name: "Shortcut recorder", group: "Inputs", demo: "shortcut-recorder",
+    summary: "Click to arm recording and press any modifier + key chord to capture it as sculpted keycaps.",
+    code: `ui.shortcut_recorder("deploy-key", &mut s.chord)
+    .label("Deploy shortcut")
+    .fill_width();`,
+    options: [
+      ["ui.shortcut_recorder(key, &mut Vec<String>)", ".label(t) .width(px) .fill_width() .disabled(b)"],
+    ],
+    keys: [["Enter / Space", "Arm recording"], ["Modifiers + Key", "Capture chord"], ["Backspace", "Clear shortcut"], ["Escape", "Cancel recording"]],
+  },
+  {
+    slug: "dropzone", name: "Dropzone", group: "Inputs", demo: "dropzone",
+    summary: "Upload target zone with a hover-lifted icon tile, format hint and removable file rows.",
+    code: `if ui.dropzone("artifacts", "Drop build artifacts or click to add")
+    .hint("WASM, dSYM or tar.zst up to 50 MB")
+    .files(&mut s.uploads)
+    .clicked()
+{
+    pick_files();
+}`,
+    options: [
+      [".hint(t) .files(&mut Vec<(String, String)>)", "Format caption and mutable (name, size) list with remove buttons."],
+      [".disabled(b) .clicked()", ""],
+    ],
+    keys: [["Space / Enter", "Trigger file picker"], ["Tab to ×", "Remove attached file"]],
+  },
+  {
     slug: "switch", name: "Switch", group: "Selection", demo: "switch",
     summary: "On/off toggle. The knob stretches while pressed and springs across. Shape follows the look.",
     code: `ui.switch("Wi-Fi", &mut s.wifi);
@@ -241,6 +312,28 @@ ui.radio(&mut s.plan, Plan::Pro, "Pro — $20 / month");
 ui.radio(&mut s.plan, Plan::Team, "Team — $80 / month");`,
     options: [["ui.radio(&mut value, option, label)", "Selects `option` when clicked. Returns a Response."]],
     keys: [["Space / Enter", "Select"]],
+  },
+  {
+    slug: "radio-cards", name: "Radio cards", group: "Selection", demo: "radio-cards",
+    summary: "Selectable plan and configuration cards with leading icon tiles, price badges, descriptions and a spring-animated radio dot.",
+    code: `ui.radio_card(&mut s.tier, 1, "Performance ARM64")
+    .icon("zap")
+    .badge("$32 / mo")
+    .description("8 dedicated Ampere cores · 16 GB ECC.");`,
+    options: [
+      [".icon(name) .badge(text) .description(text)", "Card chrome; selected card tints with the accent."],
+      [".disabled(bool) .changed()", ""],
+    ],
+    keys: [["Tab", "Move between cards"], ["Space / Enter", "Select card"]],
+  },
+  {
+    slug: "rating", name: "Rating", group: "Selection", demo: "rating",
+    summary: "Interactive star bar with live hover preview, bouncy selection pop and toggle-to-clear on the active star.",
+    code: `ui.rating("release", &mut s.stars).size(22.0);`,
+    options: [
+      [".max(n) .size(px) .icon(name) .disabled(b)", "3..=10 stars (default 5) and any Lucide glyph."],
+    ],
+    keys: [["← → ↑ ↓", "Step rating"], ["Home / End", "Zero / maximum"]],
   },
   {
     slug: "segmented", name: "Segmented control", group: "Selection", demo: "segmented",
@@ -317,6 +410,38 @@ ui.steps("rollout", &mut s.step, STEPS);`,
 });`,
     options: [[".collapsed(b) .width(px)", "Width springs; labels fade."], ["nav_item(..).badge(n) .selected(b) .disabled(b)", ""], ["nav_header nav_section nav_footer", ""]],
     keys: [["↑ ↓", "Move between items"], ["Enter", "Choose"]],
+  },
+  {
+    slug: "toolbar", name: "Toolbar", group: "Navigation", demo: "toolbar",
+    summary: "A floating raised strip of icon toggles, momentary actions, separators and a trailing primary CTA.",
+    code: `ui.toolbar("editor", |tb| {
+    tb.toggle("bold", "Bold (⌘B)", &mut s.bold);
+    tb.toggle("italic", "Italic (⌘I)", &mut s.italic);
+    tb.separator();
+    tb.action("align-left", "Align left");
+    tb.primary("Share");
+});`,
+    options: [
+      ["tb.toggle(icon, tip, &mut bool)", "Accent-tinted toggle button with press squash."],
+      ["tb.action(icon, tip) tb.separator() tb.primary(label)", ""],
+    ],
+    keys: [["Tab + Space / Enter", "Toggle or trigger toolbar controls"]],
+  },
+  {
+    slug: "status-bar", name: "Status bar", group: "Navigation", demo: "status-bar",
+    summary: "Compact 28 px bottom chrome bar for live connection status, git branch, latency and tabular editor readouts.",
+    code: `ui.status_bar(|bar| {
+    bar.status("Connected", Tone::Success);
+    bar.item("git-branch", "ethereal*");
+    bar.spacer();
+    bar.text("Ln 142, Col 18");
+});`,
+    options: [
+      ["bar.status(label, Tone)", "Pulsed status dot and label."],
+      ["bar.item(icon, label) -> bool", "Clickable segment with hover pill and focus ring."],
+      ["bar.text(label) bar.spacer()", "Tabular read-only readout."],
+    ],
+    keys: [["Tab + Space / Enter", "Activate clickable status segments"]],
   },
   {
     slug: "menu", name: "Menu", group: "Overlays", demo: "menu",
@@ -478,6 +603,21 @@ ui.status("Partial outage", Tone::Warning);`,
 ui.progress(None);   // indeterminate
 ui.spinner(20.0);`,
     options: [["progress(Option<f32>)", "0..1, or None for indeterminate."], ["spinner(size)", ""]],
+    keys: [],
+  },
+  {
+    slug: "meter", name: "Segmented meter", group: "Feedback", demo: "meter",
+    summary: "Multi-part quota and storage bar whose segments spring to their shares and highlight when you hover the legend.",
+    code: `ui.meter("storage", 100.0, &[
+    ("Artifacts", 42.0),
+    ("Build cache", 21.5),
+    ("Logs", 12.0),
+])
+.label("Workspace storage")
+.unit("GB");`,
+    options: [
+      [".label(t) .unit(u)", "Header and tabular used / capacity readout."],
+    ],
     keys: [],
   },
   {

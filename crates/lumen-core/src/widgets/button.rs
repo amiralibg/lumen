@@ -27,6 +27,7 @@ pub struct Button<'u> {
     trailing: Option<String>,
     icon_only: bool,
     disabled: bool,
+    loading: bool,
     full_width: bool,
     tooltip: Option<(String, Option<String>)>,
     shown: bool,
@@ -43,6 +44,7 @@ impl<'u> Button<'u> {
             trailing: None,
             icon_only: false,
             disabled: false,
+            loading: false,
             full_width: false,
             tooltip: None,
             shown: false,
@@ -90,6 +92,11 @@ impl<'u> Button<'u> {
         self.disabled = d;
         self
     }
+    /// Show an inline spinner and prevent duplicate activation while busy.
+    pub fn loading(mut self, l: bool) -> Self {
+        self.loading = l;
+        self
+    }
     pub fn full_width(mut self) -> Self {
         self.full_width = true;
         self
@@ -108,9 +115,10 @@ impl<'u> Button<'u> {
         let ui = &mut *self.ui;
         let key = if self.icon_only { self.icon.clone().unwrap_or_default() } else { self.label.clone() };
         let id = ui.make_id(("button", key));
-        let ix = ui.interact(id, Sense::CLICK, self.disabled);
+        let busy = self.disabled || self.loading;
+        let ix = ui.interact(id, Sense::CLICK, busy);
         let (key_act, key_held) = key_activate(ui, &ix, true);
-        let clicked = (ix.clicked || key_act) && !self.disabled;
+        let clicked = (ix.clicked || key_act) && !busy;
         let (h, p) = ui.state_weights(&ix, key_held);
         let m = ui.control_metrics(self.size);
         let look = ui.look().button;
@@ -197,7 +205,7 @@ impl<'u> Button<'u> {
             Sides::all(0.0)
         } else {
             Sides {
-                left: if self.icon.is_some() { m.pad_icon } else { m.pad_x },
+                left: if self.icon.is_some() || self.loading { m.pad_icon } else { m.pad_x },
                 right: if self.trailing.is_some() { m.pad_icon } else { m.pad_x },
                 top: 0.0,
                 bottom: 0.0,
@@ -220,7 +228,7 @@ impl<'u> Button<'u> {
             justify: Justify::Center,
             ..Default::default()
         };
-        let cursor = if self.disabled { CursorIcon::Default } else { CursorIcon::Pointer };
+        let cursor = if busy { CursorIcon::Default } else { CursorIcon::Pointer };
         ui.begin(
             style,
             Some(id),
@@ -245,7 +253,31 @@ impl<'u> Button<'u> {
                 }
             })),
         );
-        if let Some(i) = &self.icon {
+        if self.loading {
+            let sz = m.icon;
+            let spin_c = icon;
+            let track_c = icon.multiply_alpha(0.28);
+            let t = ui.time() as f32;
+            let reduced = ui.reduced_motion();
+            if !reduced {
+                ui.request_repaint_after(0.0);
+            }
+            ui.leaf(
+                Style::default(),
+                vec2(sz, sz),
+                None,
+                Sense::NONE,
+                CursorIcon::Default,
+                Some(Box::new(move |cx, r| {
+                    let w = (sz / 7.5).max(1.8);
+                    let (ro, ri) = (sz / 2.0, sz / 2.0 - w);
+                    cx.painter.arc_band(r.center(), ri, ro, 0.0, std::f32::consts::TAU, track_c);
+                    let a = if reduced { 0.8 } else { t * 5.2 };
+                    let len = if reduced { 1.8 } else { 1.3 + 0.8 * (t * 2.4).sin() };
+                    cx.painter.arc_band(r.center(), ri, ro, a, a + len, spin_c);
+                })),
+            );
+        } else if let Some(i) = &self.icon {
             ui.icon_leaf(i, m.icon, icon);
         }
         if !icon_only {

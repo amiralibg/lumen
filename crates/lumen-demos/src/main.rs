@@ -11,10 +11,17 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("bento", "Overview bento"),
     ("hero", "Dashboard"),
     ("button", "Button"),
+    ("split-button", "Split button"),
+    ("hold-button", "Hold and copy buttons"),
     ("switch", "Switch"),
     ("checkbox", "Checkbox"),
     ("radio", "Radio"),
+    ("radio-cards", "Radio cards"),
+    ("rating", "Rating"),
     ("slider", "Slider"),
+    ("range-slider", "Range slider"),
+    ("shortcut-recorder", "Shortcut recorder"),
+    ("dropzone", "Dropzone"),
     ("text-input", "Text input"),
     ("text-area", "Text area"),
     ("number-field", "Number field"),
@@ -28,6 +35,8 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("breadcrumb", "Breadcrumb"),
     ("pagination", "Pagination"),
     ("steps", "Steps"),
+    ("toolbar", "Toolbar"),
+    ("status-bar", "Status bar"),
     ("menu", "Menu"),
     ("popover", "Popover"),
     ("dialog", "Dialog"),
@@ -45,6 +54,7 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("card", "Card and settings"),
     ("badge", "Badge and status"),
     ("progress", "Progress and spinner"),
+    ("meter", "Segmented meter"),
     ("alert", "Alert"),
     ("skeleton", "Skeleton"),
     ("empty-state", "Empty state"),
@@ -134,6 +144,13 @@ struct State {
     crumb_depth: usize,
     page: usize,
     wizard_step: usize,
+    tier: u8,
+    stars: u8,
+    price_band: (f32, f32),
+    deploy_chord: Vec<String>,
+    uploads: Vec<(String, String)>,
+    fmt_flags: [bool; 4],
+    busy_deploy: bool,
 }
 
 impl State {
@@ -190,6 +207,13 @@ impl State {
             crumb_depth: 4,
             page: 4,
             wizard_step: 1,
+            tier: 1,
+            stars: 4,
+            price_band: (20.0, 75.0),
+            deploy_chord: vec!["⌘".into(), "⇧".into(), "D".into()],
+            uploads: vec![("lumen-demos.wasm".into(), "7.4 MB".into()), ("lucide.ttf".into(), "218 KB".into())],
+            fmt_flags: [true, false, false, true],
+            busy_deploy: false,
         }
     }
 }
@@ -250,7 +274,8 @@ fn view(ui: &mut Ui, s: &mut State) {
         | "color-picker"
         | "hover-card"
         | "context-menu"
-        | "confirm-popover" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        | "confirm-popover"
+        | "split-button" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -919,6 +944,149 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 });
             });
         }
+        "radio-cards" => {
+            ui.column().fill_width().max_width(440.0).gap(10).show(|ui| {
+                ui.radio_card(&mut s.tier, 0, "Shared CPU")
+                    .icon("cpu")
+                    .badge("$8 / mo")
+                    .description("2 vCPU · 2 GB RAM · bursts up to 100% for hobby workloads.");
+                ui.radio_card(&mut s.tier, 1, "Performance ARM64")
+                    .icon("zap")
+                    .badge("$32 / mo")
+                    .description("8 dedicated Ampere cores · 16 GB ECC · NVMe local scratch.");
+                ui.radio_card(&mut s.tier, 2, "Dedicated Bare Metal")
+                    .icon("server")
+                    .badge("$180 / mo")
+                    .description("32 cores · 128 GB RAM · isolated single-tenant hardware.");
+            });
+        }
+        "rating" => {
+            ui.column().gap(14).align(Align::Center).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.column().gap(10).align(Align::Center).show(|ui| {
+                        ui.label("How smooth did the release feel?").strong();
+                        ui.rating("release", &mut s.stars).size(22.0);
+                        let note = ["No rating yet", "Rough", "Needs work", "Solid", "Smooth", "Effortless"][s.stars as usize];
+                        ui.label(format!("{} / 5 · {note}", s.stars)).small().muted();
+                    });
+                });
+            });
+        }
+        "range-slider" => {
+            ui.column().fill_width().max_width(380.0).gap(18).show(|ui| {
+                let txt = format!("${:.0} – ${:.0}", s.price_band.0, s.price_band.1);
+                ui.range_slider("Instance budget", &mut s.price_band, 0.0..=120.0).step(5.0).readout(txt).fill_width();
+                let mut lat = (12.0f32, 68.0f32);
+                let ltxt = format!("{:.0}–{:.0} ms", lat.0, lat.1);
+                ui.range_slider("Target p95 window", &mut lat, 0.0..=100.0).readout(ltxt).fill_width();
+            });
+        }
+        "shortcut-recorder" => {
+            ui.column().fill_width().max_width(360.0).gap(12).show(|ui| {
+                ui.shortcut_recorder("deploy-key", &mut s.deploy_chord)
+                    .label("Deploy production shortcut")
+                    .fill_width();
+                ui.label("Click the field and press any modifier + key chord (Backspace clears).").small().muted();
+            });
+        }
+        "split-button" => {
+            ui.row().gap(12).align(Align::Center).show(|ui| {
+                if ui
+                    .split_button("Deploy production")
+                    .primary()
+                    .icon("rocket")
+                    .show(|ui| {
+                        ui.menu_label("Target");
+                        if ui.menu_item("zap", "Deploy canary (10%)").shortcut("⌘⇧C").clicked() {
+                            ui.toast(Toast::new("Canary rollout started").tone(Tone::Accent));
+                        }
+                        if ui.menu_item("play", "Dry-run validation").clicked() {
+                            ui.toast(Toast::new("Validation passed").success());
+                        }
+                        ui.menu_separator();
+                        ui.menu_item("globe", "Promote to all regions");
+                    })
+                    .clicked()
+                {
+                    ui.toast(Toast::new("Production deploy triggered").success());
+                }
+                ui.button("Deploying").primary().loading(true);
+            });
+        }
+        "hold-button" => {
+            ui.column().gap(14).align(Align::Center).show(|ui| {
+                ui.row().gap(12).align(Align::Center).show(|ui| {
+                    if ui.hold_button("Hold to purge cache", 0.9).icon("trash-2").confirmed() {
+                        ui.toast(Toast::new("Edge cache purged").danger());
+                    }
+                    ui.copy_button("Copy token", "rk_live_9d2f4b8c1e7a");
+                    let label = if s.busy_deploy { "Syncing…" } else { "Sync state" };
+                    if ui.button(label).secondary().icon("zap").loading(s.busy_deploy).clicked() {
+                        s.busy_deploy = true;
+                    }
+                });
+                ui.label("Press and hold the red button for 0.9 s — releasing early springs back safely.").small().muted();
+            });
+        }
+        "dropzone" => {
+            ui.column().fill_width().max_width(420.0).show(|ui| {
+                if ui
+                    .dropzone("artifacts", "Drop build artifacts or click to add")
+                    .hint("WASM, dSYM or tar.zst up to 50 MB")
+                    .files(&mut s.uploads)
+                    .clicked()
+                {
+                    let n = s.uploads.len() + 1;
+                    s.uploads.push((format!("bundle-{n}.tar.zst"), "1.8 MB".into()));
+                }
+            });
+        }
+        "toolbar" => {
+            ui.column().gap(14).align(Align::Center).show(|ui| {
+                ui.toolbar("editor", |tb| {
+                    tb.toggle("bold", "Bold (⌘B)", &mut s.fmt_flags[0]);
+                    tb.toggle("italic", "Italic (⌘I)", &mut s.fmt_flags[1]);
+                    tb.toggle("underline", "Underline (⌘U)", &mut s.fmt_flags[2]);
+                    tb.toggle("code", "Inline code", &mut s.fmt_flags[3]);
+                    tb.separator();
+                    tb.action("align-left", "Align left");
+                    tb.action("align-center", "Center");
+                    tb.separator();
+                    if tb.primary("Share") {
+                        tb.ui.toast(Toast::new("Link copied").success());
+                    }
+                });
+                ui.label("Floating raised toolbar with spring-pressed icon toggles and primary CTA.").small().muted();
+            });
+        }
+        "status-bar" => {
+            ui.column().fill_width().max_width(520.0).gap(12).show(|ui| {
+                ui.status_bar(|bar| {
+                    bar.status("Connected", Tone::Success);
+                    if bar.item("git-branch", "ethereal*") {
+                        bar.ui.toast(Toast::new("Branch: ethereal"));
+                    }
+                    bar.item("wifi", "14 ms");
+                    bar.spacer();
+                    bar.text("Ln 142, Col 18");
+                    bar.text("UTF-8");
+                    bar.text("Rust");
+                });
+            });
+        }
+        "meter" => {
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.meter(
+                        "storage",
+                        100.0,
+                        &[("Artifacts", 42.0), ("Build cache", 21.5), ("Logs", 12.0), ("Snapshots", 6.5)],
+                    )
+                    .label("Workspace storage")
+                    .unit("GB");
+                });
+            });
+        }
         "calendar" => {
             ui.row().gap(32).align(Align::Start).show(|ui| {
                 ui.calendar(&mut s.date);
@@ -1253,6 +1421,7 @@ fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
         "combobox" => vec![k(lumen::Key::Tab), Type("an".into()), Wait(0.6)],
         "multi-select" => vec![k(lumen::Key::Tab), k(lumen::Key::ArrowDown), k(lumen::Key::ArrowDown), Wait(0.6)],
         "otp-input" => vec![k(lumen::Key::Tab), Wait(0.4)],
+        "split-button" => vec![k(lumen::Key::Tab), k(lumen::Key::Tab), k(lumen::Key::Enter), Wait(0.5)],
         _ => vec![],
     }
 }
