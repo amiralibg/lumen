@@ -11,6 +11,15 @@ pub mod text;
 pub mod text_input;
 pub mod picker;
 pub mod segmented;
+pub mod popover;
+pub mod menu;
+pub mod select;
+pub mod toast;
+pub mod dialog;
+pub mod tabs;
+pub mod misc;
+pub mod calendar;
+pub mod chart;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -20,6 +29,12 @@ pub use slider::Slider;
 pub use switch::Switch;
 pub use text::{Heading, Label};
 pub use text_input::TextInput;
+pub use popover::Popover;
+pub use menu::MenuItem;
+pub use select::Select;
+pub use toast::{Toast, Tone};
+pub use dialog::Dialog;
+pub use chart::{Chart, ChartKind, Series};
 
 use crate::color::Color;
 use crate::theme::Token;

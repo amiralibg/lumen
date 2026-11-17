@@ -1044,6 +1044,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumen-demos"
+version = "0.1.0"
+dependencies = [
+ "lumen",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "lumen-gallery"
 version = "0.1.0"
 dependencies = [

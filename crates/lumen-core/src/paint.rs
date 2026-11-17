@@ -279,6 +279,148 @@ impl Painter {
         }
     }
 
+    // ------------------------------------------------------------- meshes
+
+    /// Append solid-color triangles (`SOLID` mode, color interpolated).
+    pub fn mesh(&mut self, verts: &[(Vec2, Color)], indices: &[u32]) {
+        if self.clip.is_empty() || verts.is_empty() || indices.is_empty() {
+            return;
+        }
+        let clip = self.clip_px();
+        let base = self.data.vertices.len() as u32;
+        self.data.vertices.extend(verts.iter().map(|(p, c)| Vertex { pos: [p.x, p.y], mode: mode::SOLID, color: c.to_u8(), ..Default::default() }));
+        let start = self.data.indices.len() as u32;
+        self.data.indices.extend(indices.iter().map(|i| base + i));
+        let n = indices.len() as u32;
+        match self.data.cmds.last_mut() {
+            Some(c) if c.clip == clip && c.index_start + c.index_count == start => c.index_count += n,
+            _ => self.data.cmds.push(DrawCmd { clip, index_start: start, index_count: n }),
+        }
+    }
+
+    /// Anti-aliased polyline of `width` logical px with mitered joins.
+    pub fn polyline(&mut self, pts: &[Vec2], width: f32, color: Color) {
+        if pts.len() < 2 || color.a <= 0.0 {
+            return;
+        }
+        let aa = 1.0 / self.scale;
+        let hw = (width / 2.0).max(aa / 2.0);
+        // Thin lines fade instead of going below one pixel.
+        let color = if width < aa { color.multiply_alpha(width / aa) } else { color };
+        let n = pts.len();
+        let normals: Vec<Vec2> = (0..n)
+            .map(|i| {
+                let d = |a: Vec2, b: Vec2| {
+                    let v = b - a;
+                    let l = v.length().max(1e-6);
+                    vec2(-v.y / l, v.x / l)
+                };
+                let n0 = if i > 0 { Some(d(pts[i - 1], pts[i])) } else { None };
+                let n1 = if i + 1 < n { Some(d(pts[i], pts[i + 1])) } else { None };
+                match (n0, n1) {
+                    (Some(a), Some(b)) => {
+                        let m = a + b;
+                        let l = m.length();
+                        if l < 1e-4 {
+                            a
+                        } else {
+                            let m = m * (1.0 / l);
+                            let cos = (m.x * a.x + m.y * a.y).max(0.25);
+                            m * (1.0 / cos)
+                        }
+                    }
+                    (Some(a), None) | (None, Some(a)) => a,
+                    _ => vec2(0.0, 1.0),
+                }
+            })
+            .collect();
+        let clear = color.with_alpha(0.0);
+        let mut verts = Vec::with_capacity(n * 4);
+        for i in 0..n {
+            let (p, nm) = (pts[i], normals[i]);
+            let inner = (hw - aa / 2.0).max(0.0);
+            let outer = hw + aa / 2.0;
+            verts.push((p + nm * outer, clear));
+            verts.push((p + nm * inner, color));
+            verts.push((p - nm * inner, color));
+            verts.push((p - nm * outer, clear));
+        }
+        let mut idx = Vec::with_capacity((n - 1) * 18);
+        for i in 0..(n - 1) as u32 {
+            let a = i * 4;
+            let b = a + 4;
+            for k in 0..3 {
+                idx.extend_from_slice(&[a + k, a + k + 1, b + k + 1, a + k, b + k + 1, b + k]);
+            }
+        }
+        self.mesh(&verts, &idx);
+    }
+
+    /// Fill the band between a top polyline and a bottom polyline sampled
+    /// at the same xs (area charts). `top` and `bottom` colors make a
+    /// vertical gradient.
+    pub fn fill_between(&mut self, upper: &[Vec2], lower: &[Vec2], top: Color, bottom: Color) {
+        let n = upper.len().min(lower.len());
+        if n < 2 {
+            return;
+        }
+        let (y0, y1) = upper.iter().chain(lower.iter()).fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+        let span = (y1 - y0).max(1e-3);
+        let col = |p: Vec2| top.mix(bottom, (p.y - y0) / span);
+        let mut verts = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            verts.push((upper[i], col(upper[i])));
+            verts.push((lower[i], col(lower[i])));
+        }
+        let mut idx = Vec::with_capacity((n - 1) * 6);
+        for i in 0..(n - 1) as u32 {
+            let a = i * 2;
+            idx.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+        }
+        self.mesh(&verts, &idx);
+    }
+
+    /// Anti-aliased ring segment (donut slice) from angle `a0` to `a1`
+    /// (radians, 0 = 12 o'clock, clockwise).
+    pub fn arc_band(&mut self, c: Vec2, r_inner: f32, r_outer: f32, a0: f32, a1: f32, color: Color) {
+        if a1 <= a0 || color.a <= 0.0 || r_outer <= r_inner {
+            return;
+        }
+        let aa = 1.0 / self.scale;
+        let steps = (((a1 - a0) * r_outer / 3.0).ceil() as usize).clamp(2, 256);
+        let clear = color.with_alpha(0.0);
+        let radii = [r_outer + aa / 2.0, r_outer - aa / 2.0, r_inner + aa / 2.0, (r_inner - aa / 2.0).max(0.0)];
+        let mut verts = Vec::with_capacity((steps + 1) * 4);
+        for i in 0..=steps {
+            let a = a0 + (a1 - a0) * i as f32 / steps as f32;
+            let d = vec2(a.sin(), -a.cos());
+            for (k, r) in radii.iter().enumerate() {
+                verts.push((c + d * *r, if k == 0 || k == 3 { clear } else { color }));
+            }
+        }
+        let mut idx = Vec::with_capacity(steps * 18);
+        for i in 0..steps as u32 {
+            let a = i * 4;
+            let b = a + 4;
+            for k in 0..3 {
+                idx.extend_from_slice(&[a + k, a + k + 1, b + k + 1, a + k, b + k + 1, b + k]);
+            }
+        }
+        self.mesh(&verts, &idx);
+    }
+
+    /// Thin dashed horizontal line (grid lines).
+    pub fn dashed_hline(&mut self, x0: f32, x1: f32, y: f32, dash: f32, gap: f32, color: Color) {
+        let y = self.snap(y);
+        let px = 1.0 / self.scale;
+        let mut x = x0;
+        while x < x1 {
+            let w = dash.min(x1 - x);
+            self.rect(Rect::from_xywh(x, y, w, px.max(1.0)), color);
+            x += dash + gap;
+        }
+    }
+
     pub fn finish(self) -> DrawData {
         self.data
     }
@@ -318,6 +460,19 @@ mod tests {
         let p = Painter::new(vec2(100.0, 100.0), 2.0, Color::WHITE);
         assert_eq!(p.snap(10.3), 10.5);
         assert_eq!(p.snap(10.2), 10.0);
+    }
+
+    #[test]
+    fn meshes_append_triangles() {
+        let mut p = Painter::new(vec2(100.0, 100.0), 2.0, Color::WHITE);
+        p.polyline(&[vec2(0.0, 0.0), vec2(50.0, 10.0), vec2(90.0, 0.0)], 2.0, Color::BLACK);
+        let d = p.finish();
+        assert_eq!(d.vertices.len(), 12);
+        assert_eq!(d.indices.len(), 2 * 18);
+        assert!(d.vertices.iter().all(|v| v.mode == mode::SOLID));
+        let mut p = Painter::new(vec2(100.0, 100.0), 1.0, Color::WHITE);
+        p.arc_band(vec2(50.0, 50.0), 20.0, 30.0, 0.0, 1.0, Color::BLACK);
+        assert!(!p.finish().indices.is_empty());
     }
 
     #[test]

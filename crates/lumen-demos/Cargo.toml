@@ -1,0 +1,15 @@
+[package]
+name = "lumen-demos"
+description = "One live demo per lumen component, for the website and screenshots"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+lumen.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = ["Window", "Location"] }

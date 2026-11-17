@@ -201,6 +201,31 @@ pub enum Placement {
     Left,
 }
 
+/// How a layer's content lines up with its anchor along the anchor's edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LayerAlign {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+
+/// Where a [`Ui::layer`] goes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LayerPlace {
+    /// Next to a widget laid out this frame, flipping when it doesn't fit.
+    Anchor { anchor: Id, placement: Placement, gap: f32, align: LayerAlign, match_width: bool },
+    /// The whole window (dialogs, toasts). The root fills the screen.
+    Screen,
+}
+
+struct Layer {
+    root: NodeId,
+    place: LayerPlace,
+    offset: Vec2,
+    alpha: f32,
+}
+
 struct Overlay {
     root: NodeId,
     anchor: Id,
@@ -325,6 +350,11 @@ pub struct Ui {
     seen: FastMap<Id, u32>,
     focus_order: Vec<Id>,
     overlays: Vec<Overlay>,
+    layers: Vec<Layer>,
+    layer_close: bool,
+    press_at: Option<Vec2>,
+    pub(crate) toasts: Vec<crate::widgets::toast::ToastState>,
+    pub(crate) menu: Option<crate::widgets::menu::MenuCtx>,
     tooltips: FastMap<Id, TooltipSpec>,
     tip: Option<TipState>,
     tip_last_closed: f64,
@@ -392,6 +422,11 @@ impl Ui {
             seen: FastMap::default(),
             focus_order: vec![],
             overlays: vec![],
+            layers: vec![],
+            layer_close: false,
+            press_at: None,
+            toasts: vec![],
+            menu: None,
             tooltips: FastMap::default(),
             tip: None,
             tip_last_closed: -10.0,
@@ -436,6 +471,7 @@ impl Ui {
         self.wants_text_input = false;
         self.any_press = false;
         self.any_key = false;
+        self.press_at = None;
         if let Some(f) = self.pending_focus.take() {
             self.focused = Some(f);
         }
@@ -466,6 +502,8 @@ impl Ui {
         self.seen.clear();
         self.focus_order.clear();
         self.overlays.clear();
+        self.layers.clear();
+        self.layer_close = false;
         self.tooltips.clear();
         self.scrolls.clear();
         self.repaint_at = None;
@@ -492,6 +530,7 @@ impl Ui {
                 self.pointer_down = true;
                 self.press_pos = pos;
                 self.any_press = true;
+                self.press_at = Some(pos);
                 let (t, p, n) = self.last_click;
                 self.click_count = if self.time - t < 0.4 && (p - pos).length() < 6.0 { n + 1 } else { 1 };
                 self.last_click = (self.time, pos, self.click_count);
@@ -577,6 +616,7 @@ impl Ui {
     /// Finish the frame: lay out, paint, and return draw data.
     pub fn end_frame(&mut self) -> FrameOutput {
         assert!(self.frame_started, "end_frame without begin_frame");
+        self.build_toasts();
         self.frame_started = false;
         self.update_tooltip();
 
@@ -598,6 +638,21 @@ impl Ui {
                 vec2(g.width.ceil(), g.height)
             };
             self.tree.layout(self.root, screen, &mut measure);
+            for ly in &self.layers {
+                match ly.place {
+                    LayerPlace::Screen => self.tree.layout(ly.root, screen.translate(ly.offset), &mut measure),
+                    LayerPlace::Anchor { anchor, placement, gap, align, match_width } => {
+                        let a = rect_of_id(&self.tree, &self.extras, anchor).unwrap_or(Rect::ZERO);
+                        if match_width {
+                            let st = &mut self.tree.nodes[ly.root].style;
+                            st.min.x = st.min.x.max(a.width());
+                        }
+                        let s = self.tree.measure_root(ly.root, self.screen.x - 16.0, &mut measure);
+                        let pos = place_layer(a, s, placement, gap, align, self.screen);
+                        self.tree.layout(ly.root, Rect::from_min_size(pos + ly.offset, s), &mut measure);
+                    }
+                }
+            }
             for ov in &self.overlays {
                 let s = self.tree.measure_root(ov.root, self.screen.x, &mut measure);
                 let anchor = rect_of_id(&self.tree, &self.extras, ov.anchor).unwrap_or(Rect::ZERO);
@@ -644,6 +699,26 @@ impl Ui {
                 cx.painter.push_clip_replace(clip);
                 f(&mut cx, Rect::ZERO);
                 cx.painter.pop_clip();
+            }
+            for ly in &self.layers {
+                let start = cx.painter.data.vertices.len();
+                cx.painter.push_clip_replace(screen);
+                cx.scroll_clip = screen;
+                paint_node(&self.tree, &mut extras, &self.leaves, ly.root, screen, &mut cx, &mut hits);
+                let deferred_now = std::mem::take(cx.deferred);
+                for (clip, f) in deferred_now {
+                    cx.painter.push_clip_replace(clip);
+                    f(&mut cx, Rect::ZERO);
+                    cx.painter.pop_clip();
+                }
+                cx.painter.pop_clip();
+                if ly.alpha < 1.0 {
+                    let a = ly.alpha.clamp(0.0, 1.0);
+                    for v in &mut cx.painter.data.vertices[start..] {
+                        v.color[3] = (v.color[3] as f32 * a) as u8;
+                        v.border_color[3] = (v.border_color[3] as f32 * a) as u8;
+                    }
+                }
             }
             for ov in &self.overlays {
                 let r = self.tree.nodes[ov.root].rect;
@@ -1124,6 +1199,74 @@ impl Ui {
 
     /// Attach a tooltip to widget `id` (shown on hover after 500ms, or on
     /// keyboard focus).
+    /// Build a top layer: content drawn above everything else and hit-tested
+    /// first. `offset` and `alpha` animate it in and out. With `block`, the
+    /// layer's root takes that id and swallows clicks (modal scrims).
+    pub fn layer<R>(&mut self, place: LayerPlace, offset: Vec2, alpha: f32, block: Option<Id>, f: impl FnOnce(&mut Ui) -> R) -> R {
+        let saved = std::mem::take(&mut self.stack);
+        let saved_nav = self.nav.take();
+        let style = match place {
+            LayerPlace::Screen => Style { width: Size::FILL, height: Size::FILL, ..Default::default() },
+            LayerPlace::Anchor { .. } => Style::default(),
+        };
+        let sense = if block.is_some() { Sense::CLICK } else { Sense::NONE };
+        let root = self.begin(style, block, sense, CursorIcon::Default, false, None);
+        let r = f(self);
+        self.stack.clear();
+        self.stack = saved;
+        self.nav = saved_nav;
+        self.layers.push(Layer { root, place, offset, alpha });
+        r
+    }
+
+    /// The root node of the layer currently being built (inside the
+    /// [`layer`](Self::layer) closure), for styling it.
+    pub fn layer_root_building(&self) -> Option<NodeId> {
+        self.stack.first().copied()
+    }
+
+    /// True if the widget with `id` was clicked this frame.
+    pub fn clicked_id(&self, id: Id) -> bool {
+        self.clicked.contains(&id)
+    }
+
+    pub(crate) fn repaint_after_secs(&mut self, secs: f64) {
+        self.request_repaint_after(secs);
+    }
+
+    /// Ask the enclosing popover, menu or dialog to close (e.g. after a
+    /// menu item is chosen).
+    pub fn close_layer(&mut self) {
+        self.layer_close = true;
+    }
+
+    pub(crate) fn take_layer_close(&mut self) -> bool {
+        std::mem::take(&mut self.layer_close)
+    }
+
+    /// True if the primary button went down this frame outside all `rects`.
+    pub fn pressed_outside(&self, rects: &[Rect]) -> bool {
+        self.press_at.is_some_and(|p| !rects.iter().any(|r| r.contains(p)))
+    }
+
+    /// True if `key` was pressed this frame, whatever has focus.
+    pub fn key_pressed(&self, key: Key) -> bool {
+        self.keys.iter().any(|(k, m, _)| *k == key && !m.command())
+    }
+
+    /// Ids that took keyboard focus slots since `since` (an index from
+    /// [`focus_mark`](Self::focus_mark)).
+    pub fn focusables_since(&self, since: usize) -> Vec<Id> {
+        self.focus_order.get(since..).map(|s| s.to_vec()).unwrap_or_default()
+    }
+    pub fn focus_mark(&self) -> usize {
+        self.focus_order.len()
+    }
+    /// Whether the current focus came from the keyboard.
+    pub fn focus_visible(&self) -> bool {
+        self.focus_visible
+    }
+
     pub fn tooltip_for(&mut self, id: Id, spec: TooltipSpec) {
         self.tooltips.insert(id, spec);
     }
@@ -1324,6 +1467,37 @@ fn place_overlay(anchor: Rect, size: Vec2, placement: Placement, gap: f32, scree
         Placement::Bottom => vec2(c.x - size.x / 2.0, anchor.max.y + gap),
         Placement::Right => vec2(anchor.max.x + gap, c.y - size.y / 2.0),
         Placement::Left => vec2(anchor.min.x - gap - size.x, c.y - size.y / 2.0),
+    };
+    pos.x = pos.x.clamp(margin, (screen.x - margin - size.x).max(margin));
+    pos.y = pos.y.clamp(margin, (screen.y - margin - size.y).max(margin));
+    vec2(pos.x.round(), pos.y.round())
+}
+
+fn place_layer(anchor: Rect, size: Vec2, placement: Placement, gap: f32, align: LayerAlign, screen: Vec2) -> Vec2 {
+    let margin = 8.0;
+    let fits = |p: Placement| match p {
+        Placement::Top => anchor.min.y - gap - size.y >= margin,
+        Placement::Bottom => anchor.max.y + gap + size.y <= screen.y - margin,
+        Placement::Right => anchor.max.x + gap + size.x <= screen.x - margin,
+        Placement::Left => anchor.min.x - gap - size.x >= margin,
+    };
+    let flip = match placement {
+        Placement::Top => Placement::Bottom,
+        Placement::Bottom => Placement::Top,
+        Placement::Right => Placement::Left,
+        Placement::Left => Placement::Right,
+    };
+    let p = if fits(placement) || !fits(flip) { placement } else { flip };
+    let along = |lo: f32, hi: f32, len: f32| match align {
+        LayerAlign::Start => lo,
+        LayerAlign::Center => (lo + hi - len) / 2.0,
+        LayerAlign::End => hi - len,
+    };
+    let mut pos = match p {
+        Placement::Top => vec2(along(anchor.min.x, anchor.max.x, size.x), anchor.min.y - gap - size.y),
+        Placement::Bottom => vec2(along(anchor.min.x, anchor.max.x, size.x), anchor.max.y + gap),
+        Placement::Right => vec2(anchor.max.x + gap, along(anchor.min.y, anchor.max.y, size.y)),
+        Placement::Left => vec2(anchor.min.x - gap - size.x, along(anchor.min.y, anchor.max.y, size.y)),
     };
     pos.x = pos.x.clamp(margin, (screen.x - margin - size.x).max(margin));
     pos.y = pos.y.clamp(margin, (screen.y - margin - size.y).max(margin));

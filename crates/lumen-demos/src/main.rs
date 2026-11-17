@@ -1,0 +1,632 @@
+//! One live demo per lumen component.
+//!
+//! - Native: `cargo run -p lumen-demos -- chart-line [--dark] [--look mac]`
+//! - Web: `demo.html?demo=chart-line&dark=1&look=mac&accent=blue`
+//! - Screenshot: `cargo run -p lumen-demos -- chart-line --screenshot out.png`
+
+use lumen::{Accent, Align, Date, Justify, Look, Mode, Platform, Series, Sides, Toast, Tone, Ui};
+
+/// Every demo: url name, title.
+pub const DEMOS: &[(&str, &str)] = &[
+    ("hero", "Dashboard"),
+    ("button", "Button"),
+    ("switch", "Switch"),
+    ("checkbox", "Checkbox"),
+    ("radio", "Radio"),
+    ("slider", "Slider"),
+    ("text-input", "Text input"),
+    ("select", "Select"),
+    ("segmented", "Segmented control"),
+    ("tabs", "Tabs"),
+    ("menu", "Menu"),
+    ("popover", "Popover"),
+    ("dialog", "Dialog"),
+    ("toast", "Toast"),
+    ("tooltip", "Tooltip"),
+    ("card", "Card and settings"),
+    ("badge", "Badge and status"),
+    ("progress", "Progress and spinner"),
+    ("calendar", "Calendar"),
+    ("date-picker", "Date picker"),
+    ("chart-line", "Line chart"),
+    ("chart-area", "Area chart"),
+    ("chart-bar", "Bar chart"),
+    ("donut", "Donut chart"),
+    ("gauge", "Gauge"),
+    ("sparkline", "Sparkline and stats"),
+    ("looks", "Looks"),
+    ("vault", "Vault (password manager preview)"),
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Region {
+    Frankfurt,
+    Virginia,
+    Tokyo,
+    Sydney,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Range {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+struct State {
+    demo: String,
+    on: [bool; 4],
+    checks: [bool; 4],
+    plan: u8,
+    vol: f32,
+    price: f32,
+    name: String,
+    email: String,
+    region: Region,
+    range: Range,
+    tab: u8,
+    open: bool,
+    date: Date,
+    span: Option<(Date, Date)>,
+    look: Platform,
+    progress: f32,
+    t: u32,
+    search: String,
+}
+
+impl State {
+    fn new(demo: String) -> State {
+        let today = Date::today();
+        State {
+            demo,
+            on: [true, false, true, false],
+            checks: [true, false, true, false],
+            plan: 1,
+            vol: 0.64,
+            price: 40.0,
+            name: "Ada Lovelace".into(),
+            email: String::new(),
+            region: Region::Frankfurt,
+            range: Range::Week,
+            tab: 0,
+            open: false,
+            date: today,
+            span: Some((today.add_days(-3), today.add_days(4))),
+            look: Platform::Lumen,
+            progress: 0.42,
+            t: 0,
+            search: String::new(),
+        }
+    }
+}
+
+const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+fn revenue() -> Vec<f32> {
+    vec![42.0, 48.0, 45.0, 61.0, 58.0, 72.0, 69.0, 84.0, 80.0, 96.0, 104.0, 118.0]
+}
+fn costs() -> Vec<f32> {
+    vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+fn frame(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
+    ui.column().fill().pad(28).align(Align::Center).justify(Justify::Center).show(|ui| {
+        ui.column().fill_width().max_width(760.0).gap(16).align(Align::Center).show(f);
+    });
+}
+
+fn view(ui: &mut Ui, s: &mut State) {
+    let demo = s.demo.clone();
+    match demo.as_str() {
+        "hero" => hero(ui, s),
+        "looks" => looks(ui, s),
+        "vault" => vault(ui, s),
+        _ => frame(ui, |ui| component(ui, s, &demo)),
+    }
+}
+
+fn component(ui: &mut Ui, s: &mut State, demo: &str) {
+    match demo {
+        "button" => {
+            ui.row().gap(10).align(Align::Center).show(|ui| {
+                ui.button("Deploy").primary().icon("rocket");
+                ui.button("Preview").icon("eye");
+                ui.button("Cancel").ghost();
+                ui.button("Delete").danger().icon("trash-2");
+                ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");
+            });
+            ui.row().gap(10).align(Align::Center).show(|ui| {
+                ui.button("Small").small();
+                ui.button("Medium");
+                ui.button("Large").large().primary();
+                ui.button("Disabled").disabled(true);
+            });
+        }
+        "switch" => {
+            ui.column().gap(14).show(|ui| {
+                ui.switch("Wi-Fi", &mut s.on[0]);
+                ui.switch("Bluetooth", &mut s.on[1]);
+                ui.switch("AirDrop", &mut s.on[2]);
+                ui.switch("Hotspot (managed)", &mut s.on[3]).disabled(true);
+            });
+        }
+        "checkbox" => {
+            ui.column().gap(12).show(|ui| {
+                let all = s.checks.iter().all(|c| *c);
+                let none = s.checks.iter().all(|c| !*c);
+                let mut a = all;
+                if ui.checkbox("Select all", &mut a).indeterminate(!all && !none).changed() {
+                    let v = !all;
+                    s.checks = [v; 4];
+                }
+                ui.column().gap(10).pad(Sides { left: 24.0, ..Default::default() }).show(|ui| {
+                    ui.checkbox("Email", &mut s.checks[0]).description("Digests and receipts");
+                    ui.checkbox("Push", &mut s.checks[1]);
+                    ui.checkbox("SMS", &mut s.checks[2]);
+                    ui.checkbox("Pager", &mut s.checks[3]);
+                });
+            });
+        }
+        "radio" => {
+            ui.column().gap(12).show(|ui| {
+                ui.radio(&mut s.plan, 0, "Hobby — free");
+                ui.radio(&mut s.plan, 1, "Pro — $20 / month");
+                ui.radio(&mut s.plan, 2, "Team — $80 / month");
+            });
+        }
+        "slider" => {
+            ui.column().gap(20).show(|ui| {
+                let v = format!("{:.0}%", s.vol * 100.0);
+                ui.slider("Volume", &mut s.vol, 0.0..=1.0).readout(v).width(320.0);
+                let p = format!("${:.0}", s.price);
+                ui.slider("Max price", &mut s.price, 0.0..=100.0).step(5.0).readout(p).width(320.0);
+            });
+        }
+        "text-input" => {
+            ui.column().gap(16).width(360.0).show(|ui| {
+                ui.text_input(&mut s.name).label("Full name").fill_width();
+                let err = (!s.email.is_empty() && !s.email.contains('@')).then_some("Enter a valid email address.");
+                ui.text_input(&mut s.email).label("Email").icon("mail").placeholder("you@example.com").error(err).helper("We never share it.").fill_width();
+                ui.text_input(&mut s.search).icon("search").placeholder("Search…").fill_width();
+            });
+        }
+        "select" => {
+            ui.column().gap(16).width(280.0).show(|ui| {
+                ui.select(&mut s.region, &[(Region::Frankfurt, "Frankfurt (eu-central)"), (Region::Virginia, "Virginia (us-east)"), (Region::Tokyo, "Tokyo (ap-northeast)"), (Region::Sydney, "Sydney (ap-southeast)")])
+                    .label("Region")
+                    .fill_width();
+            });
+        }
+        "segmented" => {
+            ui.segmented(&mut s.range, &[(Range::Day, "Day"), (Range::Week, "Week"), (Range::Month, "Month"), (Range::Year, "Year")]);
+        }
+        "tabs" => {
+            ui.column().width(480.0).gap(16).show(|ui| {
+                ui.tabs(&mut s.tab, &[(0, "Overview"), (1, "Activity"), (2, "Settings"), (3, "Billing")]);
+                let text = ["Everything at a glance.", "What changed, and who did it.", "Preferences for this project.", "Invoices and payment methods."][s.tab as usize];
+                ui.label(text).secondary();
+            });
+        }
+        "menu" => {
+            let r = ui.button("Actions").trailing_icon("chevron-down").show();
+            ui.menu(&r, |ui| {
+                ui.menu_label("Project");
+                ui.menu_item("pencil", "Rename").shortcut("⌘R");
+                ui.menu_item("copy", "Duplicate").shortcut("⌘D");
+                ui.menu_item("share-2", "Share…");
+                ui.menu_separator();
+                ui.menu_item("archive", "Archive");
+                ui.menu_item("trash-2", "Delete").danger().shortcut("⌫");
+            });
+            ui.label("Click the button, or Tab to it and press Enter.").muted();
+        }
+        "popover" => {
+            let r = ui.button("Share").icon("share-2").show();
+            ui.popover(&r).pad(16.0).width(300.0).show(|ui| {
+                ui.column().gap(10).fill_width().show(|ui| {
+                    ui.label("Share this board").strong();
+                    ui.label("Anyone with the link can view.").secondary();
+                    ui.row().gap(8).fill_width().show(|ui| {
+                        let mut link = "lumen.app/b/8f3k".to_string();
+                        ui.text_input(&mut link).fill_width().id("link");
+                        if ui.button("Copy").primary().clicked() {
+                            ui.close_layer();
+                        }
+                    });
+                });
+            });
+        }
+        "dialog" => {
+            if ui.button("Delete project").danger().icon("trash-2").clicked() {
+                s.open = true;
+            }
+            ui.dialog("confirm", &mut s.open)
+                .title("Delete “Northwind”?")
+                .description("This removes the project, its 14 deploys and all logs. You can't undo this.")
+                .footer(|ui| {
+                    if ui.button("Cancel").ghost().clicked() {
+                        ui.close_layer();
+                    }
+                    if ui.button("Delete").danger().clicked() {
+                        ui.close_layer();
+                    }
+                })
+                .show(|_| {});
+        }
+        "toast" => {
+            ui.row().gap(10).show(|ui| {
+                if ui.button("Saved").icon("check").clicked() {
+                    ui.toast(Toast::new("Changes saved").description("Your profile is up to date.").success());
+                }
+                if ui.button("Failed").icon("x").clicked() {
+                    ui.toast(Toast::new("Deploy failed").description("Build step exited with code 1.").danger());
+                }
+                if ui.button("Info").icon("info").clicked() {
+                    ui.toast(Toast::new("New version available").tone(Tone::Info));
+                }
+            });
+        }
+        "tooltip" => {
+            ui.row().gap(8).show(|ui| {
+                ui.icon_button("bold").ghost().tooltip_shortcut("Bold", "⌘B");
+                ui.icon_button("italic").ghost().tooltip_shortcut("Italic", "⌘I");
+                ui.icon_button("underline").ghost().tooltip_shortcut("Underline", "⌘U");
+                ui.icon_button("link").ghost().tooltip("Insert link");
+            });
+            ui.label("Hover an icon. Tooltips open after a delay, then instantly while you move along.").muted();
+        }
+        "card" => {
+            ui.column().width(560.0).show(|ui| {
+                ui.card().title("Notifications").description("Choose what reaches you.").show(|ui| {
+                    ui.settings(|rows| {
+                        rows.row("Deploy failures", "When a production deploy fails.", |ui| {
+                            ui.switch("", &mut s.on[0]);
+                        });
+                        rows.row("Weekly digest", "A Monday summary.", |ui| {
+                            ui.switch("", &mut s.on[1]);
+                        });
+                    });
+                });
+            });
+        }
+        "badge" => {
+            ui.row().gap(8).show(|ui| {
+                ui.badge("Neutral", Tone::Neutral);
+                ui.badge("Accent", Tone::Accent);
+                ui.badge("Live", Tone::Success);
+                ui.badge("Degraded", Tone::Warning);
+                ui.badge("Down", Tone::Danger);
+                ui.badge("Beta", Tone::Info);
+            });
+            ui.row().gap(20).show(|ui| {
+                ui.status("Operational", Tone::Success);
+                ui.status("Partial outage", Tone::Warning);
+                ui.status("Major outage", Tone::Danger);
+            });
+        }
+        "progress" => {
+            ui.column().width(360.0).gap(18).show(|ui| {
+                s.t += 1;
+                if s.t % 90 == 0 {
+                    s.progress = if s.progress > 0.9 { 0.1 } else { s.progress + 0.2 };
+                }
+                ui.request_repaint_after(0.05);
+                ui.label(format!("Uploading… {:.0}%", s.progress * 100.0)).small().secondary();
+                ui.progress(Some(s.progress));
+                ui.label("Indeterminate").small().secondary();
+                ui.scope("indet", |ui| ui.progress(None));
+                ui.row().gap(16).align(Align::Center).show(|ui| {
+                    ui.spinner(20.0);
+                    ui.label("Syncing").secondary();
+                });
+            });
+        }
+        "calendar" => {
+            ui.row().gap(32).align(Align::Start).show(|ui| {
+                ui.calendar(&mut s.date);
+                ui.calendar_range(&mut s.span);
+            });
+        }
+        "date-picker" => {
+            ui.row().gap(16).align(Align::Start).show(|ui| {
+                ui.date_picker("Due date", &mut s.date);
+                ui.date_range_picker("Stay", &mut s.span);
+            });
+        }
+        "chart-line" => {
+            ui.line_chart("rev", &MONTHS, vec![Series::new("Revenue", revenue()), Series::new("Costs", costs())]).smooth(true).height(260.0).format(|v| format!("${}k", lumen::widgets::chart::compact(v)));
+        }
+        "chart-area" => {
+            let v: Vec<f32> = (0..30).map(|i| 40.0 + 18.0 * ((i as f32) * 0.45).sin() + i as f32 * 1.6).collect();
+            let labels: Vec<String> = (1..=30).map(|d| format!("Nov {d}")).collect();
+            let l: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
+            ui.area_chart("visitors", &l, vec![Series::new("Visitors", v)]).smooth(true).height(260.0);
+        }
+        "chart-bar" => {
+            ui.bar_chart(
+                "week",
+                &DAYS,
+                vec![Series::new("Web", vec![12.0, 18.0, 15.0, 22.0, 26.0, 9.0, 7.0]), Series::new("iOS", vec![8.0, 10.0, 9.0, 14.0, 15.0, 11.0, 10.0]), Series::new("Android", vec![5.0, 7.0, 8.0, 9.0, 11.0, 6.0, 5.0])],
+            )
+            .stacked()
+            .height(260.0);
+        }
+        "donut" => {
+            ui.donut("traffic", &[("Search", 4200.0), ("Direct", 2600.0), ("Social", 1500.0), ("Referral", 900.0), ("Email", 600.0)]);
+        }
+        "gauge" => {
+            ui.row().gap(24).show(|ui| {
+                ui.gauge("cpu", 0.38, "CPU");
+                ui.gauge("mem", 0.71, "Memory");
+                ui.gauge("disk", 0.92, "Disk");
+            });
+        }
+        "sparkline" => {
+            ui.row().fill_width().gap(16).show(|ui| {
+                for (label, value, delta, trend) in [
+                    ("Revenue", "$118k", 12.4, revenue()),
+                    ("Active users", "8,214", 4.1, vec![60.0, 62.0, 61.0, 66.0, 70.0, 69.0, 74.0, 78.0]),
+                    ("Churn", "2.1%", -0.6, vec![3.0, 2.8, 2.9, 2.6, 2.5, 2.3, 2.2, 2.1]),
+                ] {
+                    ui.card().show(|ui| {
+                        ui.stat(label, value, Some(delta), Some(&trend));
+                    });
+                }
+            });
+        }
+        _ => {
+            ui.label(format!("Unknown demo “{demo}”.")).secondary();
+        }
+    }
+}
+
+/// The landing-page hero: a compact analytics dashboard.
+fn hero(ui: &mut Ui, s: &mut State) {
+    ui.row().fill().show(|ui| {
+        ui.sidebar().width(208.0).show(|ui| {
+            ui.nav_header("L", "Lumen Analytics");
+            ui.nav_section("Workspace");
+            ui.nav_item("layout-dashboard", "Overview").selected(true);
+            ui.nav_item("chart-line", "Reports");
+            ui.nav_item("users", "Customers").badge(4);
+            ui.nav_item("settings", "Settings");
+        });
+        ui.column().fill().pad(24).gap(16).show(|ui| {
+            ui.row().fill_width().align(Align::Center).gap(12).show(|ui| {
+                ui.heading("Overview").level(2);
+                ui.spacer();
+                ui.segmented(&mut s.range, &[(Range::Day, "Day"), (Range::Week, "Week"), (Range::Month, "Month")]);
+                ui.date_picker("", &mut s.date);
+            });
+            ui.row().fill_width().gap(16).show(|ui| {
+                for (label, value, delta, trend) in [
+                    ("Revenue", "$118.4k", 12.4, revenue()),
+                    ("Active users", "8,214", 4.1, vec![60.0, 62.0, 61.0, 66.0, 70.0, 69.0, 74.0, 78.0]),
+                    ("Churn", "2.1%", -0.6, vec![3.0, 2.8, 2.9, 2.6, 2.5, 2.3, 2.2, 2.1]),
+                ] {
+                    ui.card().pad(16.0).show(|ui| ui.stat(label, value, Some(delta), Some(&trend)));
+                }
+            });
+            ui.row().fill_width().gap(16).align(Align::Start).show(|ui| {
+                ui.column().fill_width().show(|ui| {
+                    ui.card().title("Revenue").pad(16.0).show(|ui| {
+                        ui.line_chart("hero-rev", &MONTHS, vec![Series::new("Revenue", revenue()), Series::new("Costs", costs())]).smooth(true).area().height(200.0);
+                    });
+                });
+                ui.column().width(330.0).show(|ui| {
+                    ui.card().title("Traffic").pad(16.0).show(|ui| {
+                        ui.donut_sized("hero-traffic", &[("Search", 42.0), ("Direct", 26.0), ("Social", 15.0), ("Other", 17.0)], 120.0);
+                    });
+                });
+            });
+        });
+    });
+}
+
+/// The same controls in every look.
+fn looks(ui: &mut Ui, s: &mut State) {
+    ui.set_look(s.look.look());
+    frame(ui, |ui| {
+        let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
+        ui.segmented(&mut s.look, &opts);
+        ui.column().width(520.0).show(|ui| {
+            ui.card().title("Sync").description("Everything blends when you switch looks.").show(|ui| {
+                ui.settings(|rows| {
+                    rows.row("iCloud Drive", "Keep files up to date.", |ui| {
+                        ui.switch("", &mut s.on[0]);
+                    });
+                    let v = format!("{:.0}%", s.vol * 100.0);
+                    rows.row("Quality", "", |ui| {
+                        ui.slider("", &mut s.vol, 0.0..=1.0).readout(v).width(180.0);
+                    });
+                });
+                ui.row().gap(12).show(|ui| {
+                    ui.checkbox("Remember me", &mut s.checks[0]);
+                    ui.radio(&mut s.plan, 1, "Fast");
+                    ui.radio(&mut s.plan, 2, "Small");
+                });
+                ui.row().gap(8).show(|ui| {
+                    ui.text_input(&mut s.name).fill_width();
+                    ui.button("Cancel");
+                    ui.button("Save").primary();
+                });
+            });
+        });
+    });
+}
+
+/// A preview of the password manager we plan to build with lumen.
+fn vault(ui: &mut Ui, s: &mut State) {
+    ui.row().fill().show(|ui| {
+        ui.sidebar().width(200.0).show(|ui| {
+            ui.nav_header("V", "Vault");
+            ui.nav_section("Library");
+            ui.nav_item("key-round", "All items").badge(128).selected(true);
+            ui.nav_item("star", "Favorites");
+            ui.nav_item("credit-card", "Cards");
+            ui.nav_item("file-lock", "Secure notes");
+            ui.nav_section("Health");
+            ui.nav_item("shield-alert", "Watchtower").badge(3);
+        });
+        ui.column().fill().pad(24).gap(16).show(|ui| {
+            ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                ui.text_input(&mut s.search).icon("search").placeholder("Search 128 items").fill_width();
+                ui.button("New item").primary().icon("plus");
+            });
+            ui.card().pad(0.0).show(|ui| {
+                ui.column().fill_width().pad(16).gap(14).show(|ui| {
+                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
+                        ui.column().gap(2).fill_width().show(|ui| {
+                            ui.label("GitHub").strong();
+                            ui.label("ada@analytical.engine").secondary();
+                        });
+                        ui.badge("Strong", Tone::Success);
+                    });
+                    ui.divider();
+                    ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                        let mut pw = "••••••••••••••••".to_string();
+                        ui.text_input(&mut pw).label("Password").mono().fill_width().id("pw");
+                        ui.column().pad(Sides { top: 22.0, ..Default::default() }).show(|ui| {
+                            ui.row().gap(4).show(|ui| {
+                                ui.icon_button("eye").tooltip("Reveal");
+                                ui.icon_button("copy").tooltip_shortcut("Copy password", "⌘C");
+                            });
+                        });
+                    });
+                    ui.label("One-time code").small().secondary();
+                    ui.row().gap(12).align(Align::Center).show(|ui| {
+                        ui.label("482 913").role(lumen::TextRole::Heading2);
+                        ui.scope("otp", |ui| ui.progress(Some(0.6)));
+                    });
+                });
+            });
+            ui.card().title("Password health").pad(16.0).show(|ui| {
+                ui.row().gap(24).align(Align::Center).show(|ui| {
+                    let good = ui.color(lumen::Token::Success);
+                    ui.gauge_colored("health", 0.82, "Score", good);
+                    ui.column().gap(8).show(|ui| {
+                        ui.status("3 reused passwords", Tone::Warning);
+                        ui.status("1 in a known breach", Tone::Danger);
+                        ui.status("124 strong", Tone::Success);
+                    });
+                });
+            });
+        });
+    });
+}
+
+fn parse_look(s: &str) -> Platform {
+    match s {
+        "mac" | "macos" => Platform::Mac,
+        "windows" | "win" => Platform::Windows,
+        "gnome" | "linux" => Platform::Gnome,
+        _ => Platform::Lumen,
+    }
+}
+
+fn parse_accent(s: &str) -> Accent {
+    if let Some(hex) = s.strip_prefix('#') {
+        if let Ok(v) = u32::from_str_radix(hex, 16) {
+            return Accent::Custom(v);
+        }
+    }
+    Accent::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s)).unwrap_or(Accent::Violet)
+}
+
+struct Params {
+    demo: String,
+    dark: bool,
+    look: Platform,
+    accent: Accent,
+    screenshot: Option<String>,
+    size: (u32, u32),
+    scale: f32,
+}
+
+fn params() -> Params {
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Violet, screenshot: None, size: (960, 600), scale: 2.0 };
+    #[cfg(target_arch = "wasm32")]
+    {
+        let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
+        for kv in q.trim_start_matches('?').split('&') {
+            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+            let v = v.replace("%23", "#");
+            match k {
+                "demo" => p.demo = v.to_string(),
+                "dark" => p.dark = v == "1" || v == "true",
+                "look" => p.look = parse_look(&v),
+                "accent" => p.accent = parse_accent(&v),
+                _ => {}
+            }
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let mut i = 0;
+        while i < args.len() {
+            let next = args.get(i + 1).cloned().unwrap_or_default();
+            match args[i].as_str() {
+                "--dark" => p.dark = true,
+                "--look" => {
+                    p.look = parse_look(&next);
+                    i += 1;
+                }
+                "--accent" => {
+                    p.accent = parse_accent(&next);
+                    i += 1;
+                }
+                "--screenshot" => {
+                    p.screenshot = Some(next);
+                    i += 1;
+                }
+                "--size" => {
+                    let (w, h) = next.split_once('x').unwrap_or(("960", "600"));
+                    p.size = (w.parse().unwrap_or(960), h.parse().unwrap_or(600));
+                    i += 1;
+                }
+                "--scale" => {
+                    p.scale = next.parse().unwrap_or(2.0);
+                    i += 1;
+                }
+                "--list" => {
+                    for (k, t) in DEMOS {
+                        println!("{k}\t{t}");
+                    }
+                    std::process::exit(0);
+                }
+                d if !d.starts_with('-') => p.demo = d.to_string(),
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    p
+}
+
+fn main() {
+    let mut p = params();
+    if p.look != Platform::Lumen && p.accent == Accent::Violet {
+        p.accent = Accent::Native;
+    }
+    let mut state = State::new(p.demo.clone());
+    state.look = p.look;
+    let mode = if p.dark { Mode::Dark } else { Mode::Light };
+    let look: Look = p.look.look();
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(out) = &p.screenshot {
+        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, ..Default::default() };
+        match lumen::screenshot(out, &shot, &mut state, view) {
+            Ok(()) => println!("wrote {out}"),
+            Err(e) => {
+                eprintln!("screenshot failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    let title = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen");
+    lumen::App::new(format!("lumen — {title}")).size(p.size.0, p.size.1).mode(mode).accent(p.accent).look(look).canvas("lumen").run(state, view);
+}

@@ -6,6 +6,7 @@
 
 pub mod anim;
 pub mod color;
+pub mod date;
 pub mod id;
 pub mod input;
 pub mod layout;
@@ -15,6 +16,7 @@ pub mod paint;
 pub mod theme;
 
 pub use color::Color;
+pub use date::Date;
 pub use id::Id;
 pub use math::{vec2, Rect, Sides, Vec2};
 pub use theme::{Accent, Mode, Token};
@@ -30,5 +32,6 @@ pub use anim::{Ease, SpringParams};
 pub use input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
-pub use ui::{FrameOutput, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
+pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
+pub use widgets::{ChartKind, Series, Toast, Tone};
 pub use widgets::Variant;
