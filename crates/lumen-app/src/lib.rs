@@ -268,11 +268,14 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
         if self.window.is_some() {
             return;
         }
-        let mut attrs = Window::default_attributes()
-            .with_title(self.app.title.clone())
-            .with_inner_size(winit::dpi::LogicalSize::new(self.app.size.0, self.app.size.1));
-        if let Some((w, h)) = self.app.min_size {
-            attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(w, h));
+        let mut attrs = Window::default_attributes().with_title(self.app.title.clone());
+        // On the web the canvas is sized by CSS; window sizes apply natively.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(self.app.size.0, self.app.size.1));
+            if let Some((w, h)) = self.app.min_size {
+                attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(w, h));
+            }
         }
         #[cfg(target_arch = "wasm32")]
         {

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lumen gallery</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #F9FAFB; }
+    @media (prefers-color-scheme: dark) { html, body { background: #0B0C0F; } }
+    canvas#lumen { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="lumen" tabindex="0"></canvas>
+  <script type="module">
+    import init from "./lumen-gallery.js";
+    init().then(() => document.getElementById("lumen").focus());
+  </script>
+</body>
+</html>

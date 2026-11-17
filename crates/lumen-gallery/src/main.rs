@@ -4,7 +4,7 @@
 //! Run: `cargo run -p lumen-gallery`
 //! Screenshot: `cargo run -p lumen-gallery -- --screenshot out.png --dark --accent blue`
 
-use lumen::{Accent, Align, ControlSize, Id, Justify, Key, Mode, Rect, Token, Ui};
+use lumen::{Align, ControlSize, Id, Justify, Key, Mode, Rect, Token, Ui};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Page {
@@ -547,7 +547,7 @@ fn main() {
 #[cfg(not(target_arch = "wasm32"))]
 mod cli {
     use super::*;
-    use lumen::{vec2, Modifiers, Shot, ShotStep};
+    use lumen::{vec2, Accent, Modifiers, Shot, ShotStep};
 
     fn accent(s: &str) -> Option<Accent> {
         Accent::ALL.iter().copied().find(|a| a.name().eq_ignore_ascii_case(s))
