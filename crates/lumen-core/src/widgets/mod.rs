@@ -36,6 +36,8 @@ pub mod selection;
 pub mod actions_chrome;
 pub mod data;
 pub mod code_data;
+pub mod charts_extra;
+pub mod planning;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -65,6 +67,8 @@ pub use selection::{RadioCard, RangeSlider, Rating, ShortcutRecorder};
 pub use actions_chrome::{Dropzone, HoldButton, Meter, SplitButton, StatusBarScope, ToolbarScope};
 pub use data::{Accordion, AccordionItem, Collapsible, SortDir, Table, TableCell, TableCol, TimelineItem, Tree, TreeNode};
 pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, LogLevel, LogViewer};
+pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatmap, ProgressRing, RadarChart, RingSpec, ScatterChart, ScatterPoint, ScatterSeries};
+pub use planning::{KanbanCard, KanbanCol};
 
 use crate::color::Color;
 use crate::theme::Token;

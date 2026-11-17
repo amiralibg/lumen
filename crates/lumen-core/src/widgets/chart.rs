@@ -131,7 +131,7 @@ fn monotone(pts: &[Vec2], k: usize) -> Vec<Vec2> {
     out
 }
 
-fn series_color(ui: &Ui, i: usize, n: usize, own: Option<Color>) -> Color {
+pub(crate) fn series_color(ui: &Ui, i: usize, n: usize, own: Option<Color>) -> Color {
     if let Some(c) = own {
         return c;
     }
@@ -143,7 +143,7 @@ fn series_color(ui: &Ui, i: usize, n: usize, own: Option<Color>) -> Color {
 }
 
 /// Draw a tooltip panel at `anchor` (kept on screen) with a title and rows.
-fn tooltip_panel(cx: &mut PaintCx<'_>, anchor: Vec2, bounds: Rect, title: &str, rows: &[(Color, String, String)], st: &Tip) {
+pub(crate) fn tooltip_panel(cx: &mut PaintCx<'_>, anchor: Vec2, bounds: Rect, title: &str, rows: &[(Color, String, String)], st: &Tip) {
     let tg = cx.galley(title, &st.title);
     let mut w = tg.width;
     let rows_g: Vec<_> = rows.iter().map(|(c, n, v)| (*c, cx.galley(n, &st.body), cx.galley(v, &st.value))).collect();
@@ -172,19 +172,19 @@ fn tooltip_panel(cx: &mut PaintCx<'_>, anchor: Vec2, bounds: Rect, title: &str, 
 }
 
 #[derive(Clone)]
-struct Tip {
-    title: TextStyle,
-    body: TextStyle,
-    value: TextStyle,
-    fill: Color,
-    border: Color,
-    fg: Color,
-    muted: Color,
-    shadows: Vec<crate::theme::Shadow>,
+pub(crate) struct Tip {
+    pub(crate) title: TextStyle,
+    pub(crate) body: TextStyle,
+    pub(crate) value: TextStyle,
+    pub(crate) fill: Color,
+    pub(crate) border: Color,
+    pub(crate) fg: Color,
+    pub(crate) muted: Color,
+    pub(crate) shadows: Vec<crate::theme::Shadow>,
 }
 
 impl Tip {
-    fn new(ui: &Ui) -> Tip {
+    pub(crate) fn new(ui: &Ui) -> Tip {
         let mut value = ui.text_style(TextRole::Label);
         value.tabular = true;
         Tip {
@@ -200,7 +200,7 @@ impl Tip {
     }
 }
 
-fn legend(ui: &mut Ui, items: &[(Color, String)]) {
+pub(crate) fn legend(ui: &mut Ui, items: &[(Color, String)]) {
     let st = ui.text_style(TextRole::Label);
     let c = ui.color(Token::TextSecondary);
     ui.begin(Style { dir: Dir::Row, gap: 16.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);

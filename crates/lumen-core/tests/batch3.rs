@@ -208,3 +208,55 @@ fn code_block_json_viewer_kv_editor_and_log_viewer_work_and_settle() {
     let out = h.frame(key(Key::Space));
     assert_eq!(out.copied_text.as_deref(), Some("fn main() {}\n"));
 }
+
+// --------------------------------------------------- Charts, Rings & Kanban
+
+struct PlanChartState {
+    cards: Vec<KanbanCard>,
+}
+
+fn plan_chart_view(ui: &mut Ui, s: &mut PlanChartState) {
+    let cols = [
+        KanbanCol::new("Todo", Tone::Neutral),
+        KanbanCol::new("Doing", Tone::Accent),
+        KanbanCol::new("Done", Tone::Success),
+    ];
+    ui.column().width(640.0).gap(12).show(|ui| {
+        ui.kanban("board", &cols, &mut s.cards);
+        ui.progress_ring("pr", 0.75).show();
+        ui.activity_rings("ar", &[RingSpec::new("CPU", 0.8, "64 vCPU")], 96.0);
+        ui.bar_list("bl", &[BarListItem::new("/v1/chat", 1200.0)]);
+        ui.heatmap("hm", 2, 3, &[1.0, 4.0, 9.0, 2.0, 5.0, 8.0]).show();
+        ui.radar_chart("rc", &["A", "B", "C", "D"], vec![Series::new("S", vec![80.0, 70.0, 90.0, 85.0])]).show();
+        ui.scatter_chart("sc", vec![ScatterSeries::new("G", vec![ScatterPoint::new(1.0, 2.0)])]).show();
+        ui.funnel_chart("fc", &[("Visit", 100.0), ("Sign up", 40.0)]).show();
+        ui.candlestick_chart("cc", &[Candle::new("D1", 10.0, 14.0, 9.0, 12.0)]).show();
+    });
+}
+
+#[test]
+fn kanban_moves_cards_and_all_charts_settle_to_zero_wakeups() {
+    let mut h = Harness::new(
+        PlanChartState {
+            cards: vec![KanbanCard::new("1", 0, "Ship charts").tag("UI", Tone::Accent)],
+        },
+        plan_chart_view,
+    );
+    // Let initial entrance springs settle.
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all Group 7 charts + kanban must settle to zero idle wakeups");
+
+    // Tab focuses the first Kanban card; ArrowRight moves it from col 0 -> col 1 -> col 2.
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.cards[0].col, 1);
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.cards[0].col, 2);
+    // Clamped at last column.
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.cards[0].col, 2);
+    // ArrowLeft moves back to col 1.
+    h.frame(key(Key::ArrowLeft));
+    assert_eq!(h.s.cards[0].col, 1);
+}
+

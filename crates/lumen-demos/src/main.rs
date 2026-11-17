@@ -7,8 +7,9 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    Accent, Align, Color, Command, Date, Justify, KvPair, LogEntry, LogLevel, Look, Mode, Placement, Platform, Series,
-    Sides, SortDir, TableCell, TableCol, Time, TimelineItem, Toast, Tone, TreeNode, Ui,
+    Accent, Align, BarListItem, Candle, Color, Command, Date, Justify, KanbanCard, KanbanCol, KvPair, LogEntry,
+    LogLevel, Look, Mode, Placement, Platform, RingSpec, ScatterPoint, ScatterSeries, Series, Sides, SortDir,
+    TableCell, TableCol, Time, TimelineItem, Toast, Tone, TreeNode, Ui,
 };
 
 /// Every demo: url name, title.
@@ -84,6 +85,14 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("chart-bar", "Bar chart"),
     ("donut", "Donut chart"),
     ("gauge", "Gauge"),
+    ("progress-ring", "Progress and activity rings"),
+    ("bar-list", "Bar list"),
+    ("heatmap", "Heatmap"),
+    ("radar-chart", "Radar chart"),
+    ("scatter-chart", "Scatter chart"),
+    ("funnel-chart", "Funnel chart"),
+    ("candlestick", "Candlestick chart"),
+    ("kanban", "Kanban board"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -170,6 +179,7 @@ struct State {
     tree_open: BTreeSet<String>,
     tree_sel: String,
     env_vars: Vec<KvPair>,
+    kanban_cards: Vec<KanbanCard>,
 }
 
 impl State {
@@ -242,6 +252,13 @@ impl State {
                 KvPair::new("DATABASE_URL", "postgres://app:s3cr3t@db.internal:5432/prod").secret(),
                 KvPair::new("RUST_LOG", "info,lumen_wgpu=warn"),
                 KvPair::new("EDGE_REGION", "eu-central-1"),
+            ],
+            kanban_cards: vec![
+                KanbanCard::new("104", 0, "Subpixel atlas defragmentation").tag("GPU", Tone::Accent).meta("LUM-104").assignee("JB"),
+                KanbanCard::new("108", 0, "IME composition underline").tag("Text", Tone::Neutral).meta("LUM-108").assignee("PN"),
+                KanbanCard::new("112", 1, "Spring-driven data table").tag("Widgets", Tone::Accent).meta("LUM-112").assignee("LF"),
+                KanbanCard::new("115", 1, "High-DPI scissor clip rounding").tag("Fix", Tone::Warning).meta("LUM-115").assignee("TR"),
+                KanbanCard::new("119", 2, "Zero idle wakeups at rest").tag("Perf", Tone::Success).meta("LUM-119").assignee("AK"),
             ],
         }
     }
@@ -1363,6 +1380,120 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ];
             ui.column().fill_width().max_width(640.0).show(|ui| {
                 ui.log_viewer("console", &logs).height(166.0).show();
+            });
+        }
+        "progress-ring" => {
+            let rings = [
+                RingSpec::new("Compute", 0.84, "67.2 / 80 vCPU"),
+                RingSpec::new("Memory", 0.62, "99.2 / 160 GB"),
+                RingSpec::new("SLO budget", 0.94, "99.96% uptime"),
+            ];
+            ui.row().gap(36).align(Align::Center).show(|ui| {
+                ui.activity_rings("cluster_rings", &rings, 132.0);
+                ui.divider();
+                ui.progress_ring("cache_hit", 0.92).size(104.0).thickness(9.0).label("Cache hit").show();
+            });
+        }
+        "bar-list" => {
+            let routes = [
+                BarListItem::new("/v1/chat/completions", 48200.0),
+                BarListItem::new("/v1/embeddings", 29400.0),
+                BarListItem::new("/v1/models", 16800.0),
+                BarListItem::new("/v1/files/upload", 9100.0),
+                BarListItem::new("/v1/billing/usage", 4300.0),
+            ];
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.card().title("Top edge endpoints").pad(16.0).show(|ui| {
+                    ui.bar_list("routes", &routes);
+                });
+            });
+        }
+        "heatmap" => {
+            let rows_lbl = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+            let cols_lbl = ["00h", "02h", "04h", "06h", "08h", "10h", "12h", "14h", "16h", "18h", "20h", "22h"];
+            let mut vals = Vec::with_capacity(5 * 12);
+            for r in 0..5 {
+                for c in 0..12 {
+                    let peak = 1.0 - ((c as f32 - 6.5).abs() / 6.5).min(1.0);
+                    let day_boost = [0.85, 1.0, 1.08, 0.96, 0.78][r];
+                    vals.push((120.0 + 840.0 * peak * peak * day_boost).round());
+                }
+            }
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().title("Request density (req/s)").pad(16.0).show(|ui| {
+                    ui.heatmap("req_heat", 5, 12, &vals)
+                        .row_labels(&rows_lbl)
+                        .col_labels(&cols_lbl)
+                        .unit("req/s")
+                        .show();
+                });
+            });
+        }
+        "radar-chart" => {
+            let axes = ["Throughput", "Latency", "Memory", "Startup", "Binary size", "Battery"];
+            let s1 = Series::new("lumen 0.4", vec![94.0, 92.0, 88.0, 95.0, 86.0, 90.0]);
+            let s2 = Series::new("WebView", vec![58.0, 52.0, 44.0, 49.0, 62.0, 55.0]);
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.radar_chart("bench_radar", &axes, vec![s1, s2]).height(260.0).show();
+            });
+        }
+        "scatter-chart" => {
+            let metal = ScatterSeries::new("Metal ARM64", vec![
+                ScatterPoint::bubble(1.8, 142.0, 7.5, "M3 Max"),
+                ScatterPoint::bubble(2.4, 118.0, 6.5, "M2 Pro"),
+                ScatterPoint::bubble(3.1, 96.0, 5.5, "M1 Air"),
+                ScatterPoint::bubble(1.5, 160.0, 8.5, "M4 Pro"),
+            ]);
+            let vulkan = ScatterSeries::new("Vulkan Linux", vec![
+                ScatterPoint::bubble(2.2, 134.0, 7.0, "RX 7800"),
+                ScatterPoint::bubble(3.6, 88.0, 6.0, "Arc A770"),
+                ScatterPoint::bubble(4.4, 72.0, 5.0, "Xe iGPU"),
+                ScatterPoint::bubble(1.9, 148.0, 8.0, "RTX 4080"),
+            ]);
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.scatter_chart("gpu_scatter", vec![metal, vulkan]).height(240.0).show();
+            });
+        }
+        "funnel-chart" => {
+            let stages = [
+                ("Visited docs", 18400.0),
+                ("Ran quickstart", 11800.0),
+                ("Built first view", 6400.0),
+                ("Shipped release", 2950.0),
+            ];
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().title("Developer activation funnel").pad(16.0).show(|ui| {
+                    ui.funnel_chart("activation", &stages).height(205.0).show();
+                });
+            });
+        }
+        "candlestick" => {
+            let candles = [
+                Candle::new("Nov 1", 142.0, 148.5, 139.0, 146.2),
+                Candle::new("Nov 2", 146.2, 151.0, 144.5, 149.8),
+                Candle::new("Nov 3", 149.8, 150.4, 143.0, 144.6),
+                Candle::new("Nov 4", 144.6, 147.0, 140.2, 141.5),
+                Candle::new("Nov 5", 141.5, 149.2, 141.0, 148.4),
+                Candle::new("Nov 6", 148.4, 155.0, 147.2, 153.6),
+                Candle::new("Nov 7", 153.6, 158.4, 151.8, 156.9),
+                Candle::new("Nov 8", 156.9, 157.5, 150.2, 151.8),
+                Candle::new("Nov 9", 151.8, 156.0, 149.5, 155.1),
+                Candle::new("Nov 10", 155.1, 162.4, 154.0, 160.8),
+                Candle::new("Nov 11", 160.8, 163.5, 157.0, 158.4),
+                Candle::new("Nov 12", 158.4, 166.2, 158.0, 165.0),
+            ];
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                ui.candlestick_chart("ohlc", &candles).height(250.0).show();
+            });
+        }
+        "kanban" => {
+            let cols = [
+                KanbanCol::new("Backlog", Tone::Neutral),
+                KanbanCol::new("In progress", Tone::Accent),
+                KanbanCol::new("Shipped", Tone::Success),
+            ];
+            ui.column().fill_width().max_width(660.0).show(|ui| {
+                ui.kanban("sprint_board", &cols, &mut s.kanban_cards);
             });
         }
         _ => {

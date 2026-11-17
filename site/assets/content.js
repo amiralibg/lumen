@@ -10,6 +10,7 @@ export const GROUPS = [
   "Overlays",
   "Feedback",
   "Data",
+  "Planning",
   "Dates",
   "Charts",
   "Layout and surfaces",
@@ -952,6 +953,118 @@ ui.timeline("deploys", &events);`,
       [".height(px)", "Viewport height; overflows scroll with an overlay thumb."],
     ],
     keys: [["Escape in filter", "Clear active search query"], ["Click log line", "Copy formatted log entry to clipboard"]],
+  },
+  {
+    slug: "progress-ring", name: "Progress and activity rings", group: "Charts", demo: "progress-ring",
+    summary: "Circular progress arcs and concentric Apple-style activity rings with rounded endcaps that sweep into place on the smooth spring.",
+    code: `let rings = [
+    RingSpec::new("Compute", 0.84, "67.2 / 80 vCPU"),
+    RingSpec::new("Memory", 0.62, "99.2 / 160 GB"),
+    RingSpec::new("SLO budget", 0.94, "99.96% uptime"),
+];
+ui.activity_rings("cluster", &rings, 132.0);
+ui.progress_ring("cache_hit", 0.92).size(104.0).label("Cache hit").show();`,
+    options: [
+      ["ui.progress_ring(key, 0.0..=1.0)", ".size(px), .thickness(px), .label(text), .color(Color)"],
+      ["ui.activity_rings(key, &[RingSpec], size)", "Concentric rings paired with a tabular series legend."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "bar-list", name: "Bar list", group: "Charts", demo: "bar-list",
+    summary: "Ranked horizontal proportion bars for top routes, referrers or resource consumers with tabular counts and shares.",
+    code: `let routes = [
+    BarListItem::new("/v1/chat/completions", 48200.0),
+    BarListItem::new("/v1/embeddings", 29400.0),
+];
+ui.bar_list("routes", &routes);`,
+    options: [
+      ["BarListItem::new(label, value)", ".formatted(text) overrides compact number formatting."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "heatmap", name: "Heatmap", group: "Charts", demo: "heatmap",
+    summary: "2D density and contribution matrix colored across a perceptual OKLab accent ramp with row/column labels and hover tooltips.",
+    code: `ui.heatmap("req_heat", 5, 12, &values)
+    .row_labels(&["Mon", "Tue", "Wed", "Thu", "Fri"])
+    .col_labels(&["00h", "02h", "04h", "06h", "08h", "10h", "12h", "14h", "16h", "18h", "20h", "22h"])
+    .unit("req/s")
+    .show();`,
+    options: [
+      ["ui.heatmap(key, rows, cols, &[f32])", ".row_labels(&[&str]), .col_labels(&[&str]), .unit(text)"],
+    ],
+    keys: [],
+  },
+  {
+    slug: "radar-chart", name: "Radar chart", group: "Charts", demo: "radar-chart",
+    summary: "Multi-axis polygon spider chart with concentric web rings, translucent mesh fills, vertex springs and axis tooltips.",
+    code: `let axes = ["Throughput", "Latency", "Memory", "Startup", "Binary size", "Battery"];
+ui.radar_chart("bench", &axes, vec![
+    Series::new("lumen 0.4", vec![94.0, 92.0, 88.0, 95.0, 86.0, 90.0]),
+    Series::new("WebView", vec![58.0, 52.0, 44.0, 49.0, 62.0, 55.0]),
+]).show();`,
+    options: [
+      [".max_value(f32) .height(px)", "Axis maximum (default 100.0) and chart height."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "scatter-chart", name: "Scatter chart", group: "Charts", demo: "scatter-chart",
+    summary: "2D scatter and bubble plot with nice X/Y ticks, dashed gridlines, series legend and nearest-point crosshair tooltips.",
+    code: `let metal = ScatterSeries::new("Metal ARM64", vec![
+    ScatterPoint::bubble(1.8, 142.0, 7.5, "M3 Max"),
+    ScatterPoint::bubble(2.4, 118.0, 6.5, "M2 Pro"),
+]);
+ui.scatter_chart("gpu", vec![metal]).height(240.0).show();`,
+    options: [
+      ["ScatterPoint::new(x, y) / ::bubble(x, y, r, label)", "Fixed-radius point or named bubble."],
+      ["ScatterSeries::new(name, points)", "Automatically colored from Series0..5."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "funnel-chart", name: "Funnel chart", group: "Charts", demo: "funnel-chart",
+    summary: "Centered tapering conversion trapezoids with stage counts, cumulative conversion percentages and step-retention tooltips.",
+    code: `let stages = [
+    ("Visited docs", 18400.0),
+    ("Ran quickstart", 11800.0),
+    ("Built first view", 6400.0),
+    ("Shipped release", 2950.0),
+];
+ui.funnel_chart("activation", &stages).height(205.0).show();`,
+    options: [
+      ["ui.funnel_chart(key, &[(&str, f32)])", ".height(px) sets total funnel height."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "candlestick", name: "Candlestick chart", group: "Charts", demo: "candlestick",
+    summary: "OHLC financial and latency range chart with semantic Success/Danger wicks and bodies, nice Y ticks and crosshair readouts.",
+    code: `let candles = [
+    Candle::new("Nov 1", 142.0, 148.5, 139.0, 146.2),
+    Candle::new("Nov 2", 146.2, 151.0, 144.5, 149.8),
+];
+ui.candlestick_chart("ohlc", &candles).height(250.0).show();`,
+    options: [
+      ["Candle::new(label, open, high, low, close)", "Bullish bars use Success; bearish bars use Danger."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "kanban", name: "Kanban board", group: "Planning", demo: "kanban",
+    summary: "Multi-column status board with live column counts, semantic tags, avatars and pointer or arrow-key card moves.",
+    code: `let cols = [
+    KanbanCol::new("Backlog", Tone::Neutral),
+    KanbanCol::new("In progress", Tone::Accent),
+    KanbanCol::new("Shipped", Tone::Success),
+];
+ui.kanban("sprint", &cols, &mut s.cards);`,
+    options: [
+      ["KanbanCol::new(title, Tone)", "Column header with status dot and live card counter."],
+      ["KanbanCard::new(id, col, title)", ".tag(label, Tone), .meta(id_text), .assignee(initials)"],
+    ],
+    keys: [["Tab", "Focus card"], ["← →", "Move focused card to previous or next column"]],
   },
 ];
 

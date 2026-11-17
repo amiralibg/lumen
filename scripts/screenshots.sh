@@ -36,7 +36,7 @@ wait
 for d in $("$D" --list | cut -f1); do
   case "$d" in bento|hero|vault|looks) continue ;; esac
   case "$d" in menu|dialog|popover|date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover|otp-input|split-button) extra=--open ;; *) extra= ;; esac
-  case "$d" in date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover|radio-cards|dropzone|split-button|accordion|table|tree|timeline|code-block|json-viewer|key-value|log-viewer) sz=736x460 ;; *) sz=560x350 ;; esac
+  case "$d" in date-picker|date-range-picker|combobox|multi-select|time-picker|color-picker|sheet|command-palette|hover-card|context-menu|confirm-popover|radio-cards|dropzone|split-button|accordion|table|tree|timeline|code-block|json-viewer|key-value|log-viewer|progress-ring|bar-list|heatmap|radar-chart|scatter-chart|funnel-chart|candlestick|kanban) sz=736x460 ;; *) sz=560x350 ;; esac
   shot "c-$d" "$d" "$sz" --embed --scale 2 $extra
   wait
 done
