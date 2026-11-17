@@ -16,6 +16,9 @@ pub(crate) struct PopState {
     focus_in: bool,
     /// Focusable ids inside the panel last frame.
     pub items: Vec<Id>,
+    /// Opened this frame by code: skip the outside-press check once (the
+    /// press that opened it, such as a right click, is outside).
+    pub just_opened: bool,
 }
 
 /// Builder for a popover attached to a widget's [`Response`].
@@ -30,6 +33,8 @@ pub struct Popover<'u> {
     pad: f32,
     width: Option<f32>,
     toggle: bool,
+    at: Option<Vec2>,
+    return_to: Option<Id>,
 }
 
 impl Popover<'_> {
@@ -58,6 +63,18 @@ impl Popover<'_> {
         self.width = Some(w);
         self
     }
+    /// Where focus goes when the panel closes (default: the anchor). Fields
+    /// whose anchor is a frame around an editor return focus to the editor.
+    pub fn return_focus(mut self, id: Id) -> Self {
+        self.return_to = Some(id);
+        self
+    }
+    /// Open at a point instead of next to the anchor (context menus). A
+    /// press anywhere outside the panel closes it, including on the anchor.
+    pub fn at(mut self, p: Vec2) -> Self {
+        self.at = Some(p);
+        self
+    }
     /// Don't open or close when the anchor is clicked (control it with
     /// [`Ui::set_popover_open`]).
     pub fn manual(mut self) -> Self {
@@ -67,7 +84,8 @@ impl Popover<'_> {
 
     /// Show the panel when open. Returns the closure's result while open.
     pub fn show<R>(self, f: impl FnOnce(&mut Ui) -> R) -> Option<R> {
-        let Popover { ui, anchor, placement, align, gap, match_width, pad, width, toggle } = self;
+        let Popover { ui, anchor, placement, align, gap, match_width, pad, width, toggle, at, return_to } = self;
+        let back = return_to.unwrap_or(anchor.id);
         let id = anchor.id;
         let panel_id = id.with("popover-panel");
         if toggle && anchor.clicked {
@@ -78,13 +96,15 @@ impl Popover<'_> {
         }
         let open = ui.mem::<PopState>(id).open;
         // Close on Escape, or a press outside the panel and the anchor.
-        if open {
+        let skip = std::mem::take(&mut ui.mem::<PopState>(id).just_opened);
+        if open && !skip {
             let panel_r = ui.rect_of(panel_id).unwrap_or_default();
             let esc = ui.key_pressed(Key::Escape);
-            if esc || ui.pressed_outside(&[panel_r, anchor.rect]) {
+            let keep = if at.is_some() { vec![panel_r] } else { vec![panel_r, anchor.rect] };
+            if esc || ui.pressed_outside(&keep) {
                 ui.mem::<PopState>(id).open = false;
                 if esc {
-                    ui.request_focus(id);
+                    ui.request_focus(back);
                 }
             }
         }
@@ -106,7 +126,10 @@ impl Popover<'_> {
         let border = ui.color(Token::Border);
         let shadows = Elevation::Level2.shadows(ui.theme.darkness(), ui.color(Token::ShadowInk));
         let radius = (ui.look().card.radius * 0.75).max(ui.look().control.radius[1]);
-        let place = LayerPlace::Anchor { anchor: id, placement, gap, align, match_width };
+        let place = match at {
+            Some(p) => LayerPlace::Point(p),
+            None => LayerPlace::Anchor { anchor: id, placement, gap, align, match_width },
+        };
         let r = ui.layer(place, dir * slide, t, None, |ui| {
             let mark = ui.focus_mark();
             ui.begin(
@@ -141,7 +164,7 @@ impl Popover<'_> {
         }
         if close {
             ui.mem::<PopState>(id).open = false;
-            ui.request_focus(id);
+            ui.request_focus(back);
         }
         open.then_some(out)
     }
@@ -162,12 +185,16 @@ impl Ui {
             pad: 6.0,
             width: None,
             toggle: true,
+            at: None,
+            return_to: None,
         }
     }
 
     /// Open or close the popover anchored at `anchor`.
     pub fn set_popover_open(&mut self, anchor: Id, open: bool) {
-        self.mem::<PopState>(anchor).open = open;
+        let st = self.mem::<PopState>(anchor);
+        st.just_opened = open && !st.open;
+        st.open = open;
     }
 
     pub fn is_popover_open(&mut self, anchor: Id) -> bool {

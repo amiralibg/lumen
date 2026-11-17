@@ -103,4 +103,6 @@ pub enum CursorIcon {
     Text,
     Grab,
     Grabbing,
+    /// Left-right arrows: scrubbing a number.
+    ResizeHorizontal,
 }

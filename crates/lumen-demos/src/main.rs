@@ -4,7 +4,7 @@
 //! - Web: `demo.html?demo=chart-line&dark=1&look=mac&accent=blue`
 //! - Screenshot: `cargo run -p lumen-demos -- chart-line --screenshot out.png`
 
-use lumen::{Accent, Align, Date, Justify, Look, Mode, Platform, Series, Sides, Toast, Tone, Ui};
+use lumen::{Accent, Align, Color, Date, Justify, Look, Mode, Platform, Series, Sides, Time, Toast, Tone, Ui};
 
 /// Every demo: url name, title.
 pub const DEMOS: &[(&str, &str)] = &[
@@ -33,6 +33,11 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("progress", "Progress and spinner"),
     ("calendar", "Calendar"),
     ("date-picker", "Date picker"),
+    ("combobox", "Combobox"),
+    ("multi-select", "Multi-select"),
+    ("date-range-picker", "Date range picker"),
+    ("time-picker", "Time picker"),
+    ("color-picker", "Color picker"),
     ("chart-line", "Line chart"),
     ("chart-area", "Area chart"),
     ("chart-bar", "Bar chart"),
@@ -87,6 +92,12 @@ struct State {
     jobs: i64,
     slot: u8,
     reduced: bool,
+    tz: Option<usize>,
+    reviewers: Vec<usize>,
+    deploy_time: Time,
+    quiet_end: Time,
+    brand_color: Color,
+    glow_color: Color,
 }
 
 impl State {
@@ -119,9 +130,21 @@ impl State {
             jobs: 4,
             slot: 1,
             reduced: false,
+            tz: Some(2),
+            reviewers: vec![0, 3],
+            deploy_time: Time::new(14, 30),
+            quiet_end: Time::new(8, 0),
+            brand_color: Color::hex(0x0E6EE6),
+            glow_color: Color::hex(0x7D55EC).with_alpha(0.72),
         }
     }
 }
+
+const ZONES: [&str; 14] = [
+    "Pacific/Honolulu", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Sao_Paulo", "Europe/London",
+    "Europe/Berlin", "Europe/Istanbul", "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney",
+];
+const PEOPLE: [&str; 8] = ["Jonas Berg", "Priya Nair", "Tomas Rivera", "Lena Fischer", "Sam Wu", "Dmitri Markov", "Aiko Kato", "Noor Haddad"];
 
 const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -161,7 +184,7 @@ fn view(ui: &mut Ui, s: &mut State) {
         "bento" => bento(ui, s),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
-        "menu" | "popover" | "select" | "date-picker" | "stepper" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        "menu" | "popover" | "select" | "date-picker" | "stepper" | "combobox" | "multi-select" | "date-range-picker" | "time-picker" | "color-picker" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -417,6 +440,53 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                     ui.set_popover_open(r.id, true);
                 }
                 ui.date_range_picker("Stay", &mut s.span);
+            });
+        }
+        "combobox" => {
+            ui.column().gap(12).fill_width().max_width(320.0).show(|ui| {
+                let opts: Vec<(usize, &str)> = ZONES.iter().copied().enumerate().collect();
+                ui.combobox(&mut s.tz, &opts).label("Time zone").placeholder("Search time zones").fill_width();
+                let now = s.tz.map(|i| ZONES[i]).unwrap_or("none");
+                ui.label(format!("Reports run at 09:00 in {now}.")).muted();
+            });
+        }
+        "multi-select" => {
+            ui.column().gap(12).fill_width().max_width(380.0).show(|ui| {
+                let opts: Vec<(usize, &str)> = PEOPLE.iter().copied().enumerate().collect();
+                ui.multi_select(&mut s.reviewers, &opts).label("Reviewers").placeholder("Add reviewers").fill_width();
+                ui.label(format!("{} of 8 required to approve.", s.reviewers.len().min(2))).muted();
+            });
+        }
+        "date-range-picker" => {
+            ui.column().gap(12).align(Align::Start).show(|ui| {
+                let r = ui.date_range_picker("Maintenance window", &mut s.span);
+                if std::mem::take(&mut s.force_open) {
+                    ui.set_popover_open(r.id, true);
+                }
+                let msg = match s.span {
+                    Some((a, b)) if a != b => format!("{} nights scheduled · status page updates automatically.", b.to_days() - a.to_days()),
+                    Some((a, _)) => format!("Single day: {}.", a.short()),
+                    None => "No window scheduled.".into(),
+                };
+                ui.label(msg).muted();
+            });
+        }
+        "time-picker" => {
+            ui.row().gap(16).align(Align::Start).show(|ui| {
+                let r = ui.time_picker("Deploy at (UTC)", &mut s.deploy_time).show();
+                if std::mem::take(&mut s.force_open) {
+                    ui.set_popover_open(r.id, true);
+                }
+                ui.time_picker("Quiet hours end", &mut s.quiet_end).twelve_hour(true).step(15);
+            });
+        }
+        "color-picker" => {
+            ui.row().gap(16).align(Align::Start).show(|ui| {
+                let r = ui.color_picker("Brand color", &mut s.brand_color).show();
+                if std::mem::take(&mut s.force_open) {
+                    ui.set_popover_open(r.id, true);
+                }
+                ui.color_picker("Spotlight glow", &mut s.glow_color).alpha(true);
             });
         }
         "chart-line" => {
@@ -682,6 +752,18 @@ fn vault(ui: &mut Ui, s: &mut State) {
     });
 }
 
+/// Input that opens a demo's overlay for its screenshot (`--open`).
+#[cfg(not(target_arch = "wasm32"))]
+fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
+    use lumen::{Modifiers, ShotStep::*};
+    let k = |key| Key(key, Modifiers::default());
+    match demo {
+        "combobox" => vec![k(lumen::Key::Tab), Type("an".into()), Wait(0.6)],
+        "multi-select" => vec![k(lumen::Key::Tab), k(lumen::Key::ArrowDown), k(lumen::Key::ArrowDown), Wait(0.6)],
+        _ => vec![],
+    }
+}
+
 fn parse_look(s: &str) -> Platform {
     match s {
         "mac" | "macos" => Platform::Mac,
@@ -799,7 +881,8 @@ fn main() {
     }
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(out) = &p.screenshot {
-        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, ..Default::default() };
+        let steps = if p.open { open_steps(&p.demo) } else { vec![] };
+        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, ..Default::default() };
         match lumen::screenshot(out, &shot, &mut state, view) {
             Ok(()) => println!("wrote {out}"),
             Err(e) => {

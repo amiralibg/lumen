@@ -119,6 +119,15 @@ impl TextEdit {
         self.anchor = self.cursor;
     }
 
+    /// Insert a line break at the caret (multi-line editors).
+    pub fn insert_newline(&mut self, s: &mut String) {
+        self.snapshot(s, false);
+        self.delete_selection(s);
+        s.insert(self.cursor, '\n');
+        self.cursor += 1;
+        self.anchor = self.cursor;
+    }
+
     pub fn backspace(&mut self, s: &mut String, word: bool, line: bool) {
         if self.has_selection() {
             self.snapshot(s, false);

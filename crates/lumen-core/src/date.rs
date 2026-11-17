@@ -146,3 +146,58 @@ mod tests {
         assert_eq!("2028-02-29".parse::<Date>().unwrap().to_string(), "2028-02-29");
     }
 }
+
+/// A time of day, minute precision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct Time {
+    /// 0..=23
+    pub hour: u8,
+    /// 0..=59
+    pub minute: u8,
+}
+
+impl Time {
+    pub fn new(hour: u8, minute: u8) -> Time {
+        Time { hour: hour.min(23), minute: minute.min(59) }
+    }
+
+    /// The current time in UTC.
+    pub fn now() -> Time {
+        let secs = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let m = (secs / 60) % (24 * 60);
+        Time::new((m / 60) as u8, (m % 60) as u8)
+    }
+
+    /// "14:05".
+    pub fn format_24(self) -> String {
+        format!("{:02}:{:02}", self.hour, self.minute)
+    }
+
+    /// "2:05 PM".
+    pub fn format_12(self) -> String {
+        let h = match self.hour % 12 {
+            0 => 12,
+            h => h,
+        };
+        format!("{}:{:02} {}", h, self.minute, if self.hour < 12 { "AM" } else { "PM" })
+    }
+}
+
+impl fmt::Display for Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:02}:{:02}", self.hour, self.minute)
+    }
+}
+
+#[cfg(test)]
+mod time_tests {
+    use super::Time;
+
+    #[test]
+    fn formats() {
+        assert_eq!(Time::new(14, 5).format_24(), "14:05");
+        assert_eq!(Time::new(14, 5).format_12(), "2:05 PM");
+        assert_eq!(Time::new(0, 30).format_12(), "12:30 AM");
+        assert_eq!(Time::new(30, 99), Time::new(23, 59));
+    }
+}

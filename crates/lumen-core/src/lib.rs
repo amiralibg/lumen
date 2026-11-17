@@ -16,7 +16,7 @@ pub mod paint;
 pub mod theme;
 
 pub use color::Color;
-pub use date::Date;
+pub use date::{Date, Time};
 pub use id::Id;
 pub use math::{vec2, Rect, Sides, Vec2};
 pub use theme::{Accent, Mode, Token};

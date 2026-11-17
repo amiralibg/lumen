@@ -97,6 +97,14 @@ pub struct Shown<R> {
     pub rect: Rect,
 }
 
+impl<R> Shown<R> {
+    /// A response for the container (id and last frame's rect), to anchor
+    /// popovers, hover cards and context menus to it.
+    pub fn response(&self) -> Response {
+        Response { id: self.id, rect: self.rect, ..Default::default() }
+    }
+}
+
 /// Painting context handed to paint closures after layout.
 pub struct PaintCx<'a> {
     pub painter: &'a mut Painter,
@@ -217,6 +225,9 @@ pub enum LayerPlace {
     Anchor { anchor: Id, placement: Placement, gap: f32, align: LayerAlign, match_width: bool },
     /// The whole window (dialogs, toasts). The root fills the screen.
     Screen,
+    /// At a point (context menus): below and to the right of it, flipping
+    /// when it doesn't fit.
+    Point(Vec2),
 }
 
 struct Layer {
@@ -353,6 +364,7 @@ pub struct Ui {
     layers: Vec<Layer>,
     layer_close: bool,
     press_at: Option<Vec2>,
+    secondary_at: Option<Vec2>,
     pub(crate) toasts: Vec<crate::widgets::toast::ToastState>,
     pub(crate) menu: Option<crate::widgets::menu::MenuCtx>,
     tooltips: FastMap<Id, TooltipSpec>,
@@ -425,6 +437,7 @@ impl Ui {
             layers: vec![],
             layer_close: false,
             press_at: None,
+            secondary_at: None,
             toasts: vec![],
             menu: None,
             tooltips: FastMap::default(),
@@ -472,6 +485,7 @@ impl Ui {
         self.any_press = false;
         self.any_key = false;
         self.press_at = None;
+        self.secondary_at = None;
         if let Some(f) = self.pending_focus.take() {
             self.focused = Some(f);
         }
@@ -561,6 +575,12 @@ impl Ui {
                     }
                 }
             }
+            Event::PointerButton { pos, button: PointerButton::Secondary, pressed: true } => {
+                self.pointer = Some(pos);
+                self.any_press = true;
+                self.press_at = Some(pos);
+                self.secondary_at = Some(pos);
+            }
             Event::PointerButton { .. } => {}
             Event::Scroll(d) => {
                 self.scroll_delta += d;
@@ -641,6 +661,11 @@ impl Ui {
             for ly in &self.layers {
                 match ly.place {
                     LayerPlace::Screen => self.tree.layout(ly.root, screen.translate(ly.offset), &mut measure),
+                    LayerPlace::Point(p) => {
+                        let s = self.tree.measure_root(ly.root, self.screen.x - 16.0, &mut measure);
+                        let pos = place_layer(Rect::from_min_size(p, Vec2::ZERO), s, Placement::Bottom, 2.0, LayerAlign::Start, self.screen);
+                        self.tree.layout(ly.root, Rect::from_min_size(pos + ly.offset, s), &mut measure);
+                    }
                     LayerPlace::Anchor { anchor, placement, gap, align, match_width } => {
                         let a = rect_of_id(&self.tree, &self.extras, anchor).unwrap_or(Rect::ZERO);
                         if match_width {
@@ -1189,6 +1214,13 @@ impl Ui {
         self.mem::<ScrollState>(scroll_id).target = Some(offset.max(0.0));
     }
 
+    /// Jump a scroll area immediately to `offset` (e.g. initial open).
+    pub fn scroll_set(&mut self, scroll_id: Id, offset: f32) {
+        let st = self.scroll_state(scroll_id);
+        st.offset = offset.max(0.0);
+        st.target = None;
+    }
+
     /// Id that [`scroll`](Self::scroll)`(key)` gets in the current scope.
     pub fn scroll_id(&self, key: impl std::hash::Hash) -> Id {
         let scope = *self.id_scope.last().unwrap_or(&Id::ROOT);
@@ -1207,7 +1239,7 @@ impl Ui {
         let saved_nav = self.nav.take();
         let style = match place {
             LayerPlace::Screen => Style { width: Size::FILL, height: Size::FILL, ..Default::default() },
-            LayerPlace::Anchor { .. } => Style::default(),
+            LayerPlace::Anchor { .. } | LayerPlace::Point(_) => Style::default(),
         };
         let sense = if block.is_some() { Sense::CLICK } else { Sense::NONE };
         let root = self.begin(style, block, sense, CursorIcon::Default, false, None);
@@ -1247,6 +1279,12 @@ impl Ui {
     /// True if the primary button went down this frame outside all `rects`.
     pub fn pressed_outside(&self, rects: &[Rect]) -> bool {
         self.press_at.is_some_and(|p| !rects.iter().any(|r| r.contains(p)))
+    }
+
+    /// Where the secondary (right) button went down this frame, if inside
+    /// `rect`. Context menus open from it.
+    pub fn secondary_pressed_in(&self, rect: Rect) -> Option<Vec2> {
+        self.secondary_at.filter(|p| rect.contains(*p))
     }
 
     /// True if `key` was pressed this frame, whatever has focus.
@@ -1719,6 +1757,11 @@ impl<'u> Container<'u> {
         self.clip = true;
         self
     }
+    /// Rows: move children that don't fit to a new line.
+    pub fn wrap(mut self) -> Self {
+        self.style.wrap = true;
+        self
+    }
     pub fn style(mut self, f: impl FnOnce(&mut Style)) -> Self {
         f(&mut self.style);
         self
@@ -1785,19 +1828,23 @@ impl ScrollArea<'_> {
             next.last_scroll_time = time;
         }
         if let Some(target) = st.target {
-            let target = target.min(max);
-            let key = id.with("prog");
-            if ui.anims.spring_state(key, 0).is_none_or(|s| s.target != target) && ui.anims.spring_state(key, 0).is_none() {
-                ui.anims.set_spring(key, 0, st.offset);
+            if st.viewport <= 0.0 {
+                ui.request_repaint_after(0.0);
+            } else {
+                let target = target.min(max);
+                let key = id.with("prog");
+                if ui.anims.spring_state(key, 0).is_none_or(|s| s.target != target) && ui.anims.spring_state(key, 0).is_none() {
+                    ui.anims.set_spring(key, 0, st.offset);
+                }
+                let gentle = ui.motion().gentle;
+                let v = if reduced { target } else { ui.anims.spring(key, 0, target, gentle) };
+                next.offset = v.clamp(0.0, max);
+                if (v - target).abs() < 0.5 {
+                    next.offset = target;
+                    next.target = None;
+                }
+                next.last_scroll_time = time;
             }
-            let gentle = ui.motion().gentle;
-            let v = if reduced { target } else { ui.anims.spring(key, 0, target, gentle) };
-            next.offset = v.clamp(0.0, max);
-            if (v - target).abs() < 0.5 {
-                next.offset = target;
-                next.target = None;
-            }
-            next.last_scroll_time = time;
         }
         let _ = dt;
         *ui.scroll_state(id) = next;

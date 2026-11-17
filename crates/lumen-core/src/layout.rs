@@ -75,6 +75,10 @@ pub struct Style {
     pub margin_top: f32,
     /// Vertical scrolling: children may overflow; offset applied on place.
     pub scroll: bool,
+    /// Rows only: children that don't fit move to a new line. Lines are
+    /// `gap` apart; `Fill` children share the free space of their line and
+    /// break by their `min` width.
+    pub wrap: bool,
 }
 
 impl Default for Style {
@@ -92,6 +96,7 @@ impl Default for Style {
             self_align: None,
             margin_top: 0.0,
             scroll: false,
+            wrap: false,
         }
     }
 }
@@ -232,6 +237,31 @@ impl Tree {
         let children = std::mem::take(&mut self.nodes[n].children);
         let mut cw = vec![0.0f32; children.len()];
         match st.dir {
+            Dir::Row if st.wrap => {
+                for (i, &c) in children.iter().enumerate() {
+                    let cs = self.nodes[c].style;
+                    cw[i] = match cs.width {
+                        Size::Fixed(f) => clamp(f, cs.min.x, cs.max.x),
+                        Size::Hug => self.nodes[c].pref_w,
+                        Size::Fill(_) => cs.min.x,
+                    }
+                    .min(inner);
+                }
+                for line in wrap_lines(&cw, inner, st.gap) {
+                    let used: f32 = cw[line.clone()].iter().sum::<f32>() + st.gap * (line.len().saturating_sub(1)) as f32;
+                    let free = inner - used;
+                    let weights: f32 = line.clone().map(|i| fill_weight(&self.nodes[children[i]].style)).sum();
+                    if free > 0.0 && weights > 0.0 {
+                        for i in line {
+                            let cs = self.nodes[children[i]].style;
+                            let wt = fill_weight(&cs);
+                            if wt > 0.0 {
+                                cw[i] = (cw[i] + free * wt / weights).min(cs.max.x);
+                            }
+                        }
+                    }
+                }
+            }
             Dir::Row => {
                 let gaps = st.gap * children.len().saturating_sub(1) as f32;
                 let mut used = gaps;
@@ -339,6 +369,12 @@ impl Tree {
         };
         let inner = match st.dir {
             Dir::Column => sum + gaps,
+            Dir::Row if st.wrap => {
+                let ws: Vec<f32> = children.iter().map(|&c| self.nodes[c].content_size.x).collect();
+                let lines = wrap_lines(&ws, inner_w, st.gap);
+                let n = lines.len();
+                lines.into_iter().map(|l| l.map(|i| self.nodes[children[i]].content_h).fold(0.0, f32::max)).sum::<f32>() + st.gap * n.saturating_sub(1) as f32
+            }
             Dir::Row | Dir::Stack => max,
         }
         .max(content);
@@ -367,6 +403,28 @@ impl Tree {
         let count = children.len();
         let scroll = if st.scroll { self.nodes[n].scroll_offset } else { 0.0 };
         match st.dir {
+            Dir::Row if st.wrap => {
+                let ws: Vec<f32> = children.iter().map(|&c| self.nodes[c].content_size.x).collect();
+                let mut y = inner.min.y - scroll;
+                for line in wrap_lines(&ws, iw, st.gap) {
+                    let lh = line.clone().map(|i| self.nodes[children[i]].content_h).fold(0.0, f32::max);
+                    let total: f32 = ws[line.clone()].iter().sum::<f32>() + st.gap * line.len().saturating_sub(1) as f32;
+                    let (mut x, extra_gap) = justify(st.justify, iw - total, line.len(), false);
+                    x += inner.min.x;
+                    for i in line {
+                        let c = children[i];
+                        let cs = self.nodes[c].style;
+                        let align = cs.self_align.unwrap_or(st.align);
+                        let h = match (cs.height, align) {
+                            (Size::Fill(_), _) | (Size::Hug, Align::Stretch) => clamp(lh, cs.min.y, cs.max.y),
+                            _ => self.nodes[c].content_h,
+                        };
+                        self.place(c, Rect::from_min_size(vec2(x, y + cross(align, lh, h)), vec2(ws[i], h)));
+                        x += ws[i] + st.gap + extra_gap;
+                    }
+                    y += lh + st.gap;
+                }
+            }
             Dir::Column => {
                 let mut hs: Vec<f32> = children.iter().map(|&c| self.nodes[c].content_h).collect();
                 let margins: Vec<f32> =
@@ -442,6 +500,26 @@ impl Tree {
         }
         self.nodes[n].children = children;
     }
+}
+
+/// Greedy line breaking for wrapping rows: index ranges of each line.
+fn wrap_lines(ws: &[f32], inner: f32, gap: f32) -> Vec<std::ops::Range<usize>> {
+    let mut lines = vec![];
+    let mut start = 0;
+    let mut x = 0.0f32;
+    for (i, &w) in ws.iter().enumerate() {
+        if i > start && x + gap + w > inner + 0.5 {
+            lines.push(start..i);
+            start = i;
+            x = w;
+        } else {
+            x += if i > start { gap + w } else { w };
+        }
+    }
+    if start < ws.len() {
+        lines.push(start..ws.len());
+    }
+    lines
 }
 
 fn fill_weight(s: &Style) -> f32 {
@@ -532,6 +610,21 @@ mod tests {
         assert_eq!(t.rect(root), Rect::from_xywh(0.0, 0.0, 148.0, 112.0));
         assert_eq!(t.rect(a), Rect::from_xywh(24.0, 24.0, 100.0, 20.0));
         assert_eq!(t.rect(b), Rect::from_xywh(24.0, 58.0, 60.0, 30.0));
+    }
+
+    #[test]
+    fn wrapping_row_breaks_lines_and_fills_the_last() {
+        let mut t = Tree::new();
+        let root = t.add(Style { dir: Dir::Row, wrap: true, width: Size::Fixed(200.0), gap: 10.0, ..Default::default() }, Content::None);
+        let chips: Vec<_> = (0..3).map(|_| t.add_child(root, Style::default(), Content::Fixed(vec2(80.0, 20.0)))).collect();
+        let input = t.add_child(root, Style { width: Size::FILL, min: vec2(60.0, 0.0), ..Default::default() }, Content::Fixed(vec2(0.0, 30.0)));
+        t.layout(root, Rect::from_xywh(0.0, 0.0, 1000.0, 1000.0), &mut no_measure());
+        assert_eq!(t.rect(chips[0]), Rect::from_xywh(0.0, 0.0, 80.0, 20.0));
+        assert_eq!(t.rect(chips[1]), Rect::from_xywh(90.0, 0.0, 80.0, 20.0));
+        // Line two: a chip, then the fill child takes the rest of the line.
+        assert_eq!(t.rect(chips[2]), Rect::from_xywh(0.0, 30.0, 80.0, 20.0));
+        assert_eq!(t.rect(input), Rect::from_xywh(90.0, 30.0, 110.0, 30.0));
+        assert_eq!(t.rect(root).height(), 60.0);
     }
 
     #[test]

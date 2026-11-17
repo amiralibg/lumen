@@ -66,6 +66,49 @@ ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");`,
     keys: [["Space / Enter / ↓", "Open, landing on the selected option"], ["↑ ↓ Home End", "Move through options"], ["Enter", "Choose"], ["Escape", "Close and return focus"]],
   },
   {
+    slug: "combobox", name: "Combobox", group: "Inputs", demo: "combobox",
+    summary: "Type to filter a list and pick one value. Matched spans highlight in the accent, rows stagger in, and a highlight pill slides between matches.",
+    code: `let zones: Vec<(usize, &str)> = ZONES.iter().copied().enumerate().collect();
+ui.combobox(&mut s.tz, &zones)
+    .label("Time zone")
+    .placeholder("Search time zones")
+    .fill_width();`,
+    options: [
+      [".label(t) .placeholder(t)", "Clearing the query and leaving sets the value to None."],
+      [".max_rows(n) .width(px) .fill_width() .disabled(b)", "Long lists scroll and keep the active row in view."],
+      [".changed() .show()", ""],
+    ],
+    keys: [["Type", "Fuzzy-filter options and highlight matched letters"], ["↑ ↓ Home End", "Move the highlight pill"], ["Enter", "Pick the highlighted option"], ["Escape", "Close and revert to the current value"]],
+  },
+  {
+    slug: "multi-select", name: "Multi-select", group: "Inputs", demo: "multi-select",
+    summary: "Pick several options as removable chips inside a field that grows on a spring as chips wrap.",
+    code: `let people: Vec<(usize, &str)> = PEOPLE.iter().copied().enumerate().collect();
+ui.multi_select(&mut s.reviewers, &people)
+    .label("Reviewers")
+    .placeholder("Add reviewers")
+    .fill_width();`,
+    options: [
+      [".label(t) .placeholder(t)", "Placeholder shows only while no values are chosen."],
+      [".max_rows(n) .width(px) .fill_width() .disabled(b)", ""],
+      [".changed() .show()", ""],
+    ],
+    keys: [["Type", "Filter options"], ["↑ ↓", "Move through matches"], ["Enter", "Toggle the highlighted option"], ["Backspace (twice on empty)", "Arm, then remove the last chip"], ["Escape", "Close the list"]],
+  },
+  {
+    slug: "color-picker", name: "Color picker", group: "Inputs", demo: "color-picker",
+    summary: "A swatch trigger that opens a lumen-drawn saturation–value canvas, hue and opacity sliders, preset swatches and a live hex field.",
+    code: `ui.color_picker("Brand color", &mut s.brand);
+ui.color_picker("Spotlight glow", &mut s.glow).alpha(true);`,
+    options: [
+      [".alpha(bool)", "Adds a checkerboard opacity slider and 8-digit #RRGGBBAA hex editing."],
+      [".swatches(&[Color])", "Custom preset row; defaults to lumen's eight palette hues."],
+      [".width(px) .fill_width() .disabled(b)", ""],
+      ["ui.color_editor(key, &mut Color, alpha)", "Inline color editor without the popover trigger."],
+    ],
+    keys: [["Space / Enter / ↓", "Open with focus on the 2D canvas"], ["← → ↑ ↓ (Shift 5×)", "Nudge saturation/value, hue or opacity"], ["Enter in hex", "Apply and close"], ["Escape", "Close and return focus"]],
+  },
+  {
     slug: "slider", name: "Slider", group: "Inputs", demo: "slider",
     summary: "Continuous or stepped values. Clicking away from the thumb springs it there; dragging tracks 1:1.",
     code: `let pct = format!("{:.0}%", s.volume * 100.0);
@@ -220,11 +263,35 @@ ui.calendar_range(&mut s.stay); // Option<(Date, Date)>`,
   },
   {
     slug: "date-picker", name: "Date picker", group: "Dates", demo: "date-picker",
-    summary: "A field that opens a calendar popover; picking a date closes it. Range version included.",
-    code: `ui.date_picker("Due date", &mut s.due);
-ui.date_range_picker("Stay", &mut s.stay);`,
-    options: [["date_picker(label, &mut Date)", ""], ["date_range_picker(label, &mut Option<(Date, Date)>)", "Closes after the second click."]],
-    keys: [["Space / Enter / ↓", "Open with focus in the grid"], ["Escape", "Close"]],
+    summary: "A field that opens a calendar popover; picking a date rolls the new value in and closes the panel.",
+    code: `ui.date_picker("Due date", &mut s.due);`,
+    options: [["date_picker(label, &mut Date)", "Returns a Response with .changed when a day is picked."]],
+    keys: [["Space / Enter / ↓", "Open with focus in the grid"], ["← → ↑ ↓", "Move through days"], ["Escape", "Close"]],
+  },
+  {
+    slug: "date-range-picker", name: "Date range picker", group: "Dates", demo: "date-range-picker",
+    summary: "A range field with quick-pick presets, live hover-band preview while choosing the end date, and a night counter.",
+    code: `ui.date_range_picker("Maintenance window", &mut s.span); // Option<(Date, Date)>`,
+    options: [
+      ["date_range_picker(label, &mut Option<(Date, Date)>)", "First click anchors the start; hovering previews the span; second click orders and closes."],
+      ["Quick picks", "Today, Last 7 days, Last 30 days, This month and Clear."],
+    ],
+    keys: [["Space / Enter / ↓", "Open with focus in the calendar"], ["← → ↑ ↓", "Walk days"], ["Enter", "Set start, then end"], ["Escape", "Close"]],
+  },
+  {
+    slug: "time-picker", name: "Time picker", group: "Dates", demo: "time-picker",
+    summary: "Scrollable hour and minute columns (plus AM/PM in 12-hour mode) with sliding selection pills and a Now shortcut.",
+    code: `ui.time_picker("Deploy at", &mut s.deploy_at);
+ui.time_picker("Quiet hours end", &mut s.quiet_end)
+    .twelve_hour(true)
+    .step(15);`,
+    options: [
+      [".twelve_hour(bool)", "12-hour display and AM/PM column (default 24-hour)."],
+      [".step(minutes)", "Minute interval in the list (default 5, clamped 1..=30)."],
+      [".width(px) .fill_width() .disabled(b)", ""],
+      ["lumen::Time", "Time::new(h, m), Time::now(), .format_24(), .format_12()."],
+    ],
+    keys: [["Space / Enter / ↓", "Open and focus the columns"], ["← →", "Switch between Hour, Minute and Period"], ["↑ ↓ Home End", "Step or jump within the column"], ["Enter / Escape", "Confirm or close"]],
   },
   {
     slug: "line-chart", name: "Line chart", group: "Charts", demo: "chart-line",
