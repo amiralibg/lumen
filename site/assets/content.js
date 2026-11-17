@@ -9,6 +9,7 @@ export const GROUPS = [
   "Navigation",
   "Overlays",
   "Feedback",
+  "Data",
   "Dates",
   "Charts",
   "Layout and surfaces",
@@ -830,6 +831,127 @@ ui.set_accent(Accent::Native); // the OS accent color`,
 ui.avatar_group(&["JB", "PN", "TR", "LF", "SW"], 4, 32.0);`,
     options: [["ui.avatar(initials, tone, size, presence)", "Tone picks a chart series color. presence: Some(true) online, Some(false) away."], ["ui.avatar_group(&[&str], max, size)", "Each avatar is ringed in the surface color."]],
     keys: [],
+  },
+  {
+    slug: "accordion", name: "Accordion", group: "Data", demo: "accordion",
+    summary: "Stacked disclosure sections and standalone collapsibles whose bodies expand on the smooth spring with rotating vector chevrons.",
+    code: `ui.accordion("faq", &mut s.open_idx)
+    .item_with("Zero-copy glyph atlas", Some("sparkles"), Some("GPU"), |ui| {
+        ui.label("Shaped glyphs stream straight into an R8 coverage texture.").secondary();
+    })
+    .item("Spring-driven micro-motion", |ui| {
+        ui.label("Every disclosure settles analytically.").secondary();
+    })
+    .show();`,
+    options: [
+      ["ui.accordion(key, &mut Option<usize>)", ".item(title, |ui| ..) and .item_with(title, icon, badge, |ui| ..)"],
+      ["ui.collapsible(key, title, &mut bool)", "Independent disclosure section with .icon(name), .badge(text), .carded(bool)."],
+    ],
+    keys: [["↑ ↓ / Home / End", "Move focus across accordion headers"], ["Space / Enter", "Expand or collapse focused section"]],
+  },
+  {
+    slug: "table", name: "Data table", group: "Data", demo: "table",
+    summary: "Interactive table with sortable column headers, indeterminate header selection checkbox, right-aligned numeric columns and status badges.",
+    code: `ui.table("services")
+    .columns([
+        TableCol::new("Service").fill(1.5).sortable(),
+        TableCol::new("p95").width(104.0).sortable().right(),
+        TableCol::new("Status").width(96.0).right(),
+    ])
+    .sort_by(&mut s.sort)
+    .selection(&mut s.selected)
+    .row(0, [TableCell::strong("edge-proxy"), TableCell::mono("4.2 ms"), TableCell::badge("Healthy", Tone::Success)])
+    .show();`,
+    options: [
+      ["TableCol::new(label)", ".fill(weight), .width(px), .sortable(), .right()"],
+      ["TableCell", "::text, ::strong, ::muted, ::mono, ::badge(label, Tone)"],
+      [".sort_by(&mut Option<(usize, SortDir)>) .selection(&mut Vec<bool>)", "Optional column sorting and per-row selection."],
+    ],
+    keys: [["↑ ↓", "Move row focus"], ["Space / Enter", "Toggle focused header sort or row selection"]],
+  },
+  {
+    slug: "tree", name: "Tree view", group: "Data", demo: "tree",
+    summary: "Hierarchical explorer with rotating branch chevrons, vertical indent guides, a spring-sliding selection pill and full arrow-key navigation.",
+    code: `let nodes = [
+    TreeNode::branch("src", "src", [
+        TreeNode::leaf("lib.rs", "lib.rs").icon("file-code").meta("1.4 KB"),
+        TreeNode::leaf("theme.rs", "theme.rs").icon("file-code").meta("24.8 KB"),
+    ]),
+];
+ui.tree("workspace", &nodes, &mut s.expanded, &mut s.selected).show();`,
+    options: [
+      ["TreeNode::branch(id, label, children)", "Collapsible folder node; switches folder to folder-open when expanded."],
+      ["TreeNode::leaf(id, label)", ".icon(name) and .meta(text) for trailing file sizes or counts."],
+    ],
+    keys: [["↑ ↓ / Home / End", "Move selection across visible nodes"], ["→ / ←", "Expand or enter branch / collapse or jump to parent"], ["Space / Enter", "Toggle branch"]],
+  },
+  {
+    slug: "timeline", name: "Timeline", group: "Data", demo: "timeline",
+    summary: "Vertical deploy and activity feed with semantic status badges, connecting rails, commit tags and timestamps.",
+    code: `let events = [
+    TimelineItem::new("Promoted v0.4.2 to production", "2m ago")
+        .icon("rocket")
+        .tone(Tone::Success)
+        .tag("9f3c1a2")
+        .description("All 14 health checks green across Frankfurt and Virginia."),
+];
+ui.timeline("deploys", &events);`,
+    options: [
+      ["TimelineItem::new(title, time)", ".icon(name), .tone(Tone), .tag(mono_pill), .description(text)"],
+    ],
+    keys: [],
+  },
+  {
+    slug: "code-block", name: "Code block", group: "Data", demo: "code-block",
+    summary: "Syntax-highlighted monospace code viewer for Rust, TOML, JSON and shell snippets with line numbers, accent line highlights and Copy.",
+    code: `ui.code_block("rollout", snippet)
+    .title("examples/rollout.rs")
+    .language("rust")
+    .highlight_lines(&[4, 5])
+    .show();`,
+    options: [
+      [".language(lang) .title(path)", "Built-in tokenizer colors keywords, types, strings, numbers, macros and comments via theme tokens."],
+      [".line_numbers(bool) .highlight_lines(&[usize]) .copyable(bool)", "1-based highlighted lines get an accent gutter bar and subtle tint."],
+    ],
+    keys: [["Tab + Enter on Copy", "Copies the full snippet and confirms with a check"]],
+  },
+  {
+    slug: "json-viewer", name: "JSON viewer", group: "Data", demo: "json-viewer",
+    summary: "Zero-dependency JSON parser and interactive collapsible tree with key/item count previews, indent guides and typed syntax colors.",
+    code: `ui.json_viewer("manifest", payload)
+    .title("release-manifest.json")
+    .default_depth(2)
+    .show();`,
+    options: [
+      [".default_depth(usize)", "Initial expansion depth before collapsing nested objects and arrays into { n keys } / [ n items ]."],
+      [".title(label)", "Header title next to the Copy button."],
+    ],
+    keys: [["Space / Enter", "Expand or collapse focused object or array"]],
+  },
+  {
+    slug: "key-value", name: "Key–value editor", group: "Data", demo: "key-value",
+    summary: "Editable table of environment variables or HTTP headers with per-row enable checkboxes, secret bullet masking, reveal toggle and row add/remove.",
+    code: `ui.key_value_editor("env", &mut s.env_vars)
+    .placeholders("VARIABLE_NAME", "value")
+    .add_label("Add variable")
+    .show();`,
+    options: [
+      ["KvPair::new(key, value)", ".secret() masks the value with bullets until revealed; .disabled_row() starts unchecked."],
+      [".placeholders(key, val) .add_label(label)", "Custom placeholders and footer button copy."],
+    ],
+    keys: [["Tab", "Move across checkbox, key field, value field and row actions"]],
+  },
+  {
+    slug: "log-viewer", name: "Log viewer", group: "Data", demo: "log-viewer",
+    summary: "Structured live console with Info / Warn / Error filter chips, instant fuzzy search highlighting and click-to-copy log lines.",
+    code: `ui.log_viewer("console", &logs)
+    .height(210.0)
+    .show();`,
+    options: [
+      ["LogEntry::new(time, LogLevel, target, message)", "LogLevel::Info, Warn, or Error."],
+      [".height(px)", "Viewport height; overflows scroll with an overlay thumb."],
+    ],
+    keys: [["Escape in filter", "Clear active search query"], ["Click log line", "Copy formatted log entry to clipboard"]],
   },
 ];
 

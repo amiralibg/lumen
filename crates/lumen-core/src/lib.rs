@@ -33,5 +33,7 @@ pub use input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
 pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
-pub use widgets::{password_strength, ChartKind, Command, Series, Toast, Tone};
-pub use widgets::Variant;
+pub use widgets::{
+    password_strength, ChartKind, Command, KvPair, LogEntry, LogLevel, Series, SortDir, TableCell, TableCol,
+    TimelineItem, Toast, Tone, TreeNode, Variant,
+};

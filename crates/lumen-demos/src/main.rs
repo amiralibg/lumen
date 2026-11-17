@@ -4,7 +4,12 @@
 //! - Web: `demo.html?demo=chart-line&dark=1&look=mac&accent=blue`
 //! - Screenshot: `cargo run -p lumen-demos -- chart-line --screenshot out.png`
 
-use lumen::{Accent, Align, Color, Command, Date, Justify, Look, Mode, Placement, Platform, Series, Sides, Time, Toast, Tone, Ui};
+use std::collections::BTreeSet;
+
+use lumen::{
+    Accent, Align, Color, Command, Date, Justify, KvPair, LogEntry, LogLevel, Look, Mode, Placement, Platform, Series,
+    Sides, SortDir, TableCell, TableCol, Time, TimelineItem, Toast, Tone, TreeNode, Ui,
+};
 
 /// Every demo: url name, title.
 pub const DEMOS: &[(&str, &str)] = &[
@@ -59,6 +64,14 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("skeleton", "Skeleton"),
     ("empty-state", "Empty state"),
     ("kbd", "Keycap"),
+    ("accordion", "Accordion"),
+    ("table", "Data table"),
+    ("tree", "Tree view"),
+    ("timeline", "Timeline"),
+    ("code-block", "Code block"),
+    ("json-viewer", "JSON viewer"),
+    ("key-value", "Key-value editor"),
+    ("log-viewer", "Log viewer"),
     ("calendar", "Calendar"),
     ("date-picker", "Date picker"),
     ("combobox", "Combobox"),
@@ -151,6 +164,12 @@ struct State {
     uploads: Vec<(String, String)>,
     fmt_flags: [bool; 4],
     busy_deploy: bool,
+    acc_open: Option<usize>,
+    table_sort: Option<(usize, SortDir)>,
+    table_sel: Vec<bool>,
+    tree_open: BTreeSet<String>,
+    tree_sel: String,
+    env_vars: Vec<KvPair>,
 }
 
 impl State {
@@ -214,6 +233,16 @@ impl State {
             uploads: vec![("lumen-demos.wasm".into(), "7.4 MB".into()), ("lucide.ttf".into(), "218 KB".into())],
             fmt_flags: [true, false, false, true],
             busy_deploy: false,
+            acc_open: Some(0),
+            table_sort: Some((2, SortDir::Asc)),
+            table_sel: vec![false, true, false, true],
+            tree_open: ["crates", "lumen-core", "src"].into_iter().map(String::from).collect(),
+            tree_sel: "theme.rs".into(),
+            env_vars: vec![
+                KvPair::new("DATABASE_URL", "postgres://app:s3cr3t@db.internal:5432/prod").secret(),
+                KvPair::new("RUST_LOG", "info,lumen_wgpu=warn"),
+                KvPair::new("EDGE_REGION", "eu-central-1"),
+            ],
         }
     }
 }
@@ -1188,6 +1217,152 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                         ui.stat(label, value, Some(delta), Some(&trend));
                     });
                 }
+            });
+        }
+        "accordion" => {
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.accordion("faq", &mut s.acc_open)
+                    .item_with("Zero-copy glyph atlas", Some("sparkles"), Some("GPU"), |ui| {
+                        ui.label("Shaped glyphs stream straight into a single R8 coverage texture — no DOM, CSS or OS native controls in the loop.").secondary();
+                    })
+                    .item_with("Spring-driven micro-motion", Some("activity"), Some("120 Hz"), |ui| {
+                        ui.label("Every disclosure height, selection pill and press squash settles analytically via critically and under-damped springs.").secondary();
+                    })
+                    .item_with("Four runtime looks", Some("layers"), Some("Live"), |ui| {
+                        ui.label("Switch between Lumen, macOS, Windows 11 and GNOME Adwaita at runtime; tokens blend in perceptual OKLab.").secondary();
+                    })
+                    .show();
+            });
+        }
+        "table" => {
+            let mut rows = vec![
+                (0usize, "edge-proxy", "eu-central", 4.2f32, "Healthy", Tone::Success),
+                (1usize, "auth-gateway", "us-east", 11.8f32, "Healthy", Tone::Success),
+                (2usize, "search-indexer", "eu-central", 7.9f32, "Healthy", Tone::Success),
+                (3usize, "billing-worker", "ap-northeast", 48.6f32, "Degraded", Tone::Warning),
+            ];
+            if let Some((col, dir)) = s.table_sort {
+                rows.sort_by(|a, b| {
+                    let ord = match col {
+                        0 => a.1.cmp(b.1),
+                        1 => a.2.cmp(b.2),
+                        2 => a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal),
+                        _ => std::cmp::Ordering::Equal,
+                    };
+                    if dir == SortDir::Desc { ord.reverse() } else { ord }
+                });
+            }
+            ui.column().fill_width().max_width(580.0).gap(8).show(|ui| {
+                let mut tbl = ui
+                    .table("services")
+                    .columns([
+                        TableCol::new("Service").fill(1.45).sortable(),
+                        TableCol::new("Region").fill(1.05).sortable(),
+                        TableCol::new("p95 latency").width(104.0).sortable().right(),
+                        TableCol::new("Status").width(96.0).right(),
+                    ])
+                    .sort_by(&mut s.table_sort)
+                    .selection(&mut s.table_sel);
+                for (rid, svc, reg, ms, st, tone) in rows {
+                    tbl = tbl.row(rid, [
+                        TableCell::strong(svc),
+                        TableCell::muted(reg),
+                        TableCell::mono(format!("{ms:.1} ms")),
+                        TableCell::badge(st, tone),
+                    ]);
+                }
+                tbl.show();
+            });
+        }
+        "tree" => {
+            let tree = [
+                TreeNode::branch("crates", "crates", [
+                    TreeNode::branch("lumen-core", "lumen-core", [
+                        TreeNode::branch("src", "src", [
+                            TreeNode::leaf("lib.rs", "lib.rs").icon("file-code").meta("1.4 KB"),
+                            TreeNode::leaf("theme.rs", "theme.rs").icon("file-code").meta("24.8 KB"),
+                            TreeNode::leaf("paint.rs", "paint.rs").icon("file-code").meta("18.2 KB"),
+                        ]),
+                        TreeNode::leaf("core-toml", "Cargo.toml").icon("file-text").meta("620 B"),
+                    ]),
+                    TreeNode::branch("lumen-wgpu", "lumen-wgpu", [
+                        TreeNode::leaf("shader.wgsl", "shader.wgsl").icon("file-code").meta("6.1 KB"),
+                    ]),
+                ]),
+                TreeNode::leaf("readme", "README.md").icon("file-text").meta("4.9 KB"),
+            ];
+            ui.column().fill_width().max_width(420.0).show(|ui| {
+                ui.tree("workspace", &tree, &mut s.tree_open, &mut s.tree_sel).show();
+            });
+        }
+        "timeline" => {
+            let events = [
+                TimelineItem::new("Promoted v0.4.2 to production", "2m ago")
+                    .icon("rocket")
+                    .tone(Tone::Success)
+                    .tag("9f3c1a2")
+                    .description("All 14 health checks green across Frankfurt and Virginia."),
+                TimelineItem::new("Canary traffic shifted to 25%", "14m ago")
+                    .icon("git-branch")
+                    .tone(Tone::Accent)
+                    .tag("canary")
+                    .description("Error budget nominal · p99 latency held steady at 8.4 ms."),
+                TimelineItem::new("Rebalanced shard worker-03", "41m ago")
+                    .icon("triangle-alert")
+                    .tone(Tone::Warning)
+                    .description("Memory pressure cleared automatically before rollout."),
+            ];
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.timeline("deploys", &events);
+                });
+            });
+        }
+        "code-block" => {
+            let snippet = r#"pub fn deploy(ui: &mut Ui, s: &mut State) {
+    ui.heading("Production rollout");
+    ui.slider("Canary", &mut s.traffic, 0.0..=100.0);
+    if ui.button("Promote build").primary().icon("rocket").clicked() {
+        ui.toast(Toast::new("v0.4.2 live").success());
+    }
+}"#;
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.code_block("rollout_rs", snippet)
+                    .title("examples/rollout.rs")
+                    .language("rust")
+                    .highlight_lines(&[4, 5])
+                    .show();
+            });
+        }
+        "json-viewer" => {
+            let payload = r#"{
+  "service": "edge-proxy",
+  "version": "0.4.2",
+  "healthy": true,
+  "replicas": 6,
+  "regions": ["eu-central-1", "us-east-1"],
+  "limits": { "cpu": "2000m", "memory_mb": 4096 }
+}"#;
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.json_viewer("manifest", payload).title("release-manifest.json").default_depth(2).show();
+            });
+        }
+        "key-value" => {
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.key_value_editor("env_editor", &mut s.env_vars).show();
+            });
+        }
+        "log-viewer" => {
+            let logs = [
+                LogEntry::new("02:14:01.10", LogLevel::Info, "wgpu::hal", "Adapter Apple M3 Max (Metal) acquired"),
+                LogEntry::new("02:14:01.12", LogLevel::Info, "lumen::atlas", "Glyph cache warmed: 312 glyphs in 1.2 ms"),
+                LogEntry::new("02:14:02.44", LogLevel::Warn, "edge::tls", "OCSP staple expires in 18m; refreshing"),
+                LogEntry::new("02:14:03.01", LogLevel::Info, "edge::router", "Matched /v1/inference -> eu-central (4.1 ms)"),
+                LogEntry::new("02:14:04.88", LogLevel::Error, "worker::shard", "Replica 03 heartbeat timed out (1500 ms)"),
+                LogEntry::new("02:14:05.12", LogLevel::Info, "worker::shard", "Replica 03 rejoined cluster cleanly"),
+            ];
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.log_viewer("console", &logs).height(166.0).show();
             });
         }
         _ => {

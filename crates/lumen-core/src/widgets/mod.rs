@@ -34,6 +34,8 @@ pub mod feedback;
 pub mod navigation;
 pub mod selection;
 pub mod actions_chrome;
+pub mod data;
+pub mod code_data;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -61,6 +63,8 @@ pub use feedback::{Alert, EmptyState, Keycap, Skeleton};
 pub use navigation::{Breadcrumb, Pagination, Steps};
 pub use selection::{RadioCard, RangeSlider, Rating, ShortcutRecorder};
 pub use actions_chrome::{Dropzone, HoldButton, Meter, SplitButton, StatusBarScope, ToolbarScope};
+pub use data::{Accordion, AccordionItem, Collapsible, SortDir, Table, TableCell, TableCol, TimelineItem, Tree, TreeNode};
+pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, LogLevel, LogViewer};
 
 use crate::color::Color;
 use crate::theme::Token;

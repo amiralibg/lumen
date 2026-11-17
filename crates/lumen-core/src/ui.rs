@@ -265,7 +265,7 @@ struct TipState {
     warm: bool,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct ScrollState {
     offset: f32,
     content: f32,
@@ -273,6 +273,12 @@ pub(crate) struct ScrollState {
     last_scroll_time: f64,
     /// Programmatic target, animated with the gentle spring.
     target: Option<f32>,
+}
+
+impl Default for ScrollState {
+    fn default() -> Self {
+        ScrollState { offset: 0.0, content: 0.0, viewport: 0.0, last_scroll_time: -10.0, target: None }
+    }
 }
 
 /// Information returned by a scroll area.
