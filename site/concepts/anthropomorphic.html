@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lumen · Anthropomorphic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="widgets.css">
+<style>
+/* ANTHROPOMORPHIC: the components are a cast. Lumi, the mascot, is built only
+   from lumen widgets (switch-track eyes, slider mouth, badge cheeks) and reacts
+   to you. Everything has weight: a 3px ink outline and a solid drop that
+   squashes on press. Don'ts: no glass, no gradients, no thin hairlines on
+   controls, no faces on anything that is not a widget. */
+.t-light, :root:not(.t-dark) {
+  --c-bg: #fbf3e6; --c-surface: #fffaf2; --c-surface-2: #f1e6d3; --c-field: #fff; --c-thumb: #fff;
+  --c-line: #1d1a16; --c-line-2: #1d1a16; --c-text: #1d1a16; --c-text-2: #6b6256; --c-text-3: #9b9183; --c-hover: #f6ead7;
+  --c-on-accent: #fff; --c-up: #0f8a57; --c-series-2: #ff8a5b; --c-series-3: #2bb3a3; --c-series-4: #ffc94a;
+  --c-shadow: 0 6px 0 #1d1a16; --drop: #1d1a16; --cheek: #ff9f9f; --sticker-1: #ffc94a; --sticker-2: #a7e3d5; --sticker-3: #ffb4c6;
+  color-scheme: light;
+}
+.t-dark {
+  --c-bg: #1b1824; --c-surface: #262233; --c-surface-2: #332e44; --c-field: #1f1c2b; --c-thumb: #48415e;
+  --c-line: #0b0910; --c-line-2: #0b0910; --c-text: #f6f0ff; --c-text-2: #b5abc9; --c-text-3: #7d7493; --c-hover: #2f2a40;
+  --c-on-accent: #fff; --c-up: #6ee0a8; --c-series-2: #ff9a72; --c-series-3: #4fd1c0; --c-series-4: #ffd166;
+  --c-shadow: 0 6px 0 #0b0910; --drop: #0b0910; --cheek: #ff7d9c; --sticker-1: #6b5a1c; --sticker-2: #1f5148; --sticker-3: #5d2a40;
+  color-scheme: dark;
+}
+:root { --font-ui: "Inter", system-ui, sans-serif; --font-display: "Bricolage Grotesque", "Geist", sans-serif; }
+body { background: var(--c-bg); color: var(--c-text); font: 400 16px/1.55 var(--font-ui); overflow-x: hidden; transition: background-color var(--d-slow) var(--ease); }
+a { color: inherit; text-decoration: none; }
+.chunky { border: 3px solid var(--c-line); box-shadow: 0 5px 0 var(--drop); transition: transform var(--d-fast) var(--spring), box-shadow var(--d-fast) var(--ease); }
+.chunky:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--drop); }
+
+nav.top { max-width: 1240px; margin: 16px auto 0; padding: 10px 10px 10px 18px; display: flex; align-items: center; gap: 24px; border-radius: 22px; background: var(--c-surface); position: sticky; top: 12px; z-index: 50; }
+@media (max-width: 1272px) { nav.top { margin: 12px 16px 0; } }
+.brand { display: flex; align-items: center; gap: 10px; font: 800 22px var(--font-display); letter-spacing: -0.03em; }
+.brand-face { width: 30px; height: 30px; border-radius: 10px; background: var(--c-text); position: relative; }
+.brand-face::before, .brand-face::after { content: ""; position: absolute; top: 10px; width: 5px; height: 8px; border-radius: 3px; background: var(--c-bg); animation: blink calc(4s * var(--m)) infinite; }
+.brand-face::before { left: 8px; } .brand-face::after { right: 8px; }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.links { display: flex; gap: 4px; font-weight: 500; font-size: 15px; }
+.links a { padding: 8px 12px; border-radius: 12px; }
+.links a[aria-current] { background: var(--c-surface-2); }
+@media (hover: hover) { .links a:hover { background: var(--c-hover); } }
+.end { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.ib { width: 42px; height: 42px; border-radius: 14px; background: var(--c-surface); display: grid; place-items: center; cursor: pointer; color: var(--c-text); }
+.ib svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.search { height: 42px; border-radius: 14px; padding: 0 8px 0 14px; display: flex; align-items: center; gap: 28px; background: var(--c-field); color: var(--c-text-3); font-weight: 500; font-size: 14px; cursor: pointer; }
+.search kbd { font: 600 11px var(--mono); padding: 3px 7px; border-radius: 7px; background: var(--c-surface-2); color: var(--c-text-2); }
+@media (max-width: 900px) { .links, .search { display: none; } }
+
+.hero { max-width: 1240px; margin: 0 auto; padding: 72px 16px 40px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: center; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; text-align: center; } }
+h1 { margin: 0; font: 800 clamp(52px, 7.6vw, 104px)/0.92 var(--font-display); letter-spacing: -0.045em; text-wrap: balance; }
+h1 .pill { display: inline-block; padding: 0 0.18em; border-radius: 0.28em; background: var(--accent); color: var(--c-on-accent); transform: rotate(-2deg); border: 3px solid var(--c-line); box-shadow: 0 5px 0 var(--drop); }
+.lede { font-size: 19px; color: var(--c-text-2); max-width: 520px; margin: 24px 0 0; text-wrap: pretty; }
+@media (max-width: 900px) { .lede { margin-inline: auto; } }
+.ctas { display: flex; gap: 14px; margin-top: 32px; flex-wrap: wrap; }
+@media (max-width: 900px) { .ctas { justify-content: center; } }
+.cta { height: 54px; padding: 0 24px; border-radius: 16px; display: inline-flex; align-items: center; gap: 10px; font: 700 17px var(--font-display); background: var(--c-surface); cursor: pointer; }
+.cta.main { background: var(--accent); color: var(--c-on-accent); }
+.clone { margin-top: 20px; font: 14px var(--mono); color: var(--c-text-2); display: inline-flex; align-items: center; gap: 10px; }
+.clone button { font: 600 12px var(--font-ui); border-radius: 8px; padding: 4px 9px; background: var(--c-surface); cursor: pointer; border: 2px solid var(--c-line); }
+
+/* Lumi: built from widgets */
+.lumi-wrap { position: relative; display: grid; place-items: center; }
+.lumi { width: min(440px, 88vw); aspect-ratio: 1 / 0.92; border-radius: 34%; background: var(--c-surface); position: relative; border: 4px solid var(--c-line); box-shadow: 0 12px 0 var(--drop);
+  transition: transform var(--d) var(--spring); animation: bob calc(4.5s * var(--m)) ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-10px) rotate(-1.5deg); } }
+:root[data-reduced="true"] .lumi { animation: none; }
+.eye { position: absolute; top: 30%; width: 26%; height: 30%; border-radius: 99px; background: var(--c-surface-2); border: 4px solid var(--c-line); overflow: hidden; }
+.eye.l { left: 17%; } .eye.r { right: 17%; }
+.eye i { position: absolute; left: 50%; top: 50%; width: 46%; aspect-ratio: 1; border-radius: 50%; background: var(--c-text); translate: -50% -50%; transition: transform calc(120ms * var(--m)) var(--ease); }
+.eye i::after { content: ""; position: absolute; top: 18%; left: 22%; width: 28%; height: 28%; border-radius: 50%; background: var(--c-surface); }
+.lid { position: absolute; inset: 0; background: var(--accent); transform: translateY(-101%); transition: transform calc(110ms * var(--m)) var(--ease); border-bottom: 4px solid var(--c-line); }
+.lumi.blink .lid { transform: none; }
+.t-dark .lid { transform: translateY(-48%); }
+.cheek { position: absolute; top: 62%; width: 13%; height: 7%; border-radius: 99px; background: var(--cheek); opacity: 0.8; }
+.cheek.l { left: 10%; } .cheek.r { right: 10%; }
+.mouth { position: absolute; left: 28%; right: 28%; top: 64%; height: 22%; }
+.mouth svg { width: 100%; height: 100%; overflow: visible; }
+.mouth path { fill: none; stroke: var(--c-line); stroke-width: 9; stroke-linecap: round; transition: d calc(380ms * var(--m)) var(--spring); }
+.mouth circle { fill: var(--c-surface); stroke: var(--c-line); stroke-width: 5; transition: cx calc(380ms * var(--m)) var(--spring), cy calc(380ms * var(--m)) var(--spring); }
+.bubble { position: absolute; top: -6px; right: -4px; padding: 10px 16px; border-radius: 18px 18px 18px 4px; background: var(--sticker-1); font: 700 16px var(--font-display); border: 3px solid var(--c-line); box-shadow: 0 4px 0 var(--drop);
+  transform-origin: 0 100%; transition: transform var(--d) var(--spring), opacity var(--d-fast) var(--ease); max-width: 240px; }
+.bubble.swap { transform: scale(0.6) rotate(-8deg); opacity: 0; }
+.ant { position: absolute; top: -48px; left: 50%; width: 4px; height: 44px; background: var(--c-line); translate: -50% 0; transform-origin: bottom; animation: wag calc(2.2s * var(--m)) ease-in-out infinite; }
+.ant::after { content: ""; position: absolute; top: -14px; left: -9px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid var(--c-line); }
+@keyframes wag { 50% { transform: rotate(10deg); } }
+
+.stage { max-width: 1240px; margin: 0 auto; padding: 40px 16px 80px; }
+.cast-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 28px; }
+h2 { margin: 0; font: 800 clamp(36px, 5vw, 64px)/1 var(--font-display); letter-spacing: -0.04em; }
+.scenes { display: flex; gap: 6px; flex-wrap: wrap; }
+.scenes button { padding: 9px 16px; border-radius: 14px; font: 700 15px var(--font-display); background: var(--c-surface); cursor: pointer; }
+.scenes button[aria-selected="true"] { background: var(--c-text); color: var(--c-bg); }
+/* widgets get weight */
+.bento .lm-card { border: 3px solid var(--c-line); box-shadow: 0 6px 0 var(--drop); border-radius: calc(var(--r) + 14px); position: relative; transition: transform var(--d) var(--spring), border-radius var(--d) var(--ease); }
+@media (hover: hover) { .bento .lm-card:hover { transform: translateY(-4px) rotate(var(--tilt, -0.6deg)); } .bento .lm-card:nth-child(even):hover { --tilt: 0.6deg; } }
+.bento .lm-card::before { content: attr(data-tag); position: absolute; top: -14px; right: 18px; padding: 2px 10px; border-radius: 99px; font: 700 12px var(--font-display); background: var(--sticker-2); border: 2.5px solid var(--c-line); transform: rotate(3deg); }
+.bento .lm-card:nth-child(3n)::before { background: var(--sticker-3); transform: rotate(-3deg); }
+.bento .lm-card:nth-child(3n+1)::before { background: var(--sticker-1); }
+.bento .lm-card h3 { font: 800 19px var(--font-display); letter-spacing: -0.02em; }
+.bento .lm-btn, .bento .lm-field input, .bento .lm-field select, .bento .lm-segmented { border: 2.5px solid var(--c-line); }
+.bento .lm-btn { box-shadow: 0 3px 0 var(--drop); font-weight: 600; }
+.bento .lm-btn:active { transform: translateY(3px); box-shadow: none; }
+.bento .lm-btn.ghost { box-shadow: none; border-color: transparent; }
+.bento .lm-switch { box-shadow: inset 0 0 0 2.5px var(--c-line); width: 46px; height: 28px; }
+.bento .lm-switch i { width: 24px; height: 24px; border: 2.5px solid var(--c-line); box-shadow: none; position: relative; }
+.bento .lm-switch[aria-checked="true"] i { transform: translateX(18px); }
+.bento .lm-switch i::before, .bento .lm-switch i::after { content: ""; position: absolute; top: 6px; width: 3px; height: 5px; border-radius: 2px; background: var(--c-line); }
+.bento .lm-switch i::before { left: 5px; } .bento .lm-switch i::after { right: 5px; }
+.bento .lm-switch[aria-checked="false"] i::before, .bento .lm-switch[aria-checked="false"] i::after { height: 2px; top: 8px; }
+.bento .lm-trow { border-bottom: 2px dashed color-mix(in oklab, var(--c-line) 25%, transparent); }
+.bento .lm-thumb { border: 2.5px solid var(--c-line); box-shadow: none; top: 2px; bottom: 2px; }
+.bento .lm-day.edge { border: 2.5px solid var(--c-line); }
+.bento .lm-avatar { border: 2.5px solid var(--c-line); }
+.bento .lm-badge { border: 2px solid var(--c-line); font-weight: 600; color: var(--c-text); background: var(--c-surface-2); }
+.bento .lm-progress { height: 12px; border: 2.5px solid var(--c-line); }
+.bento .lm-spark .line { stroke-width: 3.5; }
+.bento .lm-num b { font-weight: 800; font-size: 38px; }
+.bento .lm-donut circle { stroke-width: 7; }
+.lm-toast { border: 3px solid var(--c-line); box-shadow: 0 6px 0 var(--drop); border-radius: 20px; }
+.sp { border: 3px solid var(--c-line); box-shadow: 0 8px 0 var(--drop); border-radius: 22px; }
+.sp-seg, .sp-switch { box-shadow: inset 0 0 0 2px var(--c-line); }
+.sp-thumb { border: 2px solid var(--c-line); box-shadow: none; }
+
+.quotes { max-width: 1240px; margin: 0 auto; padding: 40px 16px 120px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+@media (max-width: 900px) { .quotes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .quotes { grid-template-columns: 1fr; } }
+.quote { margin: 0; padding: 20px; border-radius: 24px; background: var(--c-surface); display: grid; gap: 14px; align-content: start; }
+.quote:nth-child(1) { background: var(--sticker-1); } .quote:nth-child(2) { background: var(--sticker-2); } .quote:nth-child(3) { background: var(--sticker-3); }
+.quote p { margin: 0; font: 700 21px/1.2 var(--font-display); letter-spacing: -0.02em; }
+.quote small { font-size: 13px; font-weight: 600; color: var(--c-text-2); }
+.quote .who { display: flex; align-items: center; gap: 10px; }
+.mini { width: 38px; height: 24px; border-radius: 99px; background: var(--c-surface); border: 2.5px solid var(--c-line); position: relative; }
+.mini::after { content: ""; position: absolute; top: 2px; right: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); border: 2px solid var(--c-line); }
+footer { text-align: center; padding: 40px 16px 56px; color: var(--c-text-2); font-weight: 500; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="top chunky" aria-label="Main">
+  <a class="brand" href="#"><span class="brand-face" aria-hidden="true"></span>lumen</a>
+  <div class="links"><a href="#" aria-current="page">Overview</a><a href="#">Guide</a><a href="#">Components</a><a href="#">Showcase</a><a href="#">Apps</a></div>
+  <div class="end">
+    <button class="search chunky" type="button">Find a component<kbd>⌘K</kbd></button>
+    <button class="ib chunky" id="theme" type="button" aria-label="Switch theme"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+    <button class="ib chunky" id="settings" type="button" aria-label="Appearance settings"><svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></button>
+  </div>
+</nav>
+<main id="main">
+  <header class="hero">
+    <div>
+      <h1>Components with <span class="pill">feelings.</span></h1>
+      <p class="lede">lumen is a Rust UI kit where every switch stretches, every number rolls and every popover springs into place. They follow your OS, or they follow you.</p>
+      <div class="ctas"><a class="cta main chunky" href="#" data-say="Yay! Let's build something.">Get started →</a><a class="cta chunky" href="#cast" data-say="Come meet the gang!">Meet the components</a></div>
+      <div class="clone">cargo add lumen <button type="button" data-copy="cargo add lumen" data-say="Copied! Paste me anywhere.">Copy</button></div>
+    </div>
+    <div class="lumi-wrap">
+      <div class="lumi" id="lumi" role="img" aria-label="Lumi, the lumen mascot, built from a switch, a slider and badges">
+        <span class="ant" aria-hidden="true"></span>
+        <span class="eye l"><i></i><b class="lid"></b></span><span class="eye r"><i></i><b class="lid"></b></span>
+        <span class="cheek l"></span><span class="cheek r"></span>
+        <span class="mouth"><svg viewBox="0 0 100 50" aria-hidden="true"><path id="mouth" d="M5 15 Q50 45 95 15"/><circle id="knob" cx="62" cy="27" r="9"/></svg></span>
+        <span class="bubble" id="bubble" aria-live="polite">Hi! I'm Lumi. I'm made of switches.</span>
+      </div>
+    </div>
+  </header>
+  <section class="stage" id="cast">
+    <div class="cast-head"><h2>Meet the cast.</h2>
+      <div class="scenes" role="tablist" aria-label="Scenes"><button class="chunky" role="tab" aria-selected="true">Overview</button><button class="chunky" role="tab" aria-selected="false">Data</button><button class="chunky" role="tab" aria-selected="false">Planning</button><button class="chunky" role="tab" aria-selected="false">Assistant</button></div></div>
+    <div data-bento></div>
+  </section>
+  <section class="quotes" aria-label="What the components say">
+    <figure class="quote chunky"><p>"I stretch when you press me. It's a whole thing."</p><figcaption class="who"><span class="mini"></span><small>Switch · Selection</small></figcaption></figure>
+    <figure class="quote chunky"><p>"I land where you click, then settle like I meant it."</p><figcaption class="who"><span class="mini"></span><small>Slider · Inputs</small></figcaption></figure>
+    <figure class="quote chunky"><p>"I wear macOS on Mondays and GNOME on weekends."</p><figcaption class="who"><span class="mini"></span><small>Look · System</small></figcaption></figure>
+    <figure class="quote chunky"><p>"Zero webviews. I'm all GPU, all the way down."</p><figcaption class="who"><span class="mini"></span><small>Renderer · wgpu</small></figcaption></figure>
+  </section>
+</main>
+<footer>lumen. MIT or Apache-2.0. Concept B: Anthropomorphic.</footer>
+<script type="module">
+import { init, motionScale } from "./shared.js";
+init();
+document.querySelectorAll(".bento .lm-card, .scenes button").forEach((c) => c.classList.add("chunky"));
+document.addEventListener("lumen:settings", () => document.querySelectorAll(".bento .lm-card").forEach((c) => c.classList.add("chunky")));
+
+const lumi = document.getElementById("lumi"), pupils = lumi.querySelectorAll(".eye i");
+const mouth = document.getElementById("mouth"), knob = document.getElementById("knob"), bubble = document.getElementById("bubble");
+// Pupils track the pointer.
+addEventListener("pointermove", (e) => {
+  if (!motionScale()) return;
+  pupils.forEach((p) => {
+    const r = p.parentElement.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const a = Math.atan2(e.clientY - cy, e.clientX - cx), d = Math.min(1, Math.hypot(e.clientX - cx, e.clientY - cy) / 300);
+    p.style.transform = `translate(${Math.cos(a) * d * r.width * 0.22}px, ${Math.sin(a) * d * r.height * 0.24}px)`;
+  });
+});
+// Blinks at random.
+(function blink() { setTimeout(() => { lumi.classList.add("blink"); setTimeout(() => lumi.classList.remove("blink"), 140); blink(); }, 2200 + Math.random() * 3000); })();
+// The mouth is a slider: its curve and knob react to what you hover.
+const moods = { happy: ["M5 15 Q50 45 95 15", 62, 27], grin: ["M5 8 Q50 62 95 8", 50, 35], o: ["M35 22 Q50 40 65 22", 50, 25], flat: ["M10 25 Q50 26 90 25", 30, 25] };
+function mood(m) { const [d, x, y] = moods[m]; mouth.setAttribute("d", d); knob.setAttribute("cx", x); knob.setAttribute("cy", y); }
+function say(t) { if (bubble.textContent === t) return; bubble.classList.add("swap"); setTimeout(() => { bubble.textContent = t; bubble.classList.remove("swap"); }, 160 * (motionScale() ? 1 / motionScale() : 0)); }
+document.querySelectorAll("[data-say]").forEach((el) => {
+  el.addEventListener("pointerenter", () => { mood("grin"); say(el.dataset.say); });
+  el.addEventListener("focus", () => { mood("grin"); say(el.dataset.say); });
+  el.addEventListener("pointerleave", () => mood("happy"));
+});
+lumi.addEventListener("click", () => { mood("o"); say("Hey, that tickles!"); setTimeout(() => mood("happy"), 900); });
+document.addEventListener("click", (e) => {
+  const sw = e.target.closest(".lm-switch");
+  if (sw) { const on = sw.getAttribute("aria-checked") === "true"; mood(on ? "grin" : "flat"); say(on ? `${sw.getAttribute("aria-label")} on. Lovely.` : `${sw.getAttribute("aria-label")} off. Resting.`); }
+  if (e.target.closest("[data-toast]")) { mood("grin"); say("New runner! Welcome aboard."); }
+});
+let wasDark = document.documentElement.classList.contains("t-dark");
+document.addEventListener("lumen:settings", (e) => {
+  const dark = document.documentElement.classList.contains("t-dark");
+  if (dark === wasDark) return say("Ooh, a new outfit!"); wasDark = dark;
+  say(dark ? "Night mode. I'm getting sleepy…" : "Good morning! Bright and ready.");
+});
+document.querySelectorAll(".scenes button").forEach((b) => b.addEventListener("click", () => document.querySelectorAll(".scenes button").forEach((x) => x.setAttribute("aria-selected", String(x === b)))));
+</script>
+</body>
+</html>

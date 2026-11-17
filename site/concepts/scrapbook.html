@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lumen · Scrapbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Permanent+Marker&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="widgets.css">
+<style>
+/* SCRAPBOOK: lumen's maker journal. Real renders as polaroids, washi tape,
+   label-maker strips and sticky notes on warm paper. Everything on the
+   collage can be picked up and moved. Imagery stance: only real lumen renders,
+   photographed as prints; decoration is paper, tape and ink only.
+   Don'ts: no clip-art, no emoji, no fake photos, no tilt on text people read
+   at length, tape colors never become UI colors. */
+.t-light, :root:not(.t-dark) {
+  --c-bg: #efe6d6; --paper: #f8f2e6; --c-surface: #fffdf8; --c-surface-2: #f0e9dc; --c-field: #fff; --c-thumb: #fff;
+  --c-line: rgb(60 45 25 / 0.12); --c-line-2: rgb(60 45 25 / 0.22); --c-text: #2a2118; --c-text-2: #6e604f; --c-text-3: #a29482; --c-hover: #f4ecdf;
+  --c-on-accent: #fff; --c-up: #2e7d4a; --c-series-2: #e07a4f; --c-series-3: #5a9a86; --c-series-4: #d9a82b;
+  --c-shadow: 0 1px 1px rgb(60 40 10 / 0.12), 0 8px 18px -6px rgb(60 40 10 / 0.3);
+  --tape-1: rgb(242 196 92 / 0.78); --tape-2: rgb(150 205 190 / 0.78); --tape-3: rgb(238 160 170 / 0.75); --note: #fbe68b; --dymo: #1f1f22; --dymo-ink: #f4f4f4;
+  color-scheme: light;
+}
+.t-dark {
+  --c-bg: #2a231d; --paper: #342b24; --c-surface: #3b322a; --c-surface-2: #4a3f35; --c-field: #2f2721; --c-thumb: #5a4d41;
+  --c-line: rgb(255 240 220 / 0.08); --c-line-2: rgb(255 240 220 / 0.16); --c-text: #f6ecdf; --c-text-2: #c4b4a0; --c-text-3: #8f806e; --c-hover: #43392f;
+  --c-on-accent: #fff; --c-up: #8ad7a0; --c-series-2: #f09a72; --c-series-3: #7cc2ad; --c-series-4: #f0c45a;
+  --c-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 10px 22px -6px rgb(0 0 0 / 0.6);
+  --tape-1: rgb(214 168 70 / 0.6); --tape-2: rgb(110 170 155 / 0.6); --tape-3: rgb(200 120 132 / 0.6); --note: #c9ad4a; --dymo: #b8322c; --dymo-ink: #fff3ee;
+  color-scheme: dark;
+}
+:root { --font-ui: "Inter", system-ui, sans-serif; --font-display: "Fraunces", Georgia, serif; --marker: "Permanent Marker", cursive; }
+body { color: var(--c-text); font: 400 16px/1.55 var(--font-ui); overflow-x: hidden; background: var(--c-bg); }
+/* paper fibre: two layered radial noises, no image files */
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.5;
+  background: radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.25), transparent 40%), radial-gradient(circle at 80% 70%, rgb(120 90 40 / 0.08), transparent 45%); }
+a { color: inherit; text-decoration: none; }
+.tape { position: absolute; width: 96px; height: 26px; background: var(--tape-1); left: 50%; top: -12px; translate: -50% 0; rotate: -3deg; z-index: 2;
+  -webkit-mask: linear-gradient(90deg, transparent 0 2px, #000 2px calc(100% - 2px), transparent 0), repeating-linear-gradient(transparent 0 3px, #000 3px 6px);
+  mask: conic-gradient(#000 0 0); clip-path: polygon(0 8%, 4% 0, 9% 10%, 14% 0, 100% 0, 97% 50%, 100% 100%, 92% 92%, 85% 100%, 0 100%, 3% 50%); }
+.tape.b { background: var(--tape-2); rotate: 4deg; } .tape.c { background: var(--tape-3); rotate: -6deg; }
+
+nav.top { max-width: 1240px; margin: 0 auto; padding: 20px 16px; display: flex; align-items: center; gap: 28px; }
+.brand { display: inline-flex; align-items: center; gap: 2px; padding: 4px 14px; background: var(--dymo); color: var(--dymo-ink); font: 700 20px var(--mono); letter-spacing: 0.18em; text-transform: uppercase; rotate: -2deg; border-radius: 3px;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.5), 0 -1px 0 rgb(255 255 255 / 0.15); box-shadow: var(--c-shadow); }
+.links { display: flex; gap: 6px; font-weight: 500; font-size: 15px; }
+.links a { padding: 6px 12px; border-radius: 99px; }
+.links a[aria-current] { background: var(--note); color: #2a2118; rotate: -2deg; box-shadow: var(--c-shadow); }
+@media (hover: hover) { .links a:not([aria-current]):hover { background: var(--c-hover); } }
+.end { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.ib { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--c-surface); display: grid; place-items: center; cursor: pointer; color: var(--c-text); box-shadow: var(--c-shadow); transition: rotate var(--d) var(--spring); }
+@media (hover: hover) { .ib:hover { rotate: -8deg; } }
+.ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.search { height: 40px; padding: 0 14px; border: 0; border-radius: 99px; background: var(--c-surface); color: var(--c-text-3); box-shadow: var(--c-shadow); display: flex; gap: 28px; align-items: center; cursor: pointer; }
+.search kbd { font: 12px var(--mono); }
+@media (max-width: 900px) { .links, .search { display: none; } }
+
+.hero { max-width: 1240px; margin: 0 auto; padding: 48px 16px 40px; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 40px; align-items: center; }
+@media (max-width: 960px) { .hero { grid-template-columns: 1fr; } }
+.kicker { font: 22px var(--marker); color: var(--accent); rotate: -2deg; display: inline-block; }
+h1 { margin: 8px 0 0; font: 500 clamp(52px, 6.8vw, 96px)/0.95 var(--font-display); letter-spacing: -0.035em; font-variation-settings: "opsz" 144; text-wrap: balance; }
+h1 i { font-style: italic; position: relative; z-index: 0; }
+h1 i::after { content: ""; position: absolute; z-index: -1; left: -0.08em; right: -0.08em; bottom: 0.08em; height: 0.36em; background: var(--tape-1); rotate: -1.5deg; }
+.lede { font-size: 18px; color: var(--c-text-2); max-width: 470px; margin: 22px 0 0; text-wrap: pretty; }
+.ctas { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; align-items: center; }
+.cta { height: 50px; padding: 0 22px; border-radius: 99px; display: inline-flex; align-items: center; font-weight: 600; background: var(--c-surface); box-shadow: var(--c-shadow); transition: transform var(--d) var(--spring); }
+.cta.main { background: var(--accent); color: var(--c-on-accent); }
+@media (hover: hover) { .cta:hover { transform: rotate(-2deg) translateY(-2px); } }
+.ticket { margin-top: 26px; display: inline-flex; align-items: stretch; background: var(--c-surface); box-shadow: var(--c-shadow); rotate: 1deg; font: 14px var(--mono);
+  -webkit-mask: radial-gradient(circle 7px at 0 50%, #0000 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 7px at 100% 50%, #0000 98%, #000) right / 51% 100% no-repeat; }
+.ticket span { padding: 12px 16px 12px 20px; border-right: 2px dashed var(--c-line-2); }
+.ticket button { border: 0; background: none; padding: 0 18px; font: 16px var(--marker); color: var(--accent); cursor: pointer; }
+
+/* collage: draggable prints */
+.collage { position: relative; height: 540px; touch-action: none; }
+@media (max-width: 960px) { .collage { height: 480px; } }
+.scrap { position: absolute; cursor: grab; user-select: none; transition: box-shadow var(--d) var(--ease), scale var(--d) var(--spring), rotate var(--d) var(--spring); }
+.scrap.drag { cursor: grabbing; scale: 1.04; z-index: 20 !important; box-shadow: 0 30px 40px -12px rgb(40 25 5 / 0.45); }
+.polaroid { padding: 10px 10px 42px; background: #fdfdfb; box-shadow: var(--c-shadow); width: 300px; }
+.t-dark .polaroid { background: #ece6db; }
+.polaroid img { display: block; width: 100%; pointer-events: none; outline: 1px solid rgb(0 0 0 / 0.08); }
+.polaroid figcaption { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font: 19px var(--marker); color: #3a2f22; }
+.sticky { width: 190px; padding: 20px 18px; background: var(--note); color: #2a2118; font: 20px/1.15 var(--marker); box-shadow: var(--c-shadow); }
+.dymo { padding: 6px 16px; background: var(--dymo); color: var(--dymo-ink); font: 700 17px var(--mono); letter-spacing: 0.16em; text-transform: uppercase; border-radius: 3px; box-shadow: var(--c-shadow); }
+.stamp { width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--accent); color: var(--accent); display: grid; place-content: center; text-align: center; font: 15px/1.1 var(--marker); rotate: 12deg; opacity: 0.85; }
+.stamp b { font: 700 34px/1 var(--font-display); }
+.hint { position: absolute; right: 0; bottom: -6px; font: 18px var(--marker); color: var(--c-text-3); }
+
+.stage { max-width: 1240px; margin: 0 auto; padding: 60px 16px 80px; }
+.sec-head { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 36px; }
+h2 { margin: 0; font: 500 clamp(40px, 5vw, 68px)/1 var(--font-display); letter-spacing: -0.03em; }
+.scenes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.scenes button { border: 0; padding: 7px 14px; font: 600 14px var(--font-ui); background: var(--c-surface); box-shadow: var(--c-shadow); cursor: pointer; border-radius: 4px; }
+.scenes button:nth-child(odd) { rotate: -1.5deg; } .scenes button:nth-child(even) { rotate: 1.5deg; }
+.scenes button[aria-selected="true"] { background: var(--dymo); color: var(--dymo-ink); font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; font-size: 12px; }
+.bento { gap: 28px; }
+.bento .lm-card { border: 0; box-shadow: var(--c-shadow); border-radius: 4px; position: relative; overflow: visible; transition: rotate var(--d) var(--spring), translate var(--d) var(--spring); }
+.bento .lm-card:nth-child(1) { rotate: -1deg; } .bento .lm-card:nth-child(2) { rotate: 1.2deg; } .bento .lm-card:nth-child(3) { rotate: -0.6deg; }
+.bento .lm-card:nth-child(4) { rotate: 0.8deg; } .bento .lm-card:nth-child(5) { rotate: -1.1deg; } .bento .lm-card:nth-child(6) { rotate: 0.5deg; } .bento .lm-card:nth-child(7) { rotate: -0.7deg; }
+@media (hover: hover) { .bento .lm-card:hover { rotate: 0deg; translate: 0 -4px; } }
+.bento .lm-card .tape { top: -13px; }
+.bento .lm-card h3 { font: 500 22px/1.1 var(--font-display); letter-spacing: -0.01em; }
+.bento .lm-num b { font: 500 40px/1 var(--font-display); }
+.bento .lm-donut b { font: 500 26px/1 var(--font-display); }
+.bento .lm-card::after { content: attr(data-tag); position: absolute; bottom: -10px; right: 14px; padding: 2px 10px; background: var(--dymo); color: var(--dymo-ink); font: 700 11px var(--mono); letter-spacing: 0.16em; text-transform: uppercase; border-radius: 2px; rotate: 2deg; }
+.split .bento { background: var(--paper); }
+.lm-toast { border-radius: 4px; border: 0; rotate: -1deg; }
+.lm-toast::before { content: ""; position: absolute; left: 50%; top: -10px; width: 70px; height: 20px; translate: -50% 0; background: var(--tape-2); rotate: 3deg; }
+.sp { border-radius: 6px; border: 0; }
+
+.apps { max-width: 1240px; margin: 0 auto; padding: 40px 16px 120px; }
+.shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 36px; }
+@media (max-width: 900px) { .shelf { grid-template-columns: 1fr; } }
+.app { position: relative; background: var(--c-surface); padding: 12px 12px 18px; box-shadow: var(--c-shadow); transition: rotate var(--d) var(--spring); }
+.app:nth-child(1) { rotate: -1.4deg; } .app:nth-child(2) { rotate: 1deg; } .app:nth-child(3) { rotate: -0.6deg; }
+@media (hover: hover) { .app:hover { rotate: 0deg; } }
+.app img { width: 100%; display: block; outline: 1px solid var(--c-line); }
+.app h3 { margin: 14px 4px 2px; font: 500 24px var(--font-display); }
+.app p { margin: 0 4px; color: var(--c-text-2); font-size: 14px; }
+footer { text-align: center; padding: 40px 16px 56px; font: 20px var(--marker); color: var(--c-text-3); }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="top" aria-label="Main">
+  <a class="brand" href="#">lumen</a>
+  <div class="links"><a href="#" aria-current="page">Overview</a><a href="#">Guide</a><a href="#">Components</a><a href="#">Showcase</a><a href="#">Apps</a><a href="#">Changelog</a></div>
+  <div class="end">
+    <button class="search" type="button">Search the journal<kbd>⌘K</kbd></button>
+    <button class="ib" id="theme" type="button" aria-label="Switch theme"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+    <button class="ib" id="settings" type="button" aria-label="Appearance settings"><svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></button>
+  </div>
+</nav>
+<main id="main">
+  <header class="hero">
+    <div>
+      <span class="kicker">vol. 0.4, collected so far</span>
+      <h1>A Rust UI kit, <i>made by hand.</i></h1>
+      <p class="lede">Every component in lumen is drawn by lumen: the type, the springs, the charts. Here is the journal of what it can do, pasted in as it ships.</p>
+      <div class="ctas"><a class="cta main" href="#">Get started →</a><a class="cta" href="#">Browse components</a></div>
+      <div class="ticket"><span>$ cargo add lumen</span><button type="button" data-copy="cargo add lumen">copy</button></div>
+    </div>
+    <div class="collage" id="collage" aria-label="Collage of real lumen renders. Drag to rearrange.">
+      <figure class="scrap polaroid" style="left:2%;top:4%;rotate:-5deg;z-index:2;width:330px"><span class="tape" aria-hidden="true"></span><img src="../img/hero-light.png" data-l="../img/hero-light.png" data-d="../img/hero-dark.png" alt="A lumen dashboard with stat cards, a revenue chart and a donut"><figcaption>the dashboard, take 3</figcaption></figure>
+      <figure class="scrap polaroid" style="left:46%;top:0;rotate:4deg;z-index:3;width:250px"><span class="tape b" aria-hidden="true"></span><img src="../img/thumb-date-light.png" data-l="../img/thumb-date-light.png" data-d="../img/thumb-date-dark.png" alt="lumen date picker"><figcaption>date picker!</figcaption></figure>
+      <figure class="scrap polaroid" style="left:30%;top:46%;rotate:-2deg;z-index:4;width:280px"><span class="tape c" aria-hidden="true"></span><img src="../img/vault-light.png" data-l="../img/vault-light.png" data-d="../img/vault-dark.png" alt="A password manager app built with lumen"><figcaption>vault (coming soon)</figcaption></figure>
+      <div class="scrap sticky" style="left:72%;top:46%;rotate:6deg;z-index:5">springs on every switch. try pressing one ↓</div>
+      <div class="scrap dymo" style="left:4%;top:74%;rotate:-4deg;z-index:6">zero webviews</div>
+      <div class="scrap stamp" style="left:78%;top:4%;z-index:1" aria-label="Four looks"><b>4</b>looks<br>one app</div>
+      <span class="hint" aria-hidden="true">← drag things around</span>
+    </div>
+  </header>
+  <section class="stage">
+    <div class="sec-head"><h2>Pasted in this week.</h2>
+      <div class="scenes" role="tablist" aria-label="Scenes"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">Data</button><button role="tab" aria-selected="false">Planning</button><button role="tab" aria-selected="false">Assistant</button></div></div>
+    <div data-bento></div>
+  </section>
+  <section class="apps">
+    <h2>Things people built.</h2>
+    <div class="shelf">
+      <article class="app"><span class="tape" aria-hidden="true"></span><img src="../img/hero-light.png" data-l="../img/hero-light.png" data-d="../img/hero-dark.png" alt=""><h3>Northwind</h3><p>Analytics dashboard: KPIs, charts, date ranges.</p></article>
+      <article class="app"><span class="tape b" aria-hidden="true"></span><img src="../img/vault-light.png" data-l="../img/vault-light.png" data-d="../img/vault-dark.png" alt=""><h3>Vault</h3><p>A password manager, built entirely with lumen.</p></article>
+      <article class="app"><span class="tape c" aria-hidden="true"></span><img src="../img/menu-light.png" data-l="../img/menu-light.png" data-d="../img/menu-dark.png" alt=""><h3>Gallery</h3><p>Every component on one page, every look.</p></article>
+    </div>
+  </section>
+</main>
+<footer>lumen · MIT or Apache-2.0 · concept D: scrapbook</footer>
+<script type="module">
+import { init } from "./shared.js";
+init();
+const tapes = ["", " b", " c"];
+const decorate = () => document.querySelectorAll(".bento .lm-card").forEach((c, i) => { if (!c.querySelector(".tape")) c.insertAdjacentHTML("afterbegin", `<span class="tape${tapes[i % 3]}" aria-hidden="true"></span>`); });
+const swapImgs = () => { const d = document.documentElement.classList.contains("t-dark"); document.querySelectorAll("img[data-l]").forEach((i) => i.src = d ? i.dataset.d : i.dataset.l); };
+decorate(); swapImgs();
+document.addEventListener("lumen:settings", () => { decorate(); swapImgs(); });
+
+// Pick up and move anything on the collage.
+let z = 10;
+document.querySelectorAll(".scrap").forEach((el) => {
+  el.addEventListener("pointerdown", (e) => {
+    const box = el.parentElement.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const ox = e.clientX - r.left, oy = e.clientY - r.top;
+    el.setPointerCapture(e.pointerId); el.classList.add("drag"); el.style.zIndex = ++z;
+    const move = (ev) => { el.style.left = ev.clientX - box.left - ox + "px"; el.style.top = ev.clientY - box.top - oy + "px"; };
+    const up = () => { el.classList.remove("drag"); el.style.rotate = (Math.random() * 10 - 5).toFixed(1) + "deg"; el.removeEventListener("pointermove", move); };
+    el.addEventListener("pointermove", move); el.addEventListener("pointerup", up, { once: true });
+  });
+});
+document.querySelectorAll(".scenes button").forEach((b) => b.addEventListener("click", () => document.querySelectorAll(".scenes button").forEach((x) => x.setAttribute("aria-selected", String(x === b)))));
+</script>
+</body>
+</html>

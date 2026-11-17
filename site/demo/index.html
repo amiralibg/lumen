@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>lumen demo</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #F9FAFB; }
-    html.dark, html.dark body { background: #0B0C0F; }
-    html.embed, html.embed body { background: #FFFFFF; }
-    html.embed.dark, html.embed.dark body { background: #121417; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #EEF0F5; }
+    html.dark, html.dark body { background: #07080C; }
+    html.embed, html.embed body { background: #F9FAFC; }
+    html.embed.dark, html.embed.dark body { background: #10121A; }
     canvas#lumen { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
     .err { position: fixed; inset: 0; display: grid; place-items: center; font: 14px/1.5 system-ui, sans-serif; color: #888; padding: 24px; text-align: center; }
   </style>
@@ -16,6 +16,14 @@
     var q = new URLSearchParams(location.search);
     if (q.get("dark") === "1") document.documentElement.classList.add("dark");
     if (q.get("embed") === "1") document.documentElement.classList.add("embed");
+    // Embedded in a page: don't take focus until the visitor interacts,
+    // or focusing the canvas would scroll the host page to this demo.
+    if (window.parent !== window) {
+      var touched = false, focus0 = HTMLElement.prototype.focus;
+      addEventListener("pointerdown", function () { touched = true; }, true);
+      addEventListener("keydown", function () { touched = true; }, true);
+      HTMLElement.prototype.focus = function (o) { if (touched) focus0.call(this, Object.assign({ preventScroll: true }, o)); };
+    }
   </script>
 </head>
 <body>

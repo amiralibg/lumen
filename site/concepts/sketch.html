@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lumen · Conceptual Sketch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="widgets.css">
+<style>
+/* CONCEPTUAL SKETCH: a designer's notebook. Graph paper, graphite ink and
+   one "blue pencil" accent. Every component starts as a pencil sketch and
+   inks itself in; flip on Specs to see the real numbers behind it (radii,
+   spring curves, hit areas). Don'ts: no fills on decoration, no drop shadows,
+   no photos, handwriting only for annotations, never for UI labels. */
+.t-light, :root:not(.t-dark) {
+  --c-bg: #f7f5ef; --grid: rgb(60 90 140 / 0.09); --grid-2: rgb(60 90 140 / 0.16);
+  --c-surface: #fdfcf8; --c-surface-2: #eeebe2; --c-field: #fff; --c-thumb: #fff;
+  --c-line: #2b2a27; --c-line-2: rgb(43 42 39 / 0.5); --c-text: #22211e; --c-text-2: #5f5c55; --c-text-3: #95918a; --c-hover: #f1eee6;
+  --c-on-accent: #fff; --c-up: #2f7d4f; --c-series-2: #c2683a; --c-series-3: #4d8a7a; --c-series-4: #b59a3a;
+  --c-shadow: 4px 4px 0 rgb(43 42 39 / 0.85); --pencil: #5f5c55; --red: #d2453b;
+  color-scheme: light;
+}
+.t-dark {
+  /* blueprint at night */
+  --c-bg: #10223f; --grid: rgb(170 200 255 / 0.08); --grid-2: rgb(170 200 255 / 0.15);
+  --c-surface: #142a4d; --c-surface-2: #1c3660; --c-field: #10223f; --c-thumb: #2a4a7c;
+  --c-line: #d6e4ff; --c-line-2: rgb(214 228 255 / 0.45); --c-text: #eef4ff; --c-text-2: #a9bde0; --c-text-3: #7088b3; --c-hover: #1a3259;
+  --c-on-accent: #fff; --c-up: #7fe0a8; --c-series-2: #ffb07a; --c-series-3: #7fd6c4; --c-series-4: #ffe08a;
+  --c-shadow: 4px 4px 0 rgb(0 0 0 / 0.4); --pencil: #a9bde0; --red: #ff8a7a;
+  color-scheme: dark;
+}
+:root { --font-ui: "Inter", system-ui, sans-serif; --font-display: "Instrument Serif", Georgia, serif; --hand: "Caveat", cursive; }
+body { color: var(--c-text); font: 400 16px/1.55 var(--font-ui); overflow-x: hidden;
+  background: var(--c-bg) linear-gradient(var(--grid-2) 1px, transparent 1px) 0 0 / 120px 120px,
+              linear-gradient(90deg, var(--grid-2) 1px, transparent 1px) 0 0 / 120px 120px;
+  background-color: var(--c-bg); }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 24px 24px; }
+a { color: inherit; text-decoration: none; }
+svg.defs { position: absolute; width: 0; height: 0; }
+.rough { filter: url(#rough); }
+
+nav.top { max-width: 1240px; margin: 0 auto; padding: 18px 16px; display: flex; align-items: center; gap: 28px; position: sticky; top: 0; z-index: 50; background: color-mix(in oklab, var(--c-bg) 88%, transparent); backdrop-filter: blur(6px); }
+nav.top::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; background: var(--c-line); filter: url(#rough); opacity: 0.8; }
+.brand { display: flex; align-items: center; gap: 10px; font: 400 30px var(--font-display); letter-spacing: -0.01em; }
+.brand svg { width: 30px; height: 30px; }
+.brand svg path, .brand svg rect { fill: none; stroke: var(--c-line); stroke-width: 3; stroke-linecap: round; }
+.brand svg circle { fill: var(--accent); }
+.links { display: flex; gap: 22px; font-size: 15px; color: var(--c-text-2); }
+.links a { position: relative; }
+.links a[aria-current] { color: var(--c-text); }
+.links a[aria-current]::after { content: ""; position: absolute; left: -4px; right: -4px; bottom: -6px; height: 8px; background: no-repeat center / 100% 100% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 10' preserveAspectRatio='none'%3E%3Cpath d='M2 6 Q30 2 52 5 T98 4' fill='none' stroke='%233b82f6' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.end { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.ib { width: 38px; height: 38px; border: 0; background: none; display: grid; place-items: center; cursor: pointer; color: var(--c-text); position: relative; }
+.ib::before { content: ""; position: absolute; inset: 2px; border: 1.5px solid var(--c-line); border-radius: 10px; filter: url(#rough); }
+.ib svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.search { height: 38px; padding: 0 12px; display: flex; gap: 30px; align-items: center; border: 0; background: var(--c-surface); color: var(--c-text-3); cursor: pointer; position: relative; font-size: 14px; }
+.search::before { content: ""; position: absolute; inset: 0; border: 1.5px solid var(--c-line); border-radius: 10px; filter: url(#rough); }
+.search kbd { font: 12px var(--mono); }
+.specs-toggle { display: flex; align-items: center; gap: 8px; font: 700 20px var(--hand); color: var(--red); cursor: pointer; border: 0; background: none; }
+.specs-toggle i { width: 34px; height: 20px; border-radius: 99px; border: 1.5px solid var(--red); position: relative; }
+.specs-toggle i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--red); transition: transform var(--d) var(--spring); }
+.specs-toggle[aria-pressed="true"] i::after { transform: translateX(14px); }
+@media (max-width: 900px) { .links, .search { display: none; } }
+
+.hero { max-width: 1240px; margin: 0 auto; padding: 72px 16px 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+@media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+.note { font: 700 22px/1.1 var(--hand); color: var(--accent); transform: rotate(-3deg); display: inline-block; }
+h1 { margin: 10px 0 0; font: 400 clamp(56px, 7.6vw, 112px)/0.92 var(--font-display); letter-spacing: -0.03em; text-wrap: balance; }
+h1 em { font-style: italic; position: relative; white-space: nowrap; }
+h1 em svg { position: absolute; left: -4%; bottom: -0.12em; width: 108%; height: 0.32em; overflow: visible; }
+h1 em path { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: ink calc(900ms * var(--m)) var(--ease) calc(600ms * var(--m)) forwards; }
+@keyframes ink { to { stroke-dashoffset: 0; } }
+.lede { font-size: 18px; color: var(--c-text-2); max-width: 500px; margin: 24px 0 0; text-wrap: pretty; }
+.ctas { display: flex; gap: 14px; margin-top: 32px; flex-wrap: wrap; align-items: center; }
+.cta { height: 48px; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; font-weight: 500; position: relative; }
+.cta::before { content: ""; position: absolute; inset: 0; border: 2px solid var(--c-line); border-radius: 12px; filter: url(#rough); transition: transform var(--d-fast) var(--spring); }
+.cta.main { color: var(--c-on-accent); }
+.cta.main::before { background: var(--accent); border-color: var(--c-line); }
+.cta span { position: relative; }
+@media (hover: hover) { .cta:hover::before { transform: rotate(-1deg) scale(1.03); } }
+.clone { margin-top: 22px; display: inline-flex; gap: 12px; align-items: center; font: 14px var(--mono); color: var(--c-text-2); }
+.clone button { font: 700 18px var(--hand); color: var(--accent); background: none; border: 0; cursor: pointer; }
+
+/* The sketch: a pencil wireframe that inks into a real dialog. */
+.board { position: relative; aspect-ratio: 1.1; }
+.board svg.wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wire .s { fill: none; stroke: var(--pencil); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.board.drawn .wire .s { stroke-dashoffset: 0; transition: stroke-dashoffset calc(1400ms * var(--m)) var(--ease); }
+.board.drawn .wire .s:nth-child(2n) { transition-delay: calc(200ms * var(--m)); }
+.board.drawn .wire .s:nth-child(3n) { transition-delay: calc(400ms * var(--m)); }
+.wire .a { stroke: var(--red); }
+.wire text { font: 700 19px var(--hand); fill: var(--red); opacity: 0; transition: opacity var(--d-slow) var(--ease) calc(1200ms * var(--m)); }
+.board.drawn .wire text { opacity: 1; }
+.real { position: absolute; left: 12.3%; top: 15.5%; width: 75.7%; height: 68.75%; align-content: start; padding: 22px; border-radius: 14px; background: var(--c-surface); border: 1.5px solid var(--c-line); box-shadow: var(--c-shadow);
+  display: flex; flex-direction: column; gap: 14px; opacity: 0; transform: scale(0.97) rotate(-0.6deg); transition: opacity var(--d-slow) var(--ease), transform var(--d-slow) var(--spring); }
+.board.inked .real { opacity: 1; transform: none; }
+.board.inked .wire .s:not(.a) { opacity: 0.25; transition: opacity var(--d-slow) var(--ease); }
+.real .lm-actions { margin-top: auto; align-self: end; }
+.real h3 { margin: 0; font: 600 18px var(--font-ui); letter-spacing: -0.01em; }
+.real p { margin: -8px 0 0; color: var(--c-text-2); font-size: 14px; }
+.ink-btn { position: absolute; right: 0; bottom: -6px; font: 700 22px var(--hand); color: var(--accent); background: none; border: 0; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.ink-btn svg { width: 46px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.stage { max-width: 1240px; margin: 0 auto; padding: 40px 16px 80px; }
+.sec-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; margin-bottom: 28px; }
+h2 { margin: 0; font: 400 clamp(40px, 5vw, 72px)/1 var(--font-display); letter-spacing: -0.02em; }
+.sec-head .note { font-size: 24px; }
+.scenes { display: flex; gap: 18px; margin-left: auto; font-size: 15px; }
+.scenes button { border: 0; background: none; color: var(--c-text-2); cursor: pointer; padding: 4px 0; position: relative; }
+.scenes button[aria-selected="true"] { color: var(--c-text); }
+.scenes button[aria-selected="true"]::after { content: ""; position: absolute; inset: -4px -10px; border: 1.5px solid var(--accent); border-radius: 50%; filter: url(#rough); }
+.bento .lm-card { border: 0; position: relative; background: var(--c-surface); }
+.bento .lm-card::after { content: ""; position: absolute; inset: 0; border: 1.6px solid var(--c-line); border-radius: inherit; filter: url(#rough); pointer-events: none; }
+.bento .lm-card h3 { font: 400 26px/1 var(--font-display); letter-spacing: -0.01em; }
+.bento .lm-num b { font: 400 44px/1 var(--font-display); letter-spacing: -0.02em; }
+.bento .lm-donut b { font: 400 30px/1 var(--font-display); }
+/* Specs mode: redline the real numbers. */
+.bento .lm-card::before { content: attr(data-spec); position: absolute; z-index: 2; top: -12px; left: 14px; padding: 0 6px; font: 700 18px/1 var(--hand); color: var(--red); background: var(--c-bg); opacity: 0; transform: translateY(4px) rotate(-2deg); transition: opacity var(--d) var(--ease), transform var(--d) var(--spring); white-space: nowrap; }
+.specs .bento .lm-card::before { opacity: 1; transform: rotate(-2deg); }
+.specs .bento .lm-card { outline: 1px dashed color-mix(in oklab, var(--red) 70%, transparent); outline-offset: calc(var(--pad) * -1); }
+.specs .bento .lm-btn, .specs .bento .lm-switch, .specs .bento .lm-field input, .specs .bento .lm-field select, .specs .bento .lm-segmented { outline: 1px dashed var(--red); outline-offset: 3px; }
+.specs .bento .lm-spark { background: repeating-linear-gradient(90deg, transparent 0 19px, color-mix(in oklab, var(--red) 25%, transparent) 19px 20px); }
+.lm-toast { border-radius: 12px; box-shadow: var(--c-shadow); border: 1.5px solid var(--c-line); }
+.sp { border: 1.5px solid var(--c-line); box-shadow: var(--c-shadow); border-radius: 14px; }
+
+.process { max-width: 1240px; margin: 0 auto; padding: 40px 16px 120px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+@media (max-width: 900px) { .process { grid-template-columns: 1fr; } }
+.step { position: relative; padding-top: 18px; }
+.step b { font: 700 54px/1 var(--hand); color: var(--accent); }
+.step h3 { margin: 6px 0 8px; font: 400 32px/1.05 var(--font-display); }
+.step p { margin: 0; color: var(--c-text-2); }
+.step pre { margin: 16px 0 0; padding: 14px 16px; font: 13px/1.6 var(--mono); background: var(--c-surface); position: relative; overflow-x: auto; border-radius: 10px; }
+.step pre::after { content: ""; position: absolute; inset: 0; border: 1.5px solid var(--c-line); border-radius: inherit; filter: url(#rough); pointer-events: none; }
+.k { color: var(--accent); } .str { color: var(--c-series-2); }
+footer { text-align: center; padding: 40px 16px 56px; color: var(--c-text-2); font: 700 22px var(--hand); }
+</style>
+</head>
+<body>
+<svg class="defs" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter></svg>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="top" aria-label="Main">
+  <a class="brand" href="#"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7"/><path d="M11 8v10.5a4.5 4.5 0 0 0 4.5 4.5H22"/><circle cx="22" cy="10" r="3"/></svg>lumen</a>
+  <div class="links"><a href="#" aria-current="page">Overview</a><a href="#">Guide</a><a href="#">Components</a><a href="#">Showcase</a><a href="#">Apps</a><a href="#">Changelog</a></div>
+  <div class="end">
+    <button class="specs-toggle" id="specs" type="button" aria-pressed="false"><i aria-hidden="true"></i>specs</button>
+    <button class="search" type="button">Search<kbd>⌘K</kbd></button>
+    <button class="ib" id="theme" type="button" aria-label="Switch theme"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+    <button class="ib" id="settings" type="button" aria-label="Appearance settings"><svg viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></button>
+  </div>
+</nav>
+<main id="main">
+  <header class="hero">
+    <div>
+      <span class="note">sketch it Monday, ship it Tuesday →</span>
+      <h1>The UI you drew, <em>running.<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7 Q25 1 50 5 T98 4" pathLength="1"/></svg></em></h1>
+      <p class="lede">lumen is a Rust UI kit with considered defaults: 4 px grid, real springs, focus rings that pass contrast. Turn on specs and every number is on the page.</p>
+      <div class="ctas"><a class="cta main" href="#"><span>Get started →</span></a><a class="cta" href="#"><span>Browse components</span></a></div>
+      <div class="clone">$ cargo add lumen <button type="button" data-copy="cargo add lumen">copy</button></div>
+    </div>
+    <div class="board" id="board">
+      <svg class="wire" viewBox="0 0 440 400" aria-hidden="true">
+        <path class="s" pathLength="1" d="M54 66 Q52 64 60 63 L382 62 Q388 63 387 70 L386 330 Q386 336 380 336 L60 337 Q53 336 54 330 Z"/>
+        <path class="s" pathLength="1" d="M80 98 L230 97"/>
+        <path class="s" pathLength="1" d="M80 120 L320 121"/>
+        <path class="s" pathLength="1" d="M80 150 Q79 147 84 147 L356 146 Q361 147 360 152 L360 178 Q360 182 356 182 L84 183 Q80 182 80 178 Z"/>
+        <path class="s" pathLength="1" d="M80 206 L330 206 M80 226 L280 227"/>
+        <path class="s" pathLength="1" d="M80 254 Q80 250 84 250 L320 250"/>
+        <path class="s" pathLength="1" d="M300 290 Q300 286 305 286 L356 286 Q361 286 361 291 L361 312 Q361 316 356 316 L305 316 Q300 316 300 312 Z"/>
+        <path class="s" pathLength="1" d="M222 290 L284 290 L284 315 L222 315 Z"/>
+        <path class="s a" pathLength="1" d="M362 330 Q410 300 404 250"/>
+        <path class="s a" pathLength="1" d="M60 46 L382 46 M60 40 L60 52 M382 40 L382 52"/>
+        <path class="s a" pathLength="1" d="M42 150 L42 182 M36 150 L48 150 M36 182 L48 182"/>
+        <text x="170" y="34">480 pt</text>
+        <text x="12" y="172">36</text>
+        <text x="436" y="236" text-anchor="end">spring 0.3s / 16%</text>
+        <text x="236" y="364">primary: one per view</text>
+      </svg>
+      <div class="real" aria-hidden="true">
+        <h3>Rename project</h3><p>Shown in the sidebar and in shared links.</p>
+        <label class="lm-field"><span>Name</span><input value="Northlight" tabindex="-1"></label>
+        <div class="lm-actions"><button type="button" class="lm-btn ghost" tabindex="-1">Cancel</button><button type="button" class="lm-btn primary" tabindex="-1">Save</button></div>
+      </div>
+      <button class="ink-btn" id="ink" type="button" aria-pressed="false">ink it in<svg viewBox="0 0 46 24"><path d="M2 16 Q20 2 40 12 M33 5 L41 12 L32 17"/></svg></button>
+    </div>
+  </header>
+  <section class="stage">
+    <div class="sec-head"><h2>Every piece, specced.</h2><span class="note">flip "specs" on, top right ↗</span>
+      <div class="scenes" role="tablist" aria-label="Scenes"><button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">Data</button><button role="tab" aria-selected="false">Planning</button><button role="tab" aria-selected="false">Assistant</button></div></div>
+    <div data-bento></div>
+  </section>
+  <section class="process" aria-label="How it works">
+    <div class="step"><b>1.</b><h3>Describe it.</h3><p>Immediate mode: your state is plain Rust, the UI is a function of it.</p>
+      <pre><span class="k">let mut</span> on = <span class="k">true</span>;</pre></div>
+    <div class="step"><b>2.</b><h3>Call a widget.</h3><p>Every widget reads geometry and motion from the current look.</p>
+      <pre>ui.<span class="k">switch</span>(<span class="str">"Wi-Fi"</span>, &amp;<span class="k">mut</span> on);</pre></div>
+    <div class="step"><b>3.</b><h3>Ship everywhere.</h3><p>The same binary-sized app on macOS, Windows, Linux and the web.</p>
+      <pre>cargo run --release</pre></div>
+  </section>
+</main>
+<footer>lumen · MIT or Apache-2.0 · concept C: conceptual sketch</footer>
+<script type="module">
+import { init } from "./shared.js";
+init();
+const specs = {
+  "Inputs": "padding 20 · gap 12 · control 36", "Charts": "stroke 2 · ease (0.2, 0, 0, 1)", "Selection": "knob spring 280ms · bounce 16%",
+  "Dates": "cells 1:1 · range tint 16%", "Layout": "avatar 34 · badge pill",
+};
+const tag = () => document.querySelectorAll(".bento .lm-card").forEach((c) => c.dataset.spec = specs[c.dataset.tag] || "");
+tag(); document.addEventListener("lumen:settings", tag);
+const sb = document.getElementById("specs");
+sb.addEventListener("click", () => { const on = sb.getAttribute("aria-pressed") !== "true"; sb.setAttribute("aria-pressed", String(on)); document.body.classList.toggle("specs", on); });
+
+const board = document.getElementById("board"), ink = document.getElementById("ink");
+new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && board.classList.add("drawn")), { threshold: 0.3 }).observe(board);
+ink.addEventListener("click", () => { const on = !board.classList.contains("inked"); board.classList.toggle("inked", on); ink.setAttribute("aria-pressed", String(on)); ink.firstChild.textContent = on ? "back to pencil" : "ink it in"; });
+setTimeout(() => { if (!board.classList.contains("inked")) ink.click(); }, 2600);
+document.querySelectorAll(".scenes button").forEach((b) => b.addEventListener("click", () => document.querySelectorAll(".scenes button").forEach((x) => x.setAttribute("aria-selected", String(x === b)))));
+</script>
+</body>
+</html>

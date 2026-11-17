@@ -302,6 +302,37 @@ ui.set_accent(Accent::Native); // the OS accent color`,
     options: [["Look::lumen() mac() windows() gnome() native()", ""], [".rounded(f) .density(Density) .text_scale(s) .motion(m) .bundled_fonts()", ""], ["ui.override_color(mode, token, color)", "Replace any token."]],
     keys: [],
   },
+  {
+    slug: "chips", name: "Filter chips", group: "Selection", demo: "chips",
+    summary: "Pills that toggle. When one turns on it tints with the accent and a check springs in ahead of the label, pushing the text over.",
+    code: `for (i, label) in ["arm64", "gpu", "docker"].iter().enumerate() {
+    ui.chip(label, &mut labels[i]);
+}`,
+    options: [["ui.chip(label, &mut bool) -> Response", "Press squashes the pill to 95%; the check uses the bouncy spring."]],
+    keys: [["Space / Enter", "Toggle"], ["Tab", "Next chip"]],
+  },
+  {
+    slug: "toggle-group", name: "Toggle group", group: "Selection", demo: "toggle-group",
+    summary: "Equal cells where one is chosen, like time slots or alignment. The choice fills with the accent and arrow keys move between cells.",
+    code: `ui.toggle_group("slots", &mut slot, &[(0, "09:00"), (1, "11:30"), (2, "14:00")]);`,
+    options: [["ui.toggle_group(key, &mut T, &[(T, &str)])", "Cells share the row width. Uses the small control height from the look."]],
+    keys: [["← →", "Move between cells"], ["Space / Enter", "Choose"]],
+  },
+  {
+    slug: "stepper", name: "Stepper", group: "Inputs", demo: "stepper",
+    summary: "A whole-number field with − and + buttons. The number rolls up or down the way it moved, and the buttons disable at the limits.",
+    code: `ui.stepper("jobs", &mut jobs, 1, 16);`,
+    options: [["ui.stepper(key, &mut i64, min, max) -> Response", "changed() is true on the frame the value moves."]],
+    keys: [["↑ ↓", "Step while a button has focus"], ["Space / Enter", "Press the focused button"]],
+  },
+  {
+    slug: "avatar", name: "Avatar", group: "Layout and surfaces", demo: "avatar",
+    summary: "Initials on a tinted circle with an optional presence dot, and overlapping groups with a +n count.",
+    code: `ui.avatar("JB", 0, 34.0, Some(true)); // online
+ui.avatar_group(&["JB", "PN", "TR", "LF", "SW"], 4, 32.0);`,
+    options: [["ui.avatar(initials, tone, size, presence)", "Tone picks a chart series color. presence: Some(true) online, Some(false) away."], ["ui.avatar_group(&[&str], max, size)", "Each avatar is ringed in the surface color."]],
+    keys: [],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -508,6 +539,10 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-17", items: [
+    "Ethereal: the Lumen look takes the site's night-sky palette, 36 px controls, 16 px glass cards with a light top edge and a pointer-following accent glow.",
+    "New: filter chips, stepper, toggle group, avatar and avatar group.",
+    "Motion: lines and sparklines draw themselves in and their end dot pops; select rows arrive in sequence, the check springs in, and a new value rolls into the trigger.",
+    "Slider can fill its container (.width(f32::INFINITY)).",
     "Layers: interactive overlays with hit testing, outside-click and Escape dismissal.",
     "Popover, menu, select, dialog, toast, tabs, radio, progress, spinner, badge and status.",
     "Calendar, range calendar, date picker and date range picker; lumen::Date.",

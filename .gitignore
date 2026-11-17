@@ -3,3 +3,4 @@ target/
 *.png
 !docs/**/*.png
 .DS_Store
+!site/img/*.png

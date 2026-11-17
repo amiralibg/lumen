@@ -26,4 +26,17 @@ shot thumb-menu menu 640x440 --embed --open
 shot thumb-dialog dialog 640x440 --embed --open
 for l in lumen mac windows gnome; do shot "look-$l" looks 760x440 --look "$l"; done
 wait
+# Posters for every live demo on the site (img/c-<demo>-{light,dark}.png):
+# shown until the WebAssembly demo is ready, and as component card thumbnails.
+shot c-bento bento 1200x760 --scale 1.5
+shot c-hero hero 1120x560 --scale 1.5
+shot c-vault vault 1000x600 --scale 1.5
+shot c-looks looks 960x440 --scale 1.5
+wait
+for d in $("$D" --list | cut -f1); do
+  case "$d" in bento|hero|vault|looks) continue ;; esac
+  case "$d" in menu|dialog|popover|date-picker) extra=--open ;; *) extra= ;; esac
+  shot "c-$d" "$d" 560x350 --embed --scale 2 $extra
+  wait
+done
 ls "$O"
