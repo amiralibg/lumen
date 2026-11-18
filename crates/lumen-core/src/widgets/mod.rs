@@ -46,6 +46,8 @@ pub mod inputs_pro;
 pub mod nav_surfaces;
 pub mod viz_pro;
 pub mod interactive_pro;
+pub mod controls_suite;
+pub mod enterprise_suite;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -94,6 +96,12 @@ pub use viz_pro::{
 };
 pub use interactive_pro::{
     ChecklistStep, CitationSource, CompareSplit, FilterFacet, GridColumn, RotaryKnob,
+};
+pub use controls_suite::{
+    ActionBarOut, DateStripDay, DimensionUnit, MeterSegment, SpeedDialItem, WorldClock,
+};
+pub use enterprise_suite::{
+    AiModelSpec, BulletMetric, ContextSlice, DescPair, HttpMethod, MasonryCard, MetricRow,
 };
 
 use crate::color::Color;

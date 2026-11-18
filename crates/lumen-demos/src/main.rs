@@ -7,13 +7,14 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    vec2, Accent, Align, BarListItem, Candle, CarouselSlide, ChatMessage, ChecklistStep, CitationSource, Color,
-    Command, CommitRow, Currency, Date, DockItem, EditorTab, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire,
-    GridColumn, HistogramMarker, ImageStatus, Justify, KanbanCard, KanbanCol, KpiMetric, KvPair, LogEntry, LogLevel,
-    Look, MentionCandidate, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem, RingSpec, SankeyLink,
-    ScatterPoint, ScatterSeries, ScheduleEvent, Series, Sides, SortDir, TableCell, TableCol, TermLine, TestCase,
-    TextRole, Time, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui,
-    UptimeStatus,
+    vec2, Accent, AiModelSpec, Align, BarListItem, BulletMetric, Candle, CarouselSlide, ChatMessage, ChecklistStep,
+    CitationSource, Color, Command, CommitRow, ContextSlice, Currency, Date, DateStripDay, DescPair, DimensionUnit,
+    DockItem, EditorTab, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker,
+    HttpMethod, ImageStatus, Justify, KanbanCard, KanbanCol, KpiMetric, KvPair, LogEntry, LogLevel, Look, MasonryCard,
+    MentionCandidate, MeterSegment, MetricRow, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem,
+    RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, Series, Sides, SortDir, SpeedDialItem, TableCell,
+    TableCol, TermLine, TestCase, TextRole, Time, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan,
+    TreeNode, TreemapItem, Ui, UptimeStatus, WorldClock,
 };
 
 /// Every demo: url name, title.
@@ -147,6 +148,26 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("compare-slider", "Comparison slider"),
     ("countdown", "Countdown timer"),
     ("checklist-card", "Checklist card"),
+    ("action-bar", "Floating action bar"),
+    ("speed-dial", "Speed dial"),
+    ("numeric-pad", "Numeric keypad"),
+    ("dimension-input", "Dimension input"),
+    ("stacked-meter", "Stacked meter"),
+    ("announcement-bar", "Announcement bar"),
+    ("quantity-picker", "Quantity picker"),
+    ("swatch-picker", "Swatch picker"),
+    ("date-strip", "Date strip"),
+    ("world-clocks", "World clocks"),
+    ("bullet-chart", "Bullet chart"),
+    ("metric-table", "Metric watchlist"),
+    ("ai-model-picker", "AI model picker"),
+    ("context-meter", "Context meter"),
+    ("api-inspector", "API inspector"),
+    ("permission-matrix", "Permission matrix"),
+    ("description-list", "Description list"),
+    ("masonry-grid", "Masonry grid"),
+    ("collapsible-card", "Collapsible card"),
+    ("marquee", "Marquee ticker"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -283,6 +304,24 @@ struct State {
     cd_secs: u32,
     cd_running: bool,
     check_steps: Vec<ChecklistStep>,
+    batch_sel: [bool; 3],
+    sd_open: bool,
+    pin_val: String,
+    pin_masked: bool,
+    dim_w: f32,
+    dim_w_unit: DimensionUnit,
+    dim_side: f32,
+    dim_side_unit: DimensionUnit,
+    ann_open: bool,
+    replica_qty: i64,
+    swatch_idx: usize,
+    strip_day: usize,
+    llm_idx: usize,
+    http_verb: HttpMethod,
+    api_url: String,
+    rbac_grid: Vec<Vec<bool>>,
+    cc_open: [bool; 2],
+    marquee_play: bool,
 }
 
 impl State {
@@ -467,6 +506,29 @@ impl State {
                 ChecklistStep::new("Compile WebGPU demo bundle", "wasm-bindgen release target under site/demo.", "Web", true),
                 ChecklistStep::new("Tag v0.5.0 release branch", "Sign release notes and publish crates.", "Ship", false),
             ],
+            batch_sel: [true, true, false],
+            sd_open: true,
+            pin_val: "482".into(),
+            pin_masked: true,
+            dim_w: 760.0,
+            dim_w_unit: DimensionUnit::Px,
+            dim_side: 24.0,
+            dim_side_unit: DimensionUnit::Percent,
+            ann_open: true,
+            replica_qty: 8,
+            swatch_idx: 1,
+            strip_day: 2,
+            llm_idx: 0,
+            http_verb: HttpMethod::Post,
+            api_url: "https://edge.lumen.dev/v1/deploys/promote".into(),
+            rbac_grid: vec![
+                vec![true, true, false, false],
+                vec![true, false, false, false],
+                vec![true, true, true, false],
+                vec![true, true, true, true],
+            ],
+            cc_open: [true, false],
+            marquee_play: true,
         }
     }
 }
@@ -2452,6 +2514,255 @@ ui.button("Ship release").primary().icon("rocket");
         "checklist-card" => {
             ui.column().fill_width().max_width(520.0).show(|ui| {
                 ui.checklist_card("rc_steps", "v0.5 Release readiness", &mut s.check_steps);
+            });
+        }
+        "action-bar" => {
+            const RUNNERS: [(&str, &str); 3] = [
+                ("fra-arm64-01", "Healthy · 14 jobs"),
+                ("iad-x64-04", "Healthy · 9 jobs"),
+                ("nrt-arm64-02", "Idle · 0 jobs"),
+            ];
+            ui.column().fill_width().max_width(520.0).gap(14).align(Align::Center).show(|ui| {
+                ui.card().pad(10.0).show(|ui| {
+                    for (i, (name, meta)) in RUNNERS.iter().enumerate() {
+                        ui.row().fill_width().pad(6.0).gap(10).align(Align::Center).show(|ui| {
+                            ui.scope(("r_cb", i), |ui| {
+                                ui.checkbox("", &mut s.batch_sel[i]);
+                            });
+                            ui.label(*name).strong();
+                            ui.spacer();
+                            ui.label(*meta).small().muted();
+                        });
+                    }
+                });
+                let cnt = s.batch_sel.iter().filter(|&&b| b).count();
+                let out = ui.floating_action_bar(
+                    "runner_batch",
+                    cnt,
+                    &[("download", "Export", false), ("refresh-cw", "Drain", false), ("trash-2", "Terminate", true)],
+                );
+                if out.cleared {
+                    s.batch_sel = [false; 3];
+                } else if let Some(act) = out.clicked_action {
+                    let msg = ["Exported selected runners", "Draining selected runners", "Terminated selected runners"][act];
+                    ui.toast(Toast::new(msg).tone(Tone::Info));
+                }
+            });
+        }
+        "speed-dial" => {
+            let items = [
+                SpeedDialItem::new("rocket", "Promote canary").shortcut("⌘P"),
+                SpeedDialItem::new("server", "Provision runner").shortcut("⌘N"),
+                SpeedDialItem::new("terminal", "Open shell").shortcut("⌘J"),
+            ];
+            ui.row().fill_width().max_width(420.0).justify(Justify::End).pad(12.0).show(|ui| {
+                if let Some(idx) = ui.speed_dial("quick_fab", &mut s.sd_open, &items) {
+                    ui.toast(Toast::new(format!("Triggered “{}”", items[idx].label)).success());
+                }
+            });
+        }
+        "numeric-pad" => {
+            ui.column().gap(10).align(Align::Center).show(|ui| {
+                if ui.numeric_pad("vault_pad", &mut s.pin_val, 6, s.pin_masked) {
+                    ui.toast(Toast::new("Hardware vault unlocked").success());
+                }
+                ui.switch("Mask digits", &mut s.pin_masked);
+            });
+        }
+        "dimension-input" => {
+            ui.column().fill_width().max_width(400.0).gap(14).show(|ui| {
+                ui.dimension_input("max_w", "Max container width", &mut s.dim_w, &mut s.dim_w_unit);
+                ui.dimension_input("side_w", "Sidebar basis", &mut s.dim_side, &mut s.dim_side_unit);
+            });
+        }
+        "stacked-meter" => {
+            let segs = [
+                MeterSegment::new("Rust", 68.0, "68% · 965 KB"),
+                MeterSegment::new("WGSL", 14.0, "14% · 198 KB"),
+                MeterSegment::new("JavaScript", 11.0, "11% · 156 KB"),
+                MeterSegment::new("Fonts", 7.0, "7% · 101 KB"),
+            ];
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.stacked_meter("bundle_breakdown", "Artifact composition", "1.42 MB total", &segs);
+            });
+        }
+        "announcement-bar" => {
+            ui.column().fill_width().max_width(600.0).gap(12).align(Align::Center).show(|ui| {
+                if s.ann_open {
+                    let (cta, dismissed) = ui.announcement_bar(
+                        "v05_ribbon",
+                        "v0.5",
+                        "150 GPU-rendered Rust components across four OS looks",
+                        "Explore",
+                    );
+                    if cta {
+                        ui.toast(Toast::new("Opened v0.5 release highlights").tone(Tone::Info));
+                    }
+                    if dismissed {
+                        s.ann_open = false;
+                    }
+                } else if ui.button("Restore announcement").secondary().small().clicked() {
+                    s.ann_open = true;
+                }
+            });
+        }
+        "quantity-picker" => {
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.quantity_picker("gpu_workers", "Dedicated GPU worker replicas", &mut s.replica_qty, 1, 32, &[1, 4, 8, 16]);
+            });
+        }
+        "swatch-picker" => {
+            let swatches = [
+                ("Electric Blue", Color::hex(0x3B82F6)),
+                ("Ethereal Violet", Color::hex(0x7F58EE)),
+                ("Emerald", Color::hex(0x22B07D)),
+                ("Amber", Color::hex(0xF5AF20)),
+                ("Coral", Color::hex(0xF46C5F)),
+                ("Rose", Color::hex(0xE0336F)),
+                ("Ice Cyan", Color::hex(0x38BDF8)),
+            ];
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.swatch_picker("accent_sw", "Brand accent token", &mut s.swatch_idx, &swatches);
+            });
+        }
+        "date-strip" => {
+            let days = [
+                DateStripDay::new("Mon", 16, 1),
+                DateStripDay::new("Tue", 17, 2),
+                DateStripDay::new("Wed", 18, 3),
+                DateStripDay::new("Thu", 19, 1),
+                DateStripDay::new("Fri", 20, 2),
+                DateStripDay::new("Sat", 21, 0),
+                DateStripDay::new("Sun", 22, 0),
+            ];
+            let agendas = [
+                "10:00 WGSL shader audit",
+                "11:00 OKLab token contrast review · 15:00 Triage",
+                "10:00 WebGPU bundle trim · 14:00 Canary rollout · 16:30 Retro",
+                "12:30 v0.5 RC sign-off",
+                "09:30 Release freeze & crate publish",
+                "No scheduled events — weekend quiet window",
+                "No scheduled events — weekend quiet window",
+            ];
+            ui.column().fill_width().max_width(540.0).gap(12).show(|ui| {
+                ui.date_strip("wk_strip", &days, &mut s.strip_day);
+                let d = &days[s.strip_day.min(days.len() - 1)];
+                ui.card().title(format!("{} Nov {}", d.weekday, d.day_num)).pad(14.0).show(|ui| {
+                    ui.label(agendas[s.strip_day.min(agendas.len() - 1)]).secondary();
+                });
+            });
+        }
+        "world-clocks" => {
+            let clocks = [
+                WorldClock::new("San Francisco", "SFO", "08:30", "UTC-8", true),
+                WorldClock::new("London", "LHR", "16:30", "UTC+0", true),
+                WorldClock::new("Berlin", "BER", "17:30", "UTC+1", true),
+                WorldClock::new("Tokyo", "HND", "01:30", "UTC+9", false),
+            ];
+            ui.column().fill_width().max_width(620.0).show(|ui| {
+                ui.world_clocks("global_tz", &clocks);
+            });
+        }
+        "bullet-chart" => {
+            let metrics = [
+                BulletMetric::new("Edge cache hit ratio", 94.0, 90.0, 100.0, "%"),
+                BulletMetric::new("Sustained throughput", 142.0, 125.0, 180.0, "k/s"),
+                BulletMetric::new("Cold WASM init budget", 38.0, 45.0, 80.0, " ms"),
+            ];
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.bullet_chart("slo_targets", &metrics);
+            });
+        }
+        "metric-table" => {
+            let rows = [
+                MetricRow::new("edge-gateway", "eu-central-1 · TLS", vec![82.0, 86.0, 85.0, 91.0, 96.0, 104.0, 112.0], "112.4k/s", 14.8),
+                MetricRow::new("glyph-atlas", "subpixel rasterizer", vec![0.24, 0.22, 0.21, 0.19, 0.19, 0.18, 0.17], "0.17 ms", 9.2),
+                MetricRow::new("wasm-hydration", "client cold boot", vec![46.0, 44.0, 45.0, 42.0, 40.0, 39.0, 38.0], "38.2 ms", -4.1),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.metric_table("svc_watchlist", &rows);
+            });
+        }
+        "ai-model-picker" => {
+            let models = [
+                AiModelSpec::new("Gemini 3.1 Pro", "Google DeepMind", "1M ctx", "$1.25 / 1M", 4, &["Reasoning", "Vision"]),
+                AiModelSpec::new("Claude Opus 4.6", "Anthropic", "200k ctx", "$5.00 / 1M", 3, &["Code", "Tools"]),
+                AiModelSpec::new("Gemini 3 Flash", "Google DeepMind", "1M ctx", "$0.15 / 1M", 5, &["Low-latency"]),
+            ];
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.ai_model_picker("model_cards", &models, &mut s.llm_idx);
+            });
+        }
+        "context-meter" => {
+            let slices = [
+                ContextSlice::new("System instructions & tools", 8.4),
+                ContextSlice::new("Indexed Rust workspace AST", 54.2),
+                ContextSlice::new("Conversation trajectory", 23.4),
+            ];
+            ui.column().fill_width().max_width(480.0).show(|ui| {
+                ui.context_meter("ctx_budget", &slices, 200.0);
+            });
+        }
+        "api-inspector" => {
+            let resp = "{\n  \"deployment_id\": \"dep_01J9ETHEREAL\",\n  \"traffic_weight\": 100,\n  \"healthy_pops\": 14\n}";
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                if ui.api_inspector("edge_rpc", &mut s.http_verb, &mut s.api_url, "200 OK", 14.8, resp) {
+                    ui.toast(Toast::new("200 OK · 14.8 ms").success());
+                }
+            });
+        }
+        "permission-matrix" => {
+            let roles = ["Admin", "Maintainer", "Dev", "Auditor"];
+            let caps = ["deploys:promote", "secrets:rotate", "runners:scale", "audit:export"];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.permission_matrix("rbac_matrix", &roles, &caps, &mut s.rbac_grid);
+            });
+        }
+        "description-list" => {
+            let pairs = [
+                DescPair::new("Cluster ID", "clu_01J9LUMEN8842").mono().copyable(),
+                DescPair::new("Primary region", "eu-central-1 (Frankfurt)"),
+                DescPair::new("GPU pipeline", "wgpu · Metal / WebGPU single-pass SDF"),
+                DescPair::new("Ingress endpoint", "https://edge.lumen.dev").mono().copyable(),
+            ];
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.description_list("clu_details", "Cluster specification", &pairs);
+            });
+        }
+        "masonry-grid" => {
+            let cards = [
+                MasonryCard::new("Shader", "64-byte vertex format", "Every rounded rect, border, Gaussian shadow and glyph shares one vertex layout.", Tone::Accent).metric("1 draw"),
+                MasonryCard::new("Motion", "Closed-form springs", "Exact analytical position & velocity at 60 Hz, 120 Hz or 240 Hz.", Tone::Success),
+                MasonryCard::new("Color", "Perceptual OKLab", "Theme transitions never pass through muddy sRGB midpoints.", Tone::Info),
+                MasonryCard::new("Idle", "Zero background wakeups", "Once springs settle within epsilon, the event loop sleeps completely.", Tone::Success).metric("0% CPU"),
+                MasonryCard::new("Targets", "Native + WebAssembly", "Metal, Vulkan, DX12 and WebGPU from one codebase.", Tone::Warning),
+            ];
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.masonry_grid("arch_masonry", 3, &cards);
+            });
+        }
+        "collapsible-card" => {
+            ui.column().fill_width().max_width(500.0).gap(10).show(|ui| {
+                ui.collapsible_card("cc_tls", "Zero-trust mTLS certificates", Some("Active"), &mut s.cc_open[0], |ui| {
+                    ui.label("Short-lived X.509 workload identities rotate every 24 hours across all edge PoPs.").secondary();
+                    ui.switch("Enforce strict SNI verification", &mut s.on[0]);
+                });
+                ui.collapsible_card("cc_wh", "Webhook delivery retries", Some("3 endpoints"), &mut s.cc_open[1], |ui| {
+                    ui.label("Exponential backoff over 5 attempts with HMAC-SHA256 request signing.").secondary();
+                });
+            });
+        }
+        "marquee" => {
+            let items = [
+                ("layers", "Single-pass WGSL"),
+                ("sparkles", "Closed-form springs"),
+                ("palette", "Perceptual OKLab"),
+                ("cpu", "Zero idle wakeups"),
+                ("globe", "Native + WebGPU"),
+            ];
+            ui.column().fill_width().max_width(580.0).gap(10).align(Align::Center).show(|ui| {
+                ui.marquee_strip("tech_ticker", &items, s.marquee_play);
+                ui.switch("Animate ticker", &mut s.marquee_play);
             });
         }
         _ => {

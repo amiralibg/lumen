@@ -1666,6 +1666,224 @@ ui.data_grid("capacity", &cols, &mut s.rows);`,
     ],
     keys: [["Tab + Space", "Toggle step checkbox"]],
   },
+  {
+    slug: "action-bar", name: "Floating action bar", group: "Actions", demo: "action-bar",
+    summary: "Elevated multi-selection batch command bar pairing a selected count pill with quick actions, destructive action, and × clear.",
+    code: `let out = ui.floating_action_bar(
+    "batch",
+    selected_count,
+    &[("download", "Export", false), ("trash-2", "Terminate", true)],
+);`,
+    options: [
+      ["actions: &[(&str, &str, bool)]", "Tuple of (icon, label, is_danger); returns ActionBarOut { clicked_action, cleared }."],
+    ],
+    keys: [["Tab + Enter", "Activate batch action or clear selection"]],
+  },
+  {
+    slug: "speed-dial", name: "Speed dial", group: "Actions", demo: "speed-dial",
+    summary: "Expandable floating action button whose + icon rotates 45° via spring into × while fanning out labeled quick-action pills.",
+    code: `let items = [
+    SpeedDialItem::new("rocket", "Promote canary").shortcut("⌘P"),
+    SpeedDialItem::new("terminal", "Open shell").shortcut("⌘J"),
+];
+ui.speed_dial("fab", &mut s.open, &items);`,
+    options: [
+      ["SpeedDialItem::new(icon, label).shortcut(..)", "Returns Some(index) when an item is clicked and closes the dial."],
+    ],
+    keys: [["Escape", "Collapse open speed dial"]],
+  },
+  {
+    slug: "numeric-pad", name: "Numeric keypad", group: "Inputs", demo: "numeric-pad",
+    summary: "Tactile 3×4 PIN and numeric entry pad with press-squash keys, Clear, Backspace, and masked or plain tabular readout.",
+    code: `if ui.numeric_pad("pin", &mut s.code, 6, true) {
+    unlock_vault();
+}`,
+    options: [
+      ["ui.numeric_pad(key, &mut value, max_len, masked) -> bool", "Returns true the moment max_len digits are entered."],
+    ],
+    keys: [["Tab + Space", "Press keypad digits, Clear or Backspace"]],
+  },
+  {
+    slug: "dimension-input", name: "Dimension input", group: "Inputs", demo: "dimension-input",
+    summary: "CSS and CAD dimension field combining a tabular numeric editor with an inline px | % | rem | auto unit switcher.",
+    code: `ui.dimension_input("max_w", "Max container width", &mut s.width, &mut s.unit);`,
+    options: [
+      ["DimensionUnit::Px | Percent | Rem | Auto", "Selecting Auto switches the value slot cleanly to Automatic sizing."],
+    ],
+    keys: [["↑ / ↓", "Increment or decrement numeric dimension"]],
+  },
+  {
+    slug: "stacked-meter", name: "Stacked meter", group: "Feedback", demo: "stacked-meter",
+    summary: "Multi-category proportion bar (storage or language breakdown) with hairline gaps, rounded outer caps, and an itemized dot legend.",
+    code: `let segs = [
+    MeterSegment::new("Rust", 68.0, "68% · 965 KB"),
+    MeterSegment::new("WGSL", 14.0, "14% · 198 KB"),
+];
+ui.stacked_meter("bundle", "Artifact composition", "1.42 MB total", &segs);`,
+    options: [
+      ["MeterSegment::new(label, value, unit_hint)", "Normalizes segment shares automatically and animates entrance via spring."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "announcement-bar", name: "Announcement bar", group: "Feedback", demo: "announcement-bar",
+    summary: "Pill-framed release and status ribbon with leading accent tag, single-line message, trailing-arrow CTA button, and dismiss ×.",
+    code: `let (cta, dismissed) = ui.announcement_bar(
+    "v05",
+    "v0.5",
+    "150 GPU-rendered Rust components across four OS looks",
+    "Explore",
+);`,
+    options: [
+      ["ui.announcement_bar(key, tag, message, cta) -> (bool, bool)", "Returns (cta_clicked, dismissed)."],
+    ],
+    keys: [["Tab + Enter", "Trigger CTA or dismiss"]],
+  },
+  {
+    slug: "quantity-picker", name: "Quantity picker", group: "Selection", demo: "quantity-picker",
+    summary: "Replica and item quantity selector pairing − / + stepper buttons and a rolling odometer readout with quick-set multiplier chips.",
+    code: `ui.quantity_picker("workers", "Dedicated GPU replicas", &mut s.replicas, 1, 32, &[1, 4, 8, 16]);`,
+    options: [
+      ["presets: &[i64]", "Renders quick-set chips below the rolling counter."],
+    ],
+    keys: [["Tab + Space", "Step down/up or pick a preset chip"]],
+  },
+  {
+    slug: "swatch-picker", name: "Swatch picker", group: "Selection", demo: "swatch-picker",
+    summary: "Palette swatch selector with a spring-popping selection ring, OKLab lightness-contrasted checkmark, and live hex readout.",
+    code: `ui.swatch_picker("brand", "Brand accent token", &mut s.idx, &swatches);`,
+    options: [
+      ["swatches: &[(&str, Color)]", "Automatically picks black or white checkmarks from OKLab lightness L."],
+    ],
+    keys: [["← / →", "Cycle selected color swatch"]],
+  },
+  {
+    slug: "date-strip", name: "Date strip", group: "Dates", demo: "date-strip",
+    summary: "Horizontal 7-day calendar strip with per-day event count dots and a spring-gliding active day pill.",
+    code: `ui.date_strip("week", &days, &mut s.selected_day);`,
+    options: [
+      ["DateStripDay::new(weekday, day_num, events)", "Draws up to three event indicator dots beneath each day number."],
+    ],
+    keys: [["← / →", "Move active day backward or forward"]],
+  },
+  {
+    slug: "world-clocks", name: "World clocks", group: "Dates", demo: "world-clocks",
+    summary: "Distributed team timezone strip displaying tabular local times, sun/moon day-night icons, city names, and UTC offset pills.",
+    code: `let clocks = [
+    WorldClock::new("San Francisco", "SFO", "08:30", "UTC-8", true),
+    WorldClock::new("Tokyo", "HND", "01:30", "UTC+9", false),
+];
+ui.world_clocks("tz", &clocks);`,
+    options: [
+      ["WorldClock::new(city, code, time_str, offset, is_daytime)", "Divided horizontal glass strip."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "bullet-chart", name: "Bullet chart", group: "Charts", demo: "bullet-chart",
+    summary: "Stephen Few actual-versus-target bullet graph with three qualitative background bands, spring measure bar, and perpendicular target marker.",
+    code: `let metrics = [
+    BulletMetric::new("Edge cache hit ratio", 94.0, 90.0, 100.0, "%"),
+];
+ui.bullet_chart("slo", &metrics);`,
+    options: [
+      ["BulletMetric::new(label, actual, target, max, unit)", "Colors the primary bar emerald automatically when actual meets or beats target."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "metric-table", name: "Metric watchlist", group: "Charts", demo: "metric-table",
+    summary: "Compact service and market watchlist table combining labels, inline area sparklines, tabular readouts, and % delta badges.",
+    code: `ui.metric_table("watch", &rows);`,
+    options: [
+      ["MetricRow::new(name, sub, spark, value, delta_pct)", "Synchronizes sparkline color and delta pill tone."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "ai-model-picker", name: "AI model picker", group: "AI", demo: "ai-model-picker",
+    summary: "LLM selector cards displaying provider, context window, token pricing, capability badges, and 5-dot latency ratings.",
+    code: `ui.ai_model_picker("models", &models, &mut s.selected);`,
+    options: [
+      ["AiModelSpec::new(name, provider, ctx, price, speed_dots, tags)", "Spring-animated radio dot and accent border."],
+    ],
+    keys: [["↑ / ↓", "Switch selected model"]],
+  },
+  {
+    slug: "context-meter", name: "Context meter", group: "AI", demo: "context-meter",
+    summary: "AI context-window token budget inspector pairing a multi-slice GPU arc ring with itemized prompt, AST, and history token counts.",
+    code: `let slices = [
+    ContextSlice::new("System instructions", 8.4),
+    ContextSlice::new("Workspace AST", 54.2),
+];
+ui.context_meter("ctx", &slices, 200.0);`,
+    options: [
+      ["ContextSlice::new(label, tokens_k)", "Draws proportional ring arcs against limit_k."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "api-inspector", name: "API inspector", group: "Developer tools", demo: "api-inspector",
+    summary: "REST and RPC endpoint tester with a cycleable HTTP verb badge (GET/POST/PUT/DELETE), URL bar, Send button, status/latency header, and syntax JSON body.",
+    code: `if ui.api_inspector("rpc", &mut s.method, &mut s.url, "200 OK", 14.8, resp_json) {
+    dispatch_request();
+}`,
+    options: [
+      ["HttpMethod::Get | Post | Put | Delete", "Click the method badge to cycle HTTP verbs."],
+    ],
+    keys: [["Tab + Enter", "Cycle verb, edit URL or click Send"]],
+  },
+  {
+    slug: "permission-matrix", name: "Permission matrix", group: "Data", demo: "permission-matrix",
+    summary: "Interactive RBAC role × capability checkbox matrix for editing access policies across roles.",
+    code: `ui.permission_matrix("rbac", &["Admin", "Maintainer", "Dev"], &["deploys:promote", "secrets:rotate"], &mut s.grid);`,
+    options: [
+      ["granted: &mut [Vec<bool>]", "Capability-major boolean matrix; returns true on any toggle."],
+    ],
+    keys: [["Tab + Space", "Toggle role × capability cell"]],
+  },
+  {
+    slug: "description-list", name: "Description list", group: "Data", demo: "description-list",
+    summary: "Structured two-column metadata and resource specification card with monospace formatting and one-click clipboard copy icons.",
+    code: `let pairs = [
+    DescPair::new("Cluster ID", "clu_01J9LUMEN8842").mono().copyable(),
+    DescPair::new("Primary region", "eu-central-1"),
+];
+ui.description_list("meta", "Cluster specification", &pairs);`,
+    options: [
+      ["DescPair::new(term, detail).mono().copyable()", "Writes directly to the system/browser clipboard when Copy is clicked."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "masonry-grid", name: "Masonry grid", group: "Layout and surfaces", demo: "masonry-grid",
+    summary: "Multi-column staggered masonry layout that distributes variable-height feature and metric cards into balanced columns.",
+    code: `ui.masonry_grid("bento", 3, &cards);`,
+    options: [
+      ["MasonryCard::new(tag, title, body, Tone).metric(..)", "Balances card heights automatically across 2–4 columns."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "collapsible-card", name: "Collapsible card", group: "Layout and surfaces", demo: "collapsible-card",
+    summary: "Titled surface card whose header toggles disclosure with a spring-rotating polyline chevron and summary badge.",
+    code: `ui.collapsible_card("tls", "Zero-trust mTLS", Some("Active"), &mut s.open, |ui| {
+    ui.switch("Enforce strict SNI", &mut s.strict_sni);
+});`,
+    options: [
+      ["ui.collapsible_card(key, title, badge, &mut open, |ui| ..)", "Rounds all four header corners when closed and top corners when open."],
+    ],
+    keys: [["Tab + Space", "Expand or collapse card"]],
+  },
+  {
+    slug: "marquee", name: "Marquee ticker", group: "Motion", demo: "marquee",
+    summary: "Seamless infinite horizontal pill ticker with soft edge fade masks, automatic pause-on-hover, and zero wakeups when paused or under reduced motion.",
+    code: `ui.marquee_strip("caps", &[("layers", "Single-pass WGSL"), ("sparkles", "Closed-form springs")], s.playing);`,
+    options: [
+      ["playing: bool", "Pauses automatically on pointer hover or when reduced_motion is active."],
+    ],
+    keys: [],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -1872,7 +2090,8 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-18", items: [
-    "130 components across 14 groups: Sankey flow ribbons, GitHub contribution calendar, percentile histogram, KPI strip, week schedule, draggable node editor, Git commit graph, test explorer, editable data grid, facet filter bar, AI citations, kinetic text effects, rotary knob, before/after split slider, countdown timer & checklist card.",
+    "150 components across 14 groups: CUI-scale suite adding floating action bar, speed-dial FAB, numeric keypad, CSS/CAD dimension input, stacked meter, announcement bar, quantity & swatch pickers, week date strip, world clocks, bullet & watchlist charts, AI model picker, context-window meter, REST API inspector, RBAC permission matrix, description list, masonry grid, collapsible card & marquee ticker.",
+    "Visualizations, graphs & tactile controls: Sankey flow ribbons, GitHub contribution calendar, percentile histogram, KPI strip, week schedule, draggable node editor, Git commit graph, test explorer, editable data grid, facet filter bar, AI citations, kinetic text effects, rotary knob, before/after split slider, countdown timer & checklist card.",
     "AI, data & workspace: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor, log console, split pane, menu bar, terminal, property inspector, flame graph, notifications & spotlight cards.",
     "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, treemap, radar, scatter, conversion funnel, OHLC candlestick, Gantt roadmap & Kanban board.",
     "DevTools, motion & chrome: unified diff viewer, trace waterfall, uptime strip, rolling odometer numbers, neighbor-magnifying dock, scrubbable audio waveform & look-aware window chrome.",

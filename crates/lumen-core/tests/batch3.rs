@@ -552,6 +552,102 @@ fn group11_viz_graphs_grid_and_tactile_widgets_interact_and_settle() {
     assert_eq!(settled2.repaint_after, None);
 }
 
+// -------- Group 12: CUI Parity Controls, Enterprise, AI, Charts & Masonry
+
+struct Group12State {
+    swatch: usize,
+    sd_open: bool,
+    pin: String,
+    dim_v: f32,
+    dim_u: lumen_core::DimensionUnit,
+    qty: i64,
+    day: usize,
+    mdl: usize,
+    verb: lumen_core::HttpMethod,
+    url: String,
+    perms: Vec<Vec<bool>>,
+    cc_open: bool,
+}
+
+fn group12_view(ui: &mut Ui, s: &mut Group12State) {
+    let swatches = [("Blue", lumen_core::Color::hex(0x3B82F6)), ("Green", lumen_core::Color::hex(0x22B07D))];
+    let sd_items = [lumen_core::SpeedDialItem::new("rocket", "Deploy")];
+    let segs = [lumen_core::MeterSegment::new("Rust", 80.0, "80%"), lumen_core::MeterSegment::new("WGSL", 20.0, "20%")];
+    let days = [lumen_core::DateStripDay::new("Mon", 16, 1), lumen_core::DateStripDay::new("Tue", 17, 2)];
+    let clocks = [lumen_core::WorldClock::new("London", "LHR", "16:30", "UTC+0", true)];
+    let bullets = [lumen_core::BulletMetric::new("Cache", 94.0, 90.0, 100.0, "%")];
+    let mrows = [lumen_core::MetricRow::new("gw", "edge", vec![1.0, 2.0, 3.0], "12k", 4.2)];
+    let models = [
+        lumen_core::AiModelSpec::new("Pro", "Lab", "1M", "$1", 4, &["Code"]),
+        lumen_core::AiModelSpec::new("Flash", "Lab", "1M", "$0.1", 5, &["Fast"]),
+    ];
+    let ctx = [lumen_core::ContextSlice::new("AST", 42.0)];
+    let desc = [lumen_core::DescPair::new("ID", "clu_1").mono().copyable()];
+    let mcards = [
+        lumen_core::MasonryCard::new("GPU", "SDF", "Single shader", Tone::Accent).metric("1 draw"),
+        lumen_core::MasonryCard::new("OKLab", "Color", "Perceptual mix", Tone::Success),
+    ];
+
+    ui.column().width(680.0).gap(8).show(|ui| {
+        ui.swatch_picker("swp", "Accent", &mut s.swatch, &swatches);
+        ui.floating_action_bar("fabar", 2, &[("download", "Export", false)]);
+        ui.speed_dial("sd", &mut s.sd_open, &sd_items);
+        ui.numeric_pad("npad", &mut s.pin, 4, true);
+        ui.dimension_input("dim", "Width", &mut s.dim_v, &mut s.dim_u);
+        ui.stacked_meter("sm", "Bundle", "1 MB", &segs);
+        ui.announcement_bar("ann", "New", "v0.5 ready", "Open");
+        ui.quantity_picker("qp", "Replicas", &mut s.qty, 1, 16, &[1, 4]);
+        ui.date_strip("dstr", &days, &mut s.day);
+        ui.world_clocks("wc", &clocks);
+        ui.bullet_chart("bc", &bullets);
+        ui.metric_table("mt", &mrows);
+        ui.ai_model_picker("amp", &models, &mut s.mdl);
+        ui.context_meter("cm", &ctx, 200.0);
+        ui.api_inspector("api", &mut s.verb, &mut s.url, "200 OK", 12.0, "{\"ok\":true}");
+        ui.permission_matrix("pmx", &["Admin", "Dev"], &["deploy"], &mut s.perms);
+        ui.description_list("dl", "Meta", &desc);
+        ui.masonry_grid("mg", 2, &mcards);
+        ui.collapsible_card("cc", "TLS", Some("On"), &mut s.cc_open, |ui| { ui.label("Body"); });
+        ui.marquee_strip("mq", &[("zap", "Fast"), ("cpu", "Zero idle")], false);
+    });
+}
+
+#[test]
+fn group12_cui_parity_suite_interacts_and_settles_to_zero_wakeups() {
+    let mut h = Harness::new(
+        Group12State {
+            swatch: 0,
+            sd_open: true,
+            pin: "42".into(),
+            dim_v: 640.0,
+            dim_u: lumen_core::DimensionUnit::Px,
+            qty: 4,
+            day: 0,
+            mdl: 0,
+            verb: lumen_core::HttpMethod::Post,
+            url: "https://edge.lumen.dev/v1/ping".into(),
+            perms: vec![vec![true, false]],
+            cc_open: true,
+        },
+        group12_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all 20 Group 12 widgets must settle to zero idle wakeups");
+
+    // First Tab focuses SwatchPicker swatch 0; ArrowRight selects swatch 1; Escape collapses SpeedDial!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.swatch, 1);
+
+    h.frame(key(Key::Escape));
+    assert!(!h.s.sd_open);
+
+    let settled2 = h.idle(90);
+    assert_eq!(settled2.repaint_after, None);
+}
+
+
 
 
 
