@@ -34,12 +34,14 @@ pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
 pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
 pub use widgets::{
-    password_strength, ActionBarOut, AiModelSpec, BarListItem, BulletMetric, Candle, CarouselSlide, ChartKind,
-    ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommitRow, ComposerOut, ContextSlice, Currency,
-    DateStripDay, DescPair, DimensionUnit, DockItem, EditorTab, EditorTabsOut, FilterFacet, FlameSpan, GanttTask,
-    GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod, ImageStatus, KanbanCard, KanbanCol, KpiMetric,
-    KvPair, LogEntry, LogLevel, MasonryCard, MentionCandidate, MeterSegment, MetricRow, NavBarItem, NotificationItem,
-    ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, Series, SortDir, SpeedDialItem,
-    TableCell, TableCol, TermLine, TermTone, TestCase, TestState, TimelineItem, Toast, TocItem, Tone, ToolCall,
-    ToolStatus, TraceSpan, TreeNode, TreemapItem, UndoBarOut, UptimeStatus, Variant, WorldClock,
+    password_strength, ActionBarOut, AiModelSpec, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle,
+    CarouselSlide, ChartKind, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
+    ComposerOut, ContextSlice, Currency, DateStripDay, DescPair, DimensionUnit, DivergingBar, DockItem, EditorTab,
+    EditorTabsOut, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod,
+    ImageStatus, KanbanCard, KanbanCol, KpiMetric, KvPair, LogEntry, LogLevel, MasonryCard, MentionCandidate,
+    MeterSegment, MetricRow, NavBarItem, NotificationItem, PlanSpec, PresencePeer, PromptTemplate, ReactionChip,
+    ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, ScheduleRule, SchemaField, Series,
+    ShortcutHint, SortDir, SpeedDialItem, SuggestionDecision, TableCell, TableCol, TermLine, TermTone, TestCase,
+    TestState, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, UndoBarOut,
+    UptimeStatus, Variant, ViewMode, WaffleSlice, WorldClock,
 };

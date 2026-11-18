@@ -647,6 +647,126 @@ fn group12_cui_parity_suite_interacts_and_settles_to_zero_wakeups() {
     assert_eq!(settled2.repaint_after, None);
 }
 
+struct Group13State {
+    view_mode: usize,
+    quarter: u8,
+    year: i32,
+    follow: bool,
+    comments: Vec<lumen_core::CommentEntry>,
+    resolved: bool,
+    reactions: Vec<lumen_core::ReactionChip>,
+    attachments: Vec<lumen_core::AttachmentItem>,
+    story_step: usize,
+    temp: f32,
+    rule: lumen_core::ScheduleRule,
+    env_idx: usize,
+    env_locked: bool,
+    decision: lumen_core::SuggestionDecision,
+    annual: bool,
+    tier: usize,
+    eq_bands: [f32; 8],
+    eq_preset: usize,
+}
+
+fn group13_view(ui: &mut Ui, s: &mut Group13State) {
+    let modes = [
+        lumen_core::ViewMode::new("list", "List"),
+        lumen_core::ViewMode::new("layout-grid", "Board"),
+        lumen_core::ViewMode::new("calendar", "Calendar"),
+    ];
+    let peers = [
+        lumen_core::PresencePeer::new("LF", "Lena", "Editing", 0).editing(true),
+        lumen_core::PresencePeer::new("JB", "Jonas", "Viewing", 1),
+    ];
+    let hints = [lumen_core::ShortcutHint::new(&["⌘", "K"], "Actions")];
+    let stops = [ui.color(Token::Series0), ui.color(Token::Warning), ui.color(Token::Danger)];
+    let deltas = [
+        lumen_core::DivergingBar::new("sdf_pass", 24.0, "%"),
+        lumen_core::DivergingBar::new("cold_init", -6.0, "%"),
+    ];
+    let waffle = [
+        lumen_core::WaffleSlice::new("WebGPU", 70, lumen_core::Tone::Accent),
+        lumen_core::WaffleSlice::new("Vulkan", 30, lumen_core::Tone::Success),
+    ];
+    let cols = [
+        lumen_core::SchemaField::new("id", "uuid").pk(),
+        lumen_core::SchemaField::new("org_id", "uuid").fk(),
+    ];
+    let slabs = [
+        lumen_core::ArenaSlab::new("VBO", 12.0, 32.0),
+        lumen_core::ArenaSlab::new("Atlas", 6.0, 16.0),
+    ];
+    let templates = [
+        lumen_core::PromptTemplate::new("cpu", "Audit", "Perf", "Check {{crate}}"),
+        lumen_core::PromptTemplate::new("sparkles", "Tune", "Motion", "Spring {{name}}"),
+    ];
+    let plans = [
+        lumen_core::PlanSpec::new("Hobby", 0, 0, "Free", &["2 regions"]),
+        lumen_core::PlanSpec::new("Pro", 30, 24, "Team", &["14 regions"]).popular(),
+    ];
+
+    ui.column().fill_width().gap(6.0).show(|ui| {
+        ui.view_switcher("vs", &modes, &mut s.view_mode);
+        ui.quarter_picker("qp", &mut s.year, &mut s.quarter);
+        ui.presence_pile("pp", &peers, 2, &mut s.follow);
+        ui.comment_thread("ct", "PR #148", &mut s.comments, &mut s.resolved);
+        ui.reaction_bar("rb", &mut s.reactions);
+        ui.attachment_list("al", &mut s.attachments);
+        ui.story_bars("sb", &[("Step 1", "Connect"), ("Step 2", "Deploy")], &mut s.story_step);
+        ui.shortcut_bar("shb", "2 selected", &hints);
+        ui.gradient_slider("gs", "Temperature", &mut s.temp, 0.0..=1.5, &stops, "");
+        ui.schedule_picker("scp", &mut s.rule);
+        ui.diverging_bars("db", "Benchmarks", &deltas, 30.0);
+        ui.waffle_chart("wf", "Backends", &waffle);
+        ui.schema_card("sc", "public.deploys", &cols);
+        ui.env_banner("eb", &mut s.env_idx, "eu-central-1", &mut s.env_locked);
+        ui.memory_arena("ma", &slabs, 22.0);
+        ui.code_suggestion("cs", "shader.wgsl", "Gaussian erfc", &["old"], &["new"], &mut s.decision);
+        ui.prompt_templates("pt", &templates);
+        ui.pricing_cards("pc", &plans, &mut s.annual, &mut s.tier);
+        ui.ab_comparison("ab", "Hydration", "Control", 60.0, "Variant B", 74.0, 99.1);
+        ui.graphic_eq("eq", &mut s.eq_bands, &mut s.eq_preset);
+    });
+}
+
+#[test]
+fn group13_collab_and_studio_suite_interacts_and_settles_to_zero_wakeups() {
+    let mut h = Harness::new(
+        Group13State {
+            view_mode: 0,
+            quarter: 2,
+            year: 2026,
+            follow: true,
+            comments: vec![lumen_core::CommentEntry::new("Lena", "LF", "2m", "Looks crisp.").with_likes(2, false)],
+            resolved: false,
+            reactions: vec![lumen_core::ReactionChip::new("rocket", "Ship", 4, true)],
+            attachments: vec![lumen_core::AttachmentItem::uploaded("demo.wasm", "WASM", "8 MB")],
+            story_step: 0,
+            temp: 0.4,
+            rule: lumen_core::ScheduleRule::default(),
+            env_idx: 2,
+            env_locked: true,
+            decision: lumen_core::SuggestionDecision::Pending,
+            annual: true,
+            tier: 1,
+            eq_bands: [0.0; 8],
+            eq_preset: 0,
+        },
+        group13_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all 20 Group 13 widgets must settle to zero idle wakeups");
+
+    // First Tab focuses ViewSwitcher segment 0; ArrowRight advances to segment 1!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.view_mode, 1);
+
+    let settled2 = h.idle(90);
+    assert_eq!(settled2.repaint_after, None);
+}
+
 
 
 

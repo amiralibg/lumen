@@ -48,6 +48,8 @@ pub mod viz_pro;
 pub mod interactive_pro;
 pub mod controls_suite;
 pub mod enterprise_suite;
+pub mod collab_suite;
+pub mod studio_suite;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -102,6 +104,12 @@ pub use controls_suite::{
 };
 pub use enterprise_suite::{
     AiModelSpec, BulletMetric, ContextSlice, DescPair, HttpMethod, MasonryCard, MetricRow,
+};
+pub use collab_suite::{
+    AttachmentItem, CommentEntry, PresencePeer, ReactionChip, ScheduleRule, ShortcutHint, ViewMode,
+};
+pub use studio_suite::{
+    ArenaSlab, DivergingBar, PlanSpec, PromptTemplate, SchemaField, SuggestionDecision, WaffleSlice,
 };
 
 use crate::color::Color;

@@ -32,7 +32,7 @@
 
 lumen is a UI toolkit for Rust in the immediate-mode style of egui, built for finish: real typography, spring motion everywhere, OKLab-blended themes, and charts, date pickers and overlays that feel considered. It can look like itself, or like macOS, Windows 11 or GNOME.
 
-- **27 components**, each with a live page on the [site](https://amiralibg.github.io/lumen/#/components).
+- **170 components**, each with a live page on the [site](https://amiralibg.github.io/lumen/#/components).
 - **Four looks.** Switching blends colors, corner radii, control sizes and motion together. `App::native()` follows the OS look, accent color, fonts and dark mode.
 - **One codebase, native and web.** winit + wgpu on macOS, Windows and Linux; WebAssembly with WebGPU or WebGL2 in the browser.
 - **Idle means idle.** A UI at rest requests no frames.

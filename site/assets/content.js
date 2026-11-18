@@ -1884,6 +1884,202 @@ ui.description_list("meta", "Cluster specification", &pairs);`,
     ],
     keys: [],
   },
+  {
+    slug: "presence-pile", name: "Presence pile", group: "Feedback", demo: "presence-pile",
+    summary: "Overlapping multiplayer collaborator avatar stack with live status cutout rings, +N overflow counter, hover lift, and viewport follow toggle.",
+    code: `let peers = [
+    PresencePeer::new("LF", "Lena Fischer", "Editing paint.rs · line 233", 0).editing(true),
+    PresencePeer::new("JB", "Jonas Berg", "Inspecting flame graph", 1).editing(true),
+];
+ui.presence_pile("collab", &peers, 4, &mut s.following);`,
+    options: [
+      ["PresencePeer::new(initials, name, status, tone).editing(bool)", "Draws a cutout avatar ring and live editing dot."],
+      ["max_visible: usize", "Collapses additional peers into a +N pill."],
+    ],
+    keys: [["Tab + Space", "Jump to collaborator or toggle Follow"]],
+  },
+  {
+    slug: "comment-thread", name: "Comment thread", group: "Feedback", demo: "comment-thread",
+    summary: "Threaded code and design review comment card with reply connector rails, bouncy heart reaction counters, and thread resolution toggle.",
+    code: `ui.comment_thread("pr_148", "PR #148 · paint.rs", &mut s.comments, &mut s.resolved);`,
+    options: [
+      ["CommentEntry::new(author, initials, time, body).reply().with_likes(n, liked)", "Renders top-level comments and indented replies."],
+      ["resolved: &mut bool", "Toggles Open / Resolved status badge and header button."],
+    ],
+    keys: [["Tab + Space", "Like comment or resolve thread"]],
+  },
+  {
+    slug: "reaction-bar", name: "Reaction bar", group: "Actions", demo: "reaction-bar",
+    summary: "Interactive strip of Lucide reaction pills with bouncy 0.95 press squash, accent active tint, live tabular counts, and a quick-add button.",
+    code: `ui.reaction_bar("release_rx", &mut s.reactions);`,
+    options: [
+      ["ReactionChip::new(icon, label, count, active)", "Toggles active state and increments/decrements count on click."],
+    ],
+    keys: [["Tab + Space / Enter", "Toggle reaction pill"]],
+  },
+  {
+    slug: "attachment-list", name: "Attachment list", group: "Inputs", demo: "attachment-list",
+    summary: "File attachment cards with semantic extension badges, smooth spring upload progress bars or completion state, sizes, and remove buttons.",
+    code: `ui.attachment_list("artifacts", &mut s.attachments);`,
+    options: [
+      ["AttachmentItem::uploaded(name, ext, size)", "Completed attachment row."],
+      ["AttachmentItem::uploading(name, ext, size, progress)", "Displays an animated progress bar until complete."],
+    ],
+    keys: [["Tab + Enter", "Remove attachment"]],
+  },
+  {
+    slug: "progress-steps", name: "Progress steps", group: "Navigation", demo: "progress-steps",
+    summary: "Segmented linear onboarding and story walkthrough bars with clickable progress segments, step copy, and Previous / Continue navigation.",
+    code: `ui.story_bars("onboard", &[("Connect repo", "..."), ("Deploy", "...")], &mut s.step);`,
+    options: [
+      ["steps: &[(&str, &str)]", "Step title and body description pairs."],
+      ["current: &mut usize", "Active step index; segments animate with snappy springs."],
+    ],
+    keys: [["Tab + Enter", "Select segment or advance step"]],
+  },
+  {
+    slug: "shortcut-bar", name: "Shortcut bar", group: "Navigation", demo: "shortcut-bar",
+    summary: "Elevated command-hint footer bar pairing multi-key chords with clickable contextual actions.",
+    code: `let hints = [ShortcutHint::new(&["⌘", "Enter"], "Deploy"), ShortcutHint::new(&["Esc"], "Clear")];
+ui.shortcut_bar("footer", "3 runners selected", &hints);`,
+    options: [
+      ["ShortcutHint::new(keys, action)", "Renders keycaps beside the action label and returns Some(index) on click."],
+    ],
+    keys: [["Tab + Enter", "Trigger hinted command"]],
+  },
+  {
+    slug: "view-switcher", name: "View switcher", group: "Selection", demo: "view-switcher",
+    summary: "Workspace layout mode switcher (List, Board, Calendar, Graph) with Lucide icons and a single spring-gliding elevated indicator pill.",
+    code: `let modes = [ViewMode::new("list", "List"), ViewMode::new("layout-grid", "Board")];
+ui.view_switcher("views", &modes, &mut s.mode);`,
+    options: [
+      ["ViewMode::new(icon, label)", "Segment definition with icon and text."],
+    ],
+    keys: [["← / →", "Cycle active view mode"]],
+  },
+  {
+    slug: "gradient-slider", name: "Gradient slider", group: "Selection", demo: "gradient-slider",
+    summary: "Continuous multi-stop perceptual OKLab color and temperature track slider with an elevated spring thumb tinted to the sampled stop.",
+    code: `ui.gradient_slider("temp", "Sampling temperature", &mut s.temp, 0.0..=1.5, &stops, "");`,
+    options: [
+      ["stops: &[Color]", "Interpolated across horizontal GPU segments in perceptual OKLab space."],
+      ["unit: &str", "Appended to the tabular readout (e.g. \" K\")."],
+    ],
+    keys: [["← / →", "Step 5%"], ["Home / End", "Jump to min / max"]],
+  },
+  {
+    slug: "schedule-picker", name: "Schedule picker", group: "Dates", demo: "schedule-picker",
+    summary: "Recurring cron schedule builder with Hourly / Daily / Weekly cadence, M–S weekday pills, UTC window stepper, and live 5-field cron badge.",
+    code: `ui.schedule_picker("backup_cron", &mut s.rule);`,
+    options: [
+      ["ScheduleRule { freq, weekdays, hour, minute }", "Exposes rule.cron_expr() for standard 5-field cron output."],
+    ],
+    keys: [["Tab + Space", "Toggle weekday pills or step run time"]],
+  },
+  {
+    slug: "quarter-picker", name: "Quarter picker", group: "Dates", demo: "quarter-picker",
+    summary: "Fiscal year stepper and Q1–Q4 quarter cards with month-range subtitles, spring selection borders, and arrow-key navigation.",
+    code: `ui.quarter_picker("fy_picker", &mut s.year, &mut s.quarter);`,
+    options: [
+      ["year: &mut i32, quarter: &mut u8", "Clamps quarter to 1..=4 and returns true on change."],
+    ],
+    keys: [["← / →", "Previous / next quarter"]],
+  },
+  {
+    slug: "win-loss-chart", name: "Win-loss chart", group: "Charts", demo: "win-loss-chart",
+    summary: "Zero-baseline diverging horizontal bar chart plotting positive gains in green to the right and regressions in red to the left.",
+    code: `let deltas = [DivergingBar::new("sdf_batch", 28.4, "%"), DivergingBar::new("cold_scan", -6.8, "%")];
+ui.diverging_bars("bench", "Benchmark vs Baseline", &deltas, 32.0);`,
+    options: [
+      ["DivergingBar::new(label, delta, unit)", "Signed delta value relative to the center zero axis."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "waffle-chart", name: "Waffle chart", group: "Charts", demo: "waffle-chart",
+    summary: "10×10 100-cell rounded-square proportion grid with spring entrance and right-hand percentage breakdown legend.",
+    code: `let slices = [WaffleSlice::new("WebGPU", 58, Tone::Accent), WaffleSlice::new("Vulkan", 24, Tone::Success)];
+ui.waffle_chart("fleet", "Active Backends", &slices);`,
+    options: [
+      ["WaffleSlice::new(label, cells, Tone)", "Each cell represents 1% of the 10×10 matrix."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "schema-viewer", name: "Schema viewer", group: "Developer tools", demo: "schema-viewer",
+    summary: "Database table and struct schema inspector card with PK / FK / IDX key badges, monospace column names, nullability, and data types.",
+    code: `let cols = [SchemaField::new("id", "uuid").pk(), SchemaField::new("org_id", "uuid").fk()];
+ui.schema_card("deploys", "public.deployments", &cols);`,
+    options: [
+      ["SchemaField::new(name, ty).pk().fk().indexed().nullable()", "Builder methods for relational constraints."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "env-switcher", name: "Environment switcher", group: "Developer tools", demo: "env-switcher",
+    summary: "Development / Staging / Production environment selector whose surface morphs into a guarded warning/danger banner with write-lock protection.",
+    code: `ui.env_banner("env", &mut s.env_idx, "eu-central-1", &mut s.write_locked);`,
+    options: [
+      ["write_locked: &mut bool", "Automatically engages write lock when switching into Production."],
+    ],
+    keys: [["← / →", "Switch target environment"]],
+  },
+  {
+    slug: "memory-profiler", name: "Memory profiler", group: "Developer tools", demo: "memory-profiler",
+    summary: "GPU and allocator arena map showing unified slab blocks, high-water peak marker, and per-slab MiB utilization bars.",
+    code: `let slabs = [ArenaSlab::new("Vertex VBO", 14.2, 32.0), ArenaSlab::new("Glyph Atlas", 8.6, 16.0)];
+ui.memory_arena("arena", &slabs, 48.5);`,
+    options: [
+      ["ArenaSlab::new(name, used_mb, cap_mb)", "Individual slab allocation and capacity."],
+      ["peak_mb: f32", "Draws a perpendicular high-water mark across the unified arena bar."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "ai-suggestion", name: "AI code suggestion", group: "AI", demo: "ai-suggestion",
+    summary: "Inline AI patch review card with target file header, rationale, red/green monospace diff lines, and Accept / Dismiss workflow.",
+    code: `ui.code_suggestion("patch", "src/shader.wgsl", "Use Gaussian erfc.", &removed, &added, &mut s.decision);`,
+    options: [
+      ["SuggestionDecision::{Pending, Accepted, Dismissed}", "Tracks review outcome with one-click reset."],
+    ],
+    keys: [["Tab + Enter", "Accept or dismiss proposed patch"]],
+  },
+  {
+    slug: "prompt-templates", name: "Prompt templates", group: "AI", demo: "prompt-templates",
+    summary: "Two-column starter prompt gallery with Lucide category icons, domain badges, {{variable}} placeholders, and tactile press feedback.",
+    code: `if let Some(i) = ui.prompt_templates("starters", &templates) { /* insert templates[i] */ }`,
+    options: [
+      ["PromptTemplate::new(icon, title, category, prompt)", "Returns Some(index) when a template card is clicked."],
+    ],
+    keys: [["Tab + Enter", "Choose starter prompt"]],
+  },
+  {
+    slug: "pricing-cards", name: "Pricing cards", group: "Layout and surfaces", demo: "pricing-cards",
+    summary: "Multi-tier plan comparison cards with an Annual (-20%) billing switch, rolling odometer prices, Popular highlight, and feature checkmarks.",
+    code: `ui.pricing_cards("plans", &plans, &mut s.annual, &mut s.selected_plan);`,
+    options: [
+      ["PlanSpec::new(name, monthly, annual, blurb, features).popular()", "Animates price digits via rolling_number when billing frequency toggles."],
+    ],
+    keys: [["Tab + Space", "Toggle annual billing or select plan"]],
+  },
+  {
+    slug: "ab-comparison", name: "A/B comparison", group: "Data", demo: "ab-comparison",
+    summary: "Statistical experiment card comparing Control vs Variant B conversion rates with relative lift badge, leader pill, and Bayesian confidence.",
+    code: `ui.ab_comparison("exp", "WASM hydration", "Control", 61.4, "Variant B", 74.8, 99.2);`,
+    options: [
+      ["confidence_pct: f32", "Marks ≥95% confidence as statistically significant."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "equalizer", name: "Graphic equalizer", group: "Motion", demo: "equalizer",
+    summary: "Interactive 8-band studio dB equalizer (-12..+12 dB) with Flat / Vocal / Warm / Air presets, smooth response curve, and vertical faders.",
+    code: `ui.graphic_eq("master_eq", &mut s.bands_db, &mut s.preset);`,
+    options: [
+      ["bands_db: &mut [f32; 8]", "60 Hz to 16 kHz dB gains; springs smoothly between presets and settles to zero wakeups."],
+    ],
+    keys: [["↑ / ↓", "Adjust focused EQ band by 1.5 dB"]],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -2090,7 +2286,8 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-18", items: [
-    "150 components across 14 groups: CUI-scale suite adding floating action bar, speed-dial FAB, numeric keypad, CSS/CAD dimension input, stacked meter, announcement bar, quantity & swatch pickers, week date strip, world clocks, bullet & watchlist charts, AI model picker, context-window meter, REST API inspector, RBAC permission matrix, description list, masonry grid, collapsible card & marquee ticker.",
+    "170 components across 14 groups: full CUI-parity suite adding presence pile, threaded comments, reaction bar, attachment list, story progress steps, shortcut bar, view switcher, OKLab gradient slider, cron schedule & fiscal quarter pickers, win-loss & 10×10 waffle charts, schema viewer, guarded environment switcher, GPU memory arena, AI patch suggestion, prompt templates, pricing cards, A/B comparison & 8-band graphic equalizer.",
+    "Enterprise & tactile controls: floating action bar, speed-dial FAB, numeric keypad, CSS/CAD dimension input, stacked meter, announcement bar, quantity & swatch pickers, week date strip, world clocks, bullet & watchlist charts, AI model picker, context-window meter, REST API inspector, RBAC permission matrix, description list, masonry grid, collapsible card & marquee ticker.",
     "Visualizations, graphs & tactile controls: Sankey flow ribbons, GitHub contribution calendar, percentile histogram, KPI strip, week schedule, draggable node editor, Git commit graph, test explorer, editable data grid, facet filter bar, AI citations, kinetic text effects, rotary knob, before/after split slider, countdown timer & checklist card.",
     "AI, data & workspace: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor, log console, split pane, menu bar, terminal, property inspector, flame graph, notifications & spotlight cards.",
     "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, treemap, radar, scatter, conversion funnel, OHLC candlestick, Gantt roadmap & Kanban board.",

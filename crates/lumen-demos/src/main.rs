@@ -7,14 +7,16 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    vec2, Accent, AiModelSpec, Align, BarListItem, BulletMetric, Candle, CarouselSlide, ChatMessage, ChecklistStep,
-    CitationSource, Color, Command, CommitRow, ContextSlice, Currency, Date, DateStripDay, DescPair, DimensionUnit,
-    DockItem, EditorTab, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker,
-    HttpMethod, ImageStatus, Justify, KanbanCard, KanbanCol, KpiMetric, KvPair, LogEntry, LogLevel, Look, MasonryCard,
-    MentionCandidate, MeterSegment, MetricRow, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem,
-    RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, Series, Sides, SortDir, SpeedDialItem, TableCell,
-    TableCol, TermLine, TestCase, TextRole, Time, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan,
-    TreeNode, TreemapItem, Ui, UptimeStatus, WorldClock,
+    vec2, Accent, AiModelSpec, Align, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle, CarouselSlide,
+    ChatMessage, ChecklistStep, CitationSource, Color, Command, CommentEntry, CommitRow, ContextSlice, Currency, Date,
+    DateStripDay, DescPair, DimensionUnit, DivergingBar, DockItem, EditorTab, FilterFacet, FlameSpan, GanttTask,
+    GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod, ImageStatus, Justify, KanbanCard, KanbanCol,
+    KpiMetric, KvPair, LogEntry, LogLevel, Look, MasonryCard, MentionCandidate, MeterSegment, MetricRow, Mode,
+    NavBarItem, NotificationItem, Placement, PlanSpec, Platform, PresencePeer, PromptTemplate, ReactionChip,
+    ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, ScheduleRule, SchemaField, Series,
+    ShortcutHint, Sides, SortDir, SpeedDialItem, SuggestionDecision, TableCell, TableCol, TermLine, TestCase, TextRole,
+    Time, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui, UptimeStatus,
+    ViewMode, WaffleSlice, WorldClock,
 };
 
 /// Every demo: url name, title.
@@ -168,6 +170,26 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("masonry-grid", "Masonry grid"),
     ("collapsible-card", "Collapsible card"),
     ("marquee", "Marquee ticker"),
+    ("presence-pile", "Presence pile"),
+    ("comment-thread", "Comment thread"),
+    ("reaction-bar", "Reaction bar"),
+    ("attachment-list", "Attachment list"),
+    ("progress-steps", "Progress steps"),
+    ("shortcut-bar", "Shortcut bar"),
+    ("view-switcher", "View switcher"),
+    ("gradient-slider", "Gradient slider"),
+    ("schedule-picker", "Schedule picker"),
+    ("quarter-picker", "Quarter picker"),
+    ("win-loss-chart", "Win-loss chart"),
+    ("waffle-chart", "Waffle chart"),
+    ("schema-viewer", "Schema viewer"),
+    ("env-switcher", "Environment switcher"),
+    ("memory-profiler", "Memory profiler"),
+    ("ai-suggestion", "AI code suggestion"),
+    ("prompt-templates", "Prompt templates"),
+    ("pricing-cards", "Pricing cards"),
+    ("ab-comparison", "A/B comparison"),
+    ("equalizer", "Graphic equalizer"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -322,6 +344,25 @@ struct State {
     rbac_grid: Vec<Vec<bool>>,
     cc_open: [bool; 2],
     marquee_play: bool,
+    follow_peer: bool,
+    comments: Vec<CommentEntry>,
+    thread_resolved: bool,
+    reactions: Vec<ReactionChip>,
+    attachments: Vec<AttachmentItem>,
+    story_step: usize,
+    view_mode: usize,
+    llm_temp: f32,
+    color_warmth: f32,
+    sched_rule: ScheduleRule,
+    fy_year: i32,
+    fy_quarter: u8,
+    env_idx: usize,
+    env_locked: bool,
+    patch_decision: SuggestionDecision,
+    annual_billing: bool,
+    selected_tier_plan: usize,
+    eq_bands: [f32; 8],
+    eq_preset: usize,
 }
 
 impl State {
@@ -529,6 +570,50 @@ impl State {
             ],
             cc_open: [true, false],
             marquee_play: true,
+            follow_peer: true,
+            comments: vec![
+                CommentEntry::new(
+                    "Lena Fischer",
+                    "LF",
+                    "4m ago",
+                    "Should we clamp the Gaussian blur radius to card.radius * 0.85 so outer scissor corners stay razor-sharp?",
+                )
+                .with_likes(4, true),
+                CommentEntry::new(
+                    "Jonas Berg",
+                    "JB",
+                    "2m ago",
+                    "Done in paint.rs — added a post-clip 1px ring pass and verified both light & dark posters.",
+                )
+                .reply()
+                .with_likes(2, false),
+            ],
+            thread_resolved: false,
+            reactions: vec![
+                ReactionChip::new("rocket", "Ship it", 12, true),
+                ReactionChip::new("sparkles", "Crisp", 8, true),
+                ReactionChip::new("heart", "Love", 5, false),
+                ReactionChip::new("flame", "Fast", 3, false),
+            ],
+            attachments: vec![
+                AttachmentItem::uploaded("lumen-demos_bg.wasm", "WASM", "8.2 MB"),
+                AttachmentItem::uploaded("sdf_uber.wgsl", "WGSL", "14.6 KB"),
+                AttachmentItem::uploading("poster-atlas-2x.png", "PNG", "1.9 MB", 0.68),
+            ],
+            story_step: 1,
+            view_mode: 1,
+            llm_temp: 0.42,
+            color_warmth: 5600.0,
+            sched_rule: ScheduleRule::default(),
+            fy_year: 2026,
+            fy_quarter: 2,
+            env_idx: 2,
+            env_locked: true,
+            patch_decision: SuggestionDecision::Pending,
+            annual_billing: true,
+            selected_tier_plan: 1,
+            eq_bands: [-2.5, -1.0, 1.5, 4.5, 5.2, 3.0, 1.0, -0.5],
+            eq_preset: 1,
         }
     }
 }
@@ -2763,6 +2848,236 @@ ui.button("Ship release").primary().icon("rocket");
             ui.column().fill_width().max_width(580.0).gap(10).align(Align::Center).show(|ui| {
                 ui.marquee_strip("tech_ticker", &items, s.marquee_play);
                 ui.switch("Animate ticker", &mut s.marquee_play);
+            });
+        }
+        "presence-pile" => {
+            let peers = [
+                PresencePeer::new("LF", "Lena Fischer", "Editing paint.rs · line 233", 0).editing(true),
+                PresencePeer::new("JB", "Jonas Berg", "Inspecting flame graph", 1).editing(true),
+                PresencePeer::new("PN", "Priya Nair", "Reviewing RBAC matrix", 2),
+                PresencePeer::new("TR", "Tomas Rivera", "Viewing dark theme", 3),
+                PresencePeer::new("AK", "Aiko Kato", "Idle · Tokyo", 0),
+                PresencePeer::new("SW", "Sam Wu", "Idle · San Francisco", 1),
+            ];
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                if let Some(idx) = ui.presence_pile("collab_bar", &peers, 4, &mut s.follow_peer) {
+                    ui.toast(Toast::new(format!("Jumped to {}’s viewport", peers[idx].name)).tone(Tone::Info));
+                }
+            });
+        }
+        "comment-thread" => {
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.comment_thread("pr_148_thread", "PR #148 · crates/lumen-core/src/paint.rs", &mut s.comments, &mut s.thread_resolved);
+            });
+        }
+        "reaction-bar" => {
+            ui.column().fill_width().max_width(520.0).gap(12).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.column().fill_width().gap(12).show(|ui| {
+                        ui.label("v0.5 shipped 170 GPU-rendered components with zero idle CPU wakeups.").strong();
+                        ui.reaction_bar("release_rx", &mut s.reactions);
+                    });
+                });
+            });
+        }
+        "attachment-list" => {
+            ui.column().fill_width().max_width(500.0).gap(10).show(|ui| {
+                ui.attachment_list("build_artifacts", &mut s.attachments);
+                if s.attachments.len() < 3 && ui.button("Restore sample files").ghost().small().clicked() {
+                    s.attachments = vec![
+                        AttachmentItem::uploaded("lumen-demos_bg.wasm", "WASM", "8.2 MB"),
+                        AttachmentItem::uploaded("sdf_uber.wgsl", "WGSL", "14.6 KB"),
+                        AttachmentItem::uploading("poster-atlas-2x.png", "PNG", "1.9 MB", 0.68),
+                    ];
+                }
+            });
+        }
+        "progress-steps" => {
+            let steps = [
+                ("Connect repository", "Grant read-only GitHub webhook access to build branches automatically."),
+                ("Configure WebGPU cache", "Persistent pipeline state objects trim cold startup below 12 ms."),
+                ("Verify regional PoPs", "Synthetic health probes run across Frankfurt, Virginia and Tokyo."),
+                ("Promote production traffic", "Shift live requests with instant automatic rollback on 5xx burn."),
+            ];
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.story_bars("onboard_story", &steps, &mut s.story_step);
+            });
+        }
+        "shortcut-bar" => {
+            let hints = [
+                ShortcutHint::new(&["⌘", "Enter"], "Deploy"),
+                ShortcutHint::new(&["⌘", "K"], "Actions"),
+                ShortcutHint::new(&["Esc"], "Clear"),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                if let Some(hi) = ui.shortcut_bar("cmd_footer", "3 runners selected", &hints) {
+                    ui.toast(Toast::new(format!("Triggered “{}”", hints[hi].action)).tone(Tone::Accent));
+                }
+            });
+        }
+        "view-switcher" => {
+            let modes = [
+                ViewMode::new("list", "List"),
+                ViewMode::new("kanban", "Board"),
+                ViewMode::new("calendar", "Timeline"),
+                ViewMode::new("git-Fork", "Graph"),
+            ];
+            let modes_clean = [
+                ViewMode::new("list", "List"),
+                ViewMode::new("layout-grid", "Board"),
+                ViewMode::new("calendar", "Calendar"),
+                ViewMode::new("git-branch", "Graph"),
+            ];
+            let _ = modes;
+            ui.column().gap(12).align(Align::Center).show(|ui| {
+                ui.view_switcher("ws_views", &modes_clean, &mut s.view_mode);
+                let desc = [
+                    "Compact tabular rows sorted by latency",
+                    "Grouped by deployment stage across 3 columns",
+                    "Scheduled rollout windows for November",
+                    "Dependency DAG across 5 workspace crates",
+                ][s.view_mode.min(3)];
+                ui.label(desc).small().muted();
+            });
+        }
+        "gradient-slider" => {
+            let temp_stops = [
+                ui.color(lumen::Token::Series0),
+                ui.color(lumen::Token::Series2),
+                ui.color(lumen::Token::Warning),
+                ui.color(lumen::Token::Danger),
+            ];
+            let kelvin_stops = [
+                ui.color(lumen::Token::Warning),
+                ui.color(lumen::Token::Knob),
+                ui.color(lumen::Token::Info),
+            ];
+            ui.column().fill_width().max_width(440.0).gap(16).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.column().fill_width().gap(16).show(|ui| {
+                        ui.gradient_slider("sampling_temp", "Sampling temperature", &mut s.llm_temp, 0.0..=1.5, &temp_stops, "");
+                        ui.gradient_slider("white_point", "Display white point", &mut s.color_warmth, 2700.0..=7500.0, &kelvin_stops, " K");
+                    });
+                });
+            });
+        }
+        "schedule-picker" => {
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.schedule_picker("backup_cron", &mut s.sched_rule);
+            });
+        }
+        "quarter-picker" => {
+            ui.column().fill_width().max_width(480.0).show(|ui| {
+                ui.quarter_picker("roadmap_fy", &mut s.fy_year, &mut s.fy_quarter);
+            });
+        }
+        "win-loss-chart" => {
+            let deltas = [
+                DivergingBar::new("sdf_batch_pass", 28.4, "%"),
+                DivergingBar::new("glyph_subpixel", 16.2, "%"),
+                DivergingBar::new("oklab_lut_mix", 9.5, "%"),
+                DivergingBar::new("cold_font_scan", -6.8, "%"),
+                DivergingBar::new("wasm_init_parse", -11.4, "%"),
+            ];
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.diverging_bars("bench_deltas", "v0.5 Frame Benchmark vs Baseline", &deltas, 32.0);
+            });
+        }
+        "waffle-chart" => {
+            let slices = [
+                WaffleSlice::new("WebGPU / Metal", 58, Tone::Accent),
+                WaffleSlice::new("Vulkan Linux", 24, Tone::Success),
+                WaffleSlice::new("DirectX 12", 12, Tone::Info),
+                WaffleSlice::new("Software fallback", 6, Tone::Warning),
+            ];
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.waffle_chart("gpu_fleet", "Active Renderer Backends", &slices);
+            });
+        }
+        "schema-viewer" => {
+            let cols = [
+                SchemaField::new("id", "uuid").pk(),
+                SchemaField::new("org_id", "uuid").fk(),
+                SchemaField::new("region_code", "varchar(16)").indexed(),
+                SchemaField::new("artifact_sha256", "bytea"),
+                SchemaField::new("promoted_at", "timestamptz").nullable(),
+            ];
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.schema_card("deployments_tbl", "public.deployments", &cols);
+            });
+        }
+        "env-switcher" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.env_banner("target_env", &mut s.env_idx, "eu-central-1", &mut s.env_locked);
+            });
+        }
+        "memory-profiler" => {
+            let slabs = [
+                ArenaSlab::new("Vertex VBO", 14.2, 32.0),
+                ArenaSlab::new("Glyph Atlas", 8.6, 16.0),
+                ArenaSlab::new("Clip & Uniforms", 3.1, 8.0),
+                ArenaSlab::new("Staging Ring", 4.8, 16.0),
+            ];
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.memory_arena("wgpu_arena", &slabs, 48.5);
+            });
+        }
+        "ai-suggestion" => {
+            let removed = ["let alpha = 1.0 - (dist / blur);"];
+            let added = [
+                "let sigma = (blur * 0.5).max(0.5);",
+                "let alpha = 0.5 * erfc(dist / (sigma * SQRT_2));",
+            ];
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.code_suggestion(
+                    "sdf_patch",
+                    "crates/lumen-wgpu/src/shader.wgsl",
+                    "Replace linear shadow falloff with analytical Gaussian error-function integration to eliminate Mach banding.",
+                    &removed,
+                    &added,
+                    &mut s.patch_decision,
+                );
+            });
+        }
+        "prompt-templates" => {
+            let templates = [
+                PromptTemplate::new("cpu", "Audit frame allocations", "Perf", "Find per-frame heap allocations inside {{crate_name}} and propose stack buffers."),
+                PromptTemplate::new("palette", "Check OKLab contrast", "Theme", "Verify APCA contrast of {{token_pair}} across both Light and Dark modes."),
+                PromptTemplate::new("shield", "Fuzz input parser", "Security", "Generate edge-case UTF-8 grapheme clusters for {{widget_fn}}."),
+                PromptTemplate::new("sparkles", "Spring motion tune", "Motion", "Tune damping & response for {{interaction}} with reduced-motion fallback."),
+            ];
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                if let Some(ti) = ui.prompt_templates("starter_prompts", &templates) {
+                    ui.toast(Toast::new(format!("Inserted “{}”", templates[ti].title)).tone(Tone::Accent));
+                }
+            });
+        }
+        "pricing-cards" => {
+            let plans = [
+                PlanSpec::new("Hobby", 0, 0, "For solo hackers & prototypes.", &["2 edge regions", "100k requests / mo", "Community support"]),
+                PlanSpec::new("Pro", 30, 24, "Production apps & fast teams.", &["14 global regions", "10M requests / mo", "Zero-downtime rollouts"]).popular(),
+                PlanSpec::new("Scale", 120, 96, "Dedicated runners & compliance.", &["Custom bare-metal", "SAML SSO & audit log", "99.99% SLA"]),
+            ];
+            ui.column().fill_width().max_width(660.0).show(|ui| {
+                ui.pricing_cards("cloud_tiers", &plans, &mut s.annual_billing, &mut s.selected_tier_plan);
+            });
+        }
+        "ab-comparison" => {
+            ui.column().fill_width().max_width(500.0).show(|ui| {
+                ui.ab_comparison(
+                    "checkout_exp",
+                    "Sub-millisecond WASM hydration experiment",
+                    "Control (v0.4 lazy init)",
+                    61.4,
+                    "Variant B (streaming compile)",
+                    74.8,
+                    99.2,
+                );
+            });
+        }
+        "equalizer" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.graphic_eq("master_eq", &mut s.eq_bands, &mut s.eq_preset);
             });
         }
         _ => {
