@@ -7,10 +7,10 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    Accent, Align, BarListItem, Candle, ChatMessage, Color, Command, Date, DockItem, Justify, KanbanCard, KanbanCol,
-    KvPair, LogEntry, LogLevel, Look, Mode, Placement, Platform, RingSpec, ScatterPoint, ScatterSeries, Series, Sides,
-    SortDir, TableCell, TableCol, TextRole, Time, TimelineItem, Toast, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode,
-    Ui, UptimeStatus,
+    Accent, Align, BarListItem, Candle, ChatMessage, Color, Command, Date, DockItem, FlameSpan, GanttTask, Justify,
+    KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, Look, Mode, NotificationItem, Placement, Platform, RingSpec,
+    ScatterPoint, ScatterSeries, Series, Sides, SortDir, TableCell, TableCol, TermLine, TextRole, Time, TimelineItem,
+    Toast, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui, UptimeStatus,
 };
 
 /// Every demo: url name, title.
@@ -104,6 +104,16 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("dock", "Magnifying dock"),
     ("waveform", "Audio waveform"),
     ("window-chrome", "Window chrome"),
+    ("split-pane", "Split pane"),
+    ("menu-bar", "Menu bar"),
+    ("terminal", "Terminal"),
+    ("gantt", "Gantt chart"),
+    ("treemap", "Treemap"),
+    ("markdown", "Markdown view"),
+    ("property-grid", "Property inspector"),
+    ("flame-graph", "Flame graph"),
+    ("notification-list", "Notification inbox"),
+    ("spotlight-card", "Spotlight card"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -201,6 +211,14 @@ struct State {
     audio_prog: f32,
     audio_playing: bool,
     win_look: Platform,
+    split_ratio: f32,
+    term_lines: Vec<TermLine>,
+    term_in: String,
+    prop_pos: (f64, f64),
+    prop_radius: f64,
+    prop_opacity: f64,
+    prop_clip: bool,
+    notifs: Vec<NotificationItem>,
 }
 
 impl State {
@@ -291,6 +309,23 @@ impl State {
             audio_prog: 0.38,
             audio_playing: false,
             win_look: Platform::Mac,
+            split_ratio: 0.38,
+            term_lines: vec![
+                TermLine::cmd("cargo test -p lumen-core --quiet"),
+                TermLine::ok("test result: ok. 119 passed; 0 failed; finished in 0.04s"),
+                TermLine::cmd("lumen build --target wasm32 --release"),
+                TermLine::out("Optimized lumen-demos_bg.wasm (100 live components ready)"),
+            ],
+            term_in: String::new(),
+            prop_pos: (128.0, 64.0),
+            prop_radius: 16.0,
+            prop_opacity: 94.0,
+            prop_clip: true,
+            notifs: vec![
+                NotificationItem::new("n1", "LF", "Merged PR #142 into ethereal", "Added GPU arc-band activity rings and radar meshes.", "3m ago", true),
+                NotificationItem::new("n2", "JB", "Canary rollout completed", "Zero error-budget burn across eu-central and us-east.", "18m ago", true),
+                NotificationItem::new("n3", "PN", "Weekly benchmark digest", "Median frame tessellation held at 0.19 ms on M3.", "2h ago", false),
+            ],
         }
     }
 }
@@ -352,7 +387,8 @@ fn view(ui: &mut Ui, s: &mut State) {
         | "hover-card"
         | "context-menu"
         | "confirm-popover"
-        | "split-button" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        | "split-button"
+        | "menu-bar" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -1689,6 +1725,160 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                     });
             });
         }
+        "split-pane" => {
+            ui.column().fill_width().max_width(580.0).gap(8).show(|ui| {
+                let cur_r = s.split_ratio;
+                ui.split_pane("ide_split", &mut s.split_ratio).height(220.0).show(
+                    |ui| {
+                        ui.label("Explorer").strong();
+                        ui.divider();
+                        for name in ["src/lib.rs", "src/ui.rs", "src/paint.rs", "src/theme.rs"] {
+                            ui.row().gap(6).align(Align::Center).show(|ui| {
+                                let ic_c = ui.color(lumen::Token::AccentStrong);
+                                ui.icon_leaf("file-code", 14.0, ic_c);
+                                ui.label(name);
+                            });
+                        }
+                    },
+                    |ui| {
+                        ui.row().fill_width().align(Align::Center).show(|ui| {
+                            ui.label("Inspector").strong();
+                            ui.spacer();
+                            ui.badge(format!("{:.0}% / {:.0}%", cur_r * 100.0, (1.0 - cur_r) * 100.0), Tone::Neutral);
+                        });
+                        ui.label("Drag the center sash or double-click it to spring back to 50 / 50.").secondary();
+                    },
+                );
+            });
+        }
+        "menu-bar" => {
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.menu_bar("app_menubar", |bar| {
+                    bar.menu("File", |ui| {
+                        ui.menu_item("plus", "New workspace").shortcut("⌘N");
+                        ui.menu_item("folder-open", "Open project…").shortcut("⌘O");
+                        ui.menu_separator();
+                        ui.menu_item("rocket", "Export release bundle").shortcut("⌘⇧E");
+                    });
+                    bar.menu("Edit", |ui| {
+                        ui.menu_item("", "Undo").shortcut("⌘Z");
+                        ui.menu_item("", "Redo").shortcut("⌘⇧Z");
+                        ui.menu_separator();
+                        ui.menu_item("copy", "Copy selection").shortcut("⌘C");
+                    });
+                    bar.menu("View", |ui| {
+                        ui.menu_item("", "Toggle sidebar").shortcut("⌘B");
+                        ui.menu_item("", "Command palette").shortcut("⌘K");
+                    });
+                    bar.menu("Build", |ui| {
+                        ui.menu_item("play", "Run target").shortcut("⌘R");
+                        ui.menu_item("flame", "Profile frame");
+                    });
+                });
+            });
+        }
+        "terminal" => {
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                let lines_snapshot = s.term_lines.clone();
+                if let Some(cmd) = ui.terminal("demo_term", &lines_snapshot, &mut s.term_in).title("zsh — lumen/crates").height(196.0).show() {
+                    s.term_lines.push(TermLine::cmd(&cmd));
+                    match cmd.as_str() {
+                        "clear" => s.term_lines.clear(),
+                        "help" => s.term_lines.push(TermLine::out("Built-ins: help, status, test, clear")),
+                        "status" => s.term_lines.push(TermLine::ok("branch ethereal · clean · 0 idle wakeups")),
+                        "test" => s.term_lines.push(TermLine::ok("119 passed in 0.04s")),
+                        other => s.term_lines.push(TermLine::out(format!("executed: {other}"))),
+                    }
+                }
+            });
+        }
+        "gantt" => {
+            let weeks = ["W1", "W2", "W3", "W4", "W5", "W6"];
+            let tasks = [
+                GanttTask::new("Token & OKLab engine", 0.0, 1.8, 1.0).owner("JB").tone(Tone::Success),
+                GanttTask::new("Single-shader wgpu pipeline", 1.0, 2.2, 1.0).owner("LF").tone(Tone::Success),
+                GanttTask::new("Batch 2–4 component suite", 2.4, 2.4, 0.82).owner("PN").tone(Tone::Accent),
+                GanttTask::new("WebGPU docs & posters", 4.0, 1.6, 0.55).owner("AK").tone(Tone::Info),
+                GanttTask::milestone("v0.5 RC freeze", 5.6),
+            ];
+            ui.column().fill_width().max_width(620.0).show(|ui| {
+                ui.gantt_chart("q4_roadmap", &weeks, &tasks);
+            });
+        }
+        "treemap" => {
+            let crates = [
+                TreemapItem::new("lumen-core", 342.0).detail("Widgets, layout & springs"),
+                TreemapItem::new("cosmic-text", 218.0).detail("HarfBuzz + shaping"),
+                TreemapItem::new("wgpu-hal", 184.0).detail("Metal / Vulkan / WebGPU"),
+                TreemapItem::new("lucide-ttf", 96.0).detail("Bundled vector icons"),
+                TreemapItem::new("lumen-app", 64.0).detail("winit loop & clipboard"),
+                TreemapItem::new("lumen-text", 48.0).detail("R8 glyph atlas"),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.card().title("Release WASM binary breakdown (KB)").pad(14.0).show(|ui| {
+                    ui.treemap("wasm_size", &crates).unit("KB").height(215.0).show();
+                });
+            });
+        }
+        "markdown" => {
+            let doc = r#"# Immediate-mode architecture
+Every frame records a compact layout tree and emits `DrawData` triangles for **one unified shader**.
+> Springs integrate in closed form, so motion stays exact at 60 Hz, 120 Hz or 240 Hz.
+- Colors resolve strictly through `Token` in perceptual OKLab
+- Zero idle wakeups when animations settle (`repaint_after == None`)
+```rust
+ui.button("Ship release").primary().icon("rocket");
+```"#;
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.markdown("arch_md", doc);
+                });
+            });
+        }
+        "property-grid" => {
+            ui.column().fill_width().max_width(380.0).show(|ui| {
+                ui.property_inspector("layer_props", |insp| {
+                    insp.section("Transform");
+                    let (mut px, mut py) = s.prop_pos;
+                    insp.vec2_row("Position", &mut px, &mut py);
+                    s.prop_pos = (px, py);
+                    insp.number("Corner radius", &mut s.prop_radius, 0.0..=48.0, "px");
+                    insp.section("Appearance");
+                    insp.number("Opacity", &mut s.prop_opacity, 0.0..=100.0, "%");
+                    insp.toggle("Clip sublayers", &mut s.prop_clip);
+                });
+            });
+        }
+        "flame-graph" => {
+            let frames = [
+                FlameSpan::new("Ui::run_frame", 0, 0.0, 4.80),
+                FlameSpan::new("layout::solve", 1, 0.12, 1.35),
+                FlameSpan::new("measure_text", 2, 0.24, 0.78),
+                FlameSpan::new("place_flex", 2, 1.06, 0.38),
+                FlameSpan::new("paint::tessellate", 1, 1.55, 1.92),
+                FlameSpan::new("Painter::rrect", 2, 1.60, 0.84),
+                FlameSpan::new("Painter::text", 2, 2.48, 0.94),
+                FlameSpan::new("wgpu::submit", 1, 3.55, 1.18),
+            ];
+            ui.column().fill_width().max_width(620.0).gap(6).show(|ui| {
+                ui.flame_graph("cpu_flame", &frames);
+            });
+        }
+        "notification-list" => {
+            ui.column().fill_width().max_width(540.0).show(|ui| {
+                ui.notification_list("inbox", &mut s.notifs);
+            });
+        }
+        "spotlight-card" => {
+            ui.row().fill_width().max_width(600.0).gap(14).show(|ui| {
+                ui.spotlight_card("sp_gpu").icon("zap").title("Single-pass SDF").show(|ui| {
+                    ui.label("Rounded rects, borders, Gaussian shadows and atlas glyphs batch into one draw call.").secondary();
+                });
+                ui.spotlight_card("sp_oklab").icon("sparkles").title("Perceptual OKLab").show(|ui| {
+                    ui.label("Switching themes or accents interpolates every token smoothly without muddy midpoints.").secondary();
+                });
+            });
+        }
         _ => {
             ui.label(format!("Unknown demo “{demo}”.")).secondary();
         }
@@ -1922,6 +2112,8 @@ fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
         "otp-input" => vec![k(lumen::Key::Tab), Wait(0.4)],
         "split-button" => vec![k(lumen::Key::Tab), k(lumen::Key::Tab), k(lumen::Key::Enter), Wait(0.5)],
         "dock" => vec![Hover(lumen::vec2(342.0, 212.0)), Wait(0.6)],
+        "menu-bar" => vec![k(lumen::Key::Tab), k(lumen::Key::Enter), Wait(0.5)],
+        "spotlight-card" => vec![Hover(lumen::vec2(235.0, 215.0)), Wait(0.4)],
         _ => vec![],
     }
 }

@@ -40,6 +40,8 @@ pub mod charts_extra;
 pub mod planning;
 pub mod ai_devtools;
 pub mod motion_chrome;
+pub mod workspace_pro;
+pub mod rich_views;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -73,6 +75,8 @@ pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatm
 pub use planning::{KanbanCard, KanbanCol};
 pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComposer, ToolCall, ToolStatus, TraceSpan, UptimeStatus};
 pub use motion_chrome::{DockItem, RollingNumber, Waveform, WindowChrome};
+pub use workspace_pro::{FlameSpan, MenuBarScope, PropertyInspector, SplitPane, TermLine, TermTone, Terminal};
+pub use rich_views::{GanttTask, NotificationItem, SpotlightCard, Treemap, TreemapItem};
 
 use crate::color::Color;
 use crate::theme::Token;

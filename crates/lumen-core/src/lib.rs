@@ -35,6 +35,7 @@ pub use theme::{springs, ControlSize, TextRole};
 pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
 pub use widgets::{
     password_strength, BarListItem, Candle, ChartKind, ChatMessage, ChatRole, Command, ComposerOut, DockItem,
-    KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, RingSpec, ScatterPoint, ScatterSeries, Series, SortDir,
-    TableCell, TableCol, TimelineItem, Toast, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, UptimeStatus, Variant,
+    FlameSpan, GanttTask, KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, NotificationItem, RingSpec, ScatterPoint,
+    ScatterSeries, Series, SortDir, TableCell, TableCol, TermLine, TermTone, TimelineItem, Toast, Tone, ToolCall,
+    ToolStatus, TraceSpan, TreeNode, TreemapItem, UptimeStatus, Variant,
 };

@@ -323,4 +323,65 @@ fn ai_devtools_motion_and_window_chrome_interact_and_settle_cleanly() {
     assert_eq!(settled2.repaint_after, None);
 }
 
+// --------------------------------- Workspace, Inspector, Flame & Rich Views
+
+struct WorkspaceState {
+    ratio: f32,
+    term_lines: Vec<TermLine>,
+    term_in: String,
+    px: f64,
+    py: f64,
+    clip: bool,
+    notifs: Vec<NotificationItem>,
+}
+
+fn workspace_view(ui: &mut Ui, s: &mut WorkspaceState) {
+    ui.column().width(660.0).gap(10).show(|ui| {
+        ui.split_pane("sp", &mut s.ratio).height(120.0).show(|ui| { ui.label("L"); }, |ui| { ui.label("R"); });
+        ui.menu_bar("mb", |bar| {
+            bar.menu("File", |ui| { ui.menu_item("", "New"); });
+            bar.menu("Edit", |ui| { ui.menu_item("", "Copy"); });
+        });
+        ui.terminal("tm", &s.term_lines, &mut s.term_in).height(120.0).show();
+        ui.gantt_chart("gt", &["W1", "W2"], &[GanttTask::new("Core", 0.0, 1.5, 0.8), GanttTask::milestone("RC", 1.8)]);
+        ui.treemap("tr", &[TreemapItem::new("core", 120.0), TreemapItem::new("wgpu", 80.0)]).height(140.0).show();
+        ui.markdown("md", "# Title\n- item with `code` and **bold**\n> quote");
+        ui.property_inspector("pi", |insp| {
+            insp.section("Layout");
+            insp.vec2_row("Pos", &mut s.px, &mut s.py);
+            insp.toggle("Clip", &mut s.clip);
+        });
+        ui.flame_graph("fg", &[FlameSpan::new("root", 0, 0.0, 4.0), FlameSpan::new("child", 1, 0.5, 1.5)]);
+        ui.notification_list("nl", &mut s.notifs);
+        ui.spotlight_card("sc").icon("zap").title("Fast").show(|ui| { ui.label("Body"); });
+    });
+}
+
+#[test]
+fn split_pane_menubar_terminal_flame_and_rich_views_interact_and_settle() {
+    let mut h = Harness::new(
+        WorkspaceState {
+            ratio: 0.4,
+            term_lines: vec![TermLine::cmd("status")],
+            term_in: String::new(),
+            px: 10.0,
+            py: 20.0,
+            clip: true,
+            notifs: vec![NotificationItem::new("1", "JB", "Ping", "Body", "1m", true)],
+        },
+        workspace_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all Group 9 workspace & rich widgets must settle to zero wakeups");
+
+    // First Tab focuses the SplitPane sash; ArrowRight steps ratio up by 0.03; Home resets to 0.5!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert!((h.s.ratio - 0.43).abs() < 1e-4);
+    h.frame(key(Key::Home));
+    assert!((h.s.ratio - 0.50).abs() < 1e-4);
+}
+
+
 

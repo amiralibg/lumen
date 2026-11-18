@@ -1197,6 +1197,135 @@ if let Some(i) = ui.dock("app_dock", &items) {
     ],
     keys: [],
   },
+  {
+    slug: "split-pane", name: "Split pane", group: "Layout and surfaces", demo: "split-pane",
+    summary: "Draggable horizontal or vertical split view with an animated accent sash, double-click 50/50 reset and arrow-key resizing.",
+    code: `ui.split_pane("ide_split", &mut s.ratio)
+    .height(220.0)
+    .show(|ui| { ui.label("Explorer"); }, |ui| { ui.label("Inspector"); });`,
+    options: [
+      [".vertical() .height(px)", "Horizontal left/right by default; .vertical() stacks top/bottom."],
+    ],
+    keys: [["← → / ↑ ↓ (Shift 2.5×)", "Resize focused sash"], ["Double-click / Home", "Spring back to 50 / 50"]],
+  },
+  {
+    slug: "menu-bar", name: "Menu bar", group: "Navigation", demo: "menu-bar",
+    summary: "Desktop application menu bar (File, Edit, View, Build) where hovering across menus while one is open switches menus seamlessly.",
+    code: `ui.menu_bar("app_bar", |bar| {
+    bar.menu("File", |ui| {
+        ui.menu_item("plus", "New workspace").shortcut("⌘N");
+    });
+    bar.menu("Edit", |ui| {
+        ui.menu_item("copy", "Copy").shortcut("⌘C");
+    });
+});`,
+    options: [
+      ["bar.menu(label, |ui| ..)", "Uses standard ui.menu_item, ui.menu_separator and ui.menu_label."],
+    ],
+    keys: [["← →", "Move across top-level triggers"], ["Space / Enter", "Open focused menu"]],
+  },
+  {
+    slug: "terminal", name: "Terminal", group: "Developer tools", demo: "terminal",
+    summary: "Interactive lumen-drawn command shell with semantic output tones, scrollable buffer, live prompt and ↑ / ↓ command history.",
+    code: `if let Some(cmd) = ui.terminal("shell", &s.lines, &mut s.input)
+    .title("zsh — lumen")
+    .height(196.0)
+    .show()
+{
+    run_command(&cmd, &mut s.lines);
+}`,
+    options: [
+      ["TermLine", "::cmd, ::out, ::ok, ::warn, ::err"],
+      [".title(text) .height(px)", "Header title and scrollable viewport height."],
+    ],
+    keys: [["Enter", "Submit command"], ["↑ ↓", "Cycle command history"]],
+  },
+  {
+    slug: "gantt", name: "Gantt chart", group: "Planning", demo: "gantt",
+    summary: "Roadmap and sprint timeline with completion-filled task bars, diamond milestones, owner tags and hover tooltips.",
+    code: `let tasks = [
+    GanttTask::new("Token & OKLab engine", 0.0, 1.8, 1.0).owner("JB").tone(Tone::Success),
+    GanttTask::milestone("v0.5 RC freeze", 5.6),
+];
+ui.gantt_chart("roadmap", &["W1", "W2", "W3", "W4", "W5", "W6"], &tasks);`,
+    options: [
+      ["GanttTask::new(name, start, duration, progress)", ".owner(initials), .tone(Tone)"],
+      ["GanttTask::milestone(name, at)", "Draws a diamond milestone marker at column coordinate at."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "treemap", name: "Treemap", group: "Charts", demo: "treemap",
+    summary: "Slice-and-dice proportional area tiles for binary size, memory or storage breakdowns with share labels and hover tooltips.",
+    code: `let items = [
+    TreemapItem::new("lumen-core", 342.0).detail("Widgets & layout"),
+    TreemapItem::new("cosmic-text", 218.0),
+];
+ui.treemap("wasm_size", &items).unit("KB").height(215.0).show();`,
+    options: [
+      ["TreemapItem::new(label, value).detail(text)", "Sorted largest-first and partitioned recursively by aspect ratio."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "markdown", name: "Markdown view", group: "Data", demo: "markdown",
+    summary: "Zero-dependency immediate-mode Markdown renderer supporting headings, bold, inline code pills, lists, blockquotes and fenced code blocks.",
+    code: `ui.markdown("doc", "# Heading\\nParagraph with \`inline_code\` and **bold**.");`,
+    options: [
+      ["ui.markdown(key, md_str)", "Delegates fenced code blocks to ui.code_block with syntax highlighting."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "property-grid", name: "Property inspector", group: "Developer tools", demo: "property-grid",
+    summary: "Compact two-column Figma/Xcode-style inspector card with section headers, scrubbable X/Y numeric pairs and toggles.",
+    code: `ui.property_inspector("props", |insp| {
+    insp.section("Transform");
+    insp.vec2_row("Position", &mut s.x, &mut s.y);
+    insp.number("Opacity", &mut s.opacity, 0.0..=100.0, "%");
+    insp.toggle("Clip sublayers", &mut s.clip);
+});`,
+    options: [
+      ["insp.section(title) .row(label, |ui| ..)", "Custom or built-in .number, .vec2_row and .toggle rows."],
+    ],
+    keys: [["Drag field / ↑ ↓", "Scrub or step numeric properties"]],
+  },
+  {
+    slug: "flame-graph", name: "Flame graph", group: "Developer tools", demo: "flame-graph",
+    summary: "Interactive CPU and GPU icicle flame chart — click any stack frame to spring-zoom into its subtree and Reset zoom to pull back.",
+    code: `let spans = [
+    FlameSpan::new("Ui::run_frame", 0, 0.0, 4.80),
+    FlameSpan::new("paint::tessellate", 1, 1.55, 1.92),
+];
+ui.flame_graph("profile", &spans);`,
+    options: [
+      ["FlameSpan::new(name, depth, start_ms, duration_ms)", "Click any span to zoom the window smoothly; hover for duration and % share."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "notification-list", name: "Notification inbox", group: "Feedback", demo: "notification-list",
+    summary: "Filterable All / Unread notification feed with unread accent dots, Mark all read button, avatars and per-item archive.",
+    code: `ui.notification_list("inbox", &mut s.notifications);`,
+    options: [
+      ["NotificationItem::new(id, author, title, body, time, unread)", "Clicking a row toggles read state; × archives it."],
+    ],
+    keys: [["Tab + Space", "Filter chips, Mark all read and row toggle"]],
+  },
+  {
+    slug: "spotlight-card", name: "Spotlight card", group: "Motion", demo: "spotlight-card",
+    summary: "Signature Ethereal glass card whose border and surface bloom with a soft OKLab radial accent spotlight tracking the pointer.",
+    code: `ui.spotlight_card("gpu")
+    .icon("zap")
+    .title("Single-pass SDF")
+    .show(|ui| {
+        ui.label("Rounded rects, borders and glyphs batch into one draw call.").secondary();
+    });`,
+    options: [
+      [".icon(name) .title(text) .show(|ui| ..)", "Suppresses radial pointer tracking automatically when reduced motion is enabled."],
+    ],
+    keys: [],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -1403,8 +1532,9 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-18", items: [
-    "90 components across 15 groups: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, syntax code block, JSON viewer, key-value editor & log console.",
-    "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, radar, scatter, conversion funnel, OHLC candlestick & Kanban board.",
+    "100 components across 14 groups: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor & log console.",
+    "Workspace, inspector & profiling: resizable split pane, desktop menu bar, interactive terminal, two-column property inspector, click-to-zoom flame graph, notification inbox & Ethereal spotlight cards.",
+    "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, treemap, radar, scatter, conversion funnel, OHLC candlestick, Gantt roadmap & Kanban board.",
     "DevTools, motion & chrome: unified diff viewer, trace waterfall, uptime strip, rolling odometer numbers, neighbor-magnifying dock, scrubbable audio waveform & look-aware window chrome.",
     "Inputs, pickers & overlays: combobox, multi-select, time & HSV/hex color pickers, sheet/drawer, ⌘K command palette, hover card, context menu, confirm popover, text area, scrubbable number field, tag input, OTP code, password strength, search field, alert/banner, skeleton, empty state, breadcrumb, pagination, wizard steps, radio cards, rating, dual-thumb range slider, shortcut recorder, split/hold/copy buttons, dropzone, toolbar, status bar & segmented meter.",
     "Ethereal: the Lumen look takes the site's night-sky palette, 36 px controls, 16 px glass cards with a light top edge and a pointer-following accent glow.",
