@@ -34,9 +34,11 @@ pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
 pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, Shown, SystemPrefs, Ui};
 pub use widgets::{
-    password_strength, BarListItem, Candle, CarouselSlide, ChartKind, ChatMessage, ChatRole, Command, ComposerOut,
-    Currency, DockItem, EditorTab, EditorTabsOut, FlameSpan, GanttTask, ImageStatus, KanbanCard, KanbanCol, KvPair,
-    LogEntry, LogLevel, MentionCandidate, NavBarItem, NotificationItem, ReorderItem, RingSpec, ScatterPoint,
-    ScatterSeries, Series, SortDir, TableCell, TableCol, TermLine, TermTone, TimelineItem, Toast, TocItem, Tone,
-    ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, UndoBarOut, UptimeStatus, Variant,
+    password_strength, BarListItem, Candle, CarouselSlide, ChartKind, ChatMessage, ChatRole, ChecklistStep,
+    CitationSource, Command, CommitRow, ComposerOut, Currency, DockItem, EditorTab, EditorTabsOut, FilterFacet,
+    FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker, ImageStatus, KanbanCard, KanbanCol,
+    KpiMetric, KvPair, LogEntry, LogLevel, MentionCandidate, NavBarItem, NotificationItem, ReorderItem, RingSpec,
+    SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, Series, SortDir, TableCell, TableCol, TermLine, TermTone,
+    TestCase, TestState, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem,
+    UndoBarOut, UptimeStatus, Variant,
 };

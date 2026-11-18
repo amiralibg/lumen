@@ -44,6 +44,8 @@ pub mod workspace_pro;
 pub mod rich_views;
 pub mod inputs_pro;
 pub mod nav_surfaces;
+pub mod viz_pro;
+pub mod interactive_pro;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -86,6 +88,12 @@ pub use inputs_pro::{
 pub use nav_surfaces::{
     Callout, Carousel, CarouselSlide, EditorTab, EditorTabsOut, ImageFrame, ImageStatus, NavBarItem, TocItem, UndoBar,
     UndoBarOut,
+};
+pub use viz_pro::{
+    CommitRow, GraphNode, GraphWire, HistogramMarker, KpiMetric, SankeyLink, ScheduleEvent, TestCase, TestState,
+};
+pub use interactive_pro::{
+    ChecklistStep, CitationSource, CompareSplit, FilterFacet, GridColumn, RotaryKnob,
 };
 
 use crate::color::Color;

@@ -7,11 +7,13 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    Accent, Align, BarListItem, Candle, CarouselSlide, ChatMessage, Color, Command, Currency, Date, DockItem,
-    EditorTab, FlameSpan, GanttTask, ImageStatus, Justify, KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, Look,
-    MentionCandidate, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem, RingSpec, ScatterPoint,
-    ScatterSeries, Series, Sides, SortDir, TableCell, TableCol, TermLine, TextRole, Time, TimelineItem, Toast,
-    TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui, UptimeStatus,
+    vec2, Accent, Align, BarListItem, Candle, CarouselSlide, ChatMessage, ChecklistStep, CitationSource, Color,
+    Command, CommitRow, Currency, Date, DockItem, EditorTab, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire,
+    GridColumn, HistogramMarker, ImageStatus, Justify, KanbanCard, KanbanCol, KpiMetric, KvPair, LogEntry, LogLevel,
+    Look, MentionCandidate, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem, RingSpec, SankeyLink,
+    ScatterPoint, ScatterSeries, ScheduleEvent, Series, Sides, SortDir, TableCell, TableCol, TermLine, TestCase,
+    TextRole, Time, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui,
+    UptimeStatus,
 };
 
 /// Every demo: url name, title.
@@ -129,6 +131,22 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("callout", "Callout"),
     ("undo-toast", "Undo snackbar"),
     ("image-frame", "Image frame"),
+    ("sankey-chart", "Sankey chart"),
+    ("contribution-graph", "Contribution graph"),
+    ("histogram", "Histogram"),
+    ("kpi-strip", "KPI strip"),
+    ("day-schedule", "Week schedule"),
+    ("node-editor", "Node editor"),
+    ("commit-graph", "Commit graph"),
+    ("test-explorer", "Test explorer"),
+    ("data-grid", "Data grid"),
+    ("filter-bar", "Filter bar"),
+    ("ai-citations", "AI citations"),
+    ("text-effects", "Text effects"),
+    ("rotary-knob", "Rotary knob"),
+    ("compare-slider", "Comparison slider"),
+    ("countdown", "Countdown timer"),
+    ("checklist-card", "Checklist card"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -255,6 +273,16 @@ struct State {
     undo_visible: bool,
     undo_rem: f32,
     img_status: ImageStatus,
+    graph_nodes: Vec<GraphNode>,
+    commit_sel: usize,
+    test_cases: Vec<TestCase>,
+    grid_rows: Vec<Vec<String>>,
+    facets: Vec<FilterFacet>,
+    knobs: [f32; 3],
+    cmp_ratio: f32,
+    cd_secs: u32,
+    cd_running: bool,
+    check_steps: Vec<ChecklistStep>,
 }
 
 impl State {
@@ -402,6 +430,43 @@ impl State {
             undo_visible: true,
             undo_rem: 0.68,
             img_status: ImageStatus::Loaded,
+            graph_nodes: vec![
+                GraphNode::new("UV Coordinates", vec2(18.0, 56.0), &[], &["uv", "dpi"], Tone::Info),
+                GraphNode::new("SDF RoundRect", vec2(218.0, 34.0), &["uv", "radii"], &["dist"], Tone::Accent),
+                GraphNode::new("OKLab Shade", vec2(422.0, 56.0), &["dist", "dpi"], &["rgba"], Tone::Success),
+            ],
+            commit_sel: 0,
+            test_cases: vec![
+                TestCase::passed("anim::spring", "retarget_preserves_velocity", 0.08),
+                TestCase::passed("paint::sdf", "quads_batch_by_scissor_clip", 0.14),
+                TestCase::failed(
+                    "layout::flex",
+                    "subpixel_baseline_snap_2x",
+                    0.31,
+                    "assertion `left == right` failed: expected y=42.5, got y=42.0 (missing scale=2.0 snap)",
+                ),
+                TestCase::passed("theme::oklab", "derived_accents_meet_contrast", 0.11),
+            ],
+            grid_rows: vec![
+                vec!["eu-central-1".into(), "4".into(), "48,000".into(), "14.2 ms".into()],
+                vec!["us-east-1".into(), "6".into(), "72,000".into(), "18.6 ms".into()],
+                vec!["ap-northeast-1".into(), "3".into(), "36,000".into(), "21.0 ms".into()],
+                vec!["eu-west-2".into(), "3".into(), "32,000".into(), "15.8 ms".into()],
+            ],
+            facets: vec![
+                FilterFacet::new("Status", "is", "Healthy"),
+                FilterFacet::new("Backend", "is", "WebGPU"),
+            ],
+            knobs: [64.0, 420.0, 38.0],
+            cmp_ratio: 0.48,
+            cd_secs: 702,
+            cd_running: false,
+            check_steps: vec![
+                ChecklistStep::new("Verify zero idle wakeups", "All 130 components return repaint_after == None at rest.", "Core", true),
+                ChecklistStep::new("Audit dark & light OKLab tokens", "Zero hardcoded hex colors inside widget renderers.", "Theme", true),
+                ChecklistStep::new("Compile WebGPU demo bundle", "wasm-bindgen release target under site/demo.", "Web", true),
+                ChecklistStep::new("Tag v0.5.0 release branch", "Sign release notes and publish crates.", "Ship", false),
+            ],
         }
     }
 }
@@ -2191,6 +2256,202 @@ ui.button("Ship release").primary().icon("rocket");
                     .caption("Click frame to zoom · 2× DPI")
                     .status(s.img_status)
                     .height(190.0);
+            });
+        }
+        "sankey-chart" => {
+            let nodes = ["Ingress", "Edge Cache", "Origin API", "2xx Cached", "2xx Dynamic", "429 Throttled"];
+            let links = [
+                SankeyLink::new(0, 1, 84.0),
+                SankeyLink::new(0, 2, 44.0),
+                SankeyLink::new(1, 3, 78.0),
+                SankeyLink::new(1, 2, 6.0),
+                SankeyLink::new(2, 4, 46.0),
+                SankeyLink::new(2, 5, 4.0),
+            ];
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                ui.card().title("Edge request flow (k req/s)").pad(16.0).show(|ui| {
+                    ui.sankey_chart("edge_sankey", &nodes, &links, 210.0);
+                });
+            });
+        }
+        "contribution-graph" => {
+            let mut weeks = [[0u8; 7]; 26];
+            for (wi, wk) in weeks.iter_mut().enumerate() {
+                for (di, cell) in wk.iter_mut().enumerate() {
+                    let h = ((wi * 17 + di * 31 + 11) % 19) as u8;
+                    *cell = if di == 0 || di == 6 {
+                        h.saturating_sub(13)
+                    } else if h < 5 {
+                        0
+                    } else {
+                        (h - 4).min(12)
+                    };
+                }
+            }
+            let months = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.contribution_graph("git_contrib", &weeks, &months);
+            });
+        }
+        "histogram" => {
+            let buckets = ["0.05", "0.08", "0.11", "0.14", "0.17", "0.20", "0.23", "0.26", "0.29", "0.32", "0.35", "0.38", "0.41", "0.45ms"];
+            let counts = [18.0, 54.0, 128.0, 210.0, 245.0, 182.0, 114.0, 68.0, 39.0, 24.0, 15.0, 9.0, 5.0, 3.0];
+            let markers = [
+                HistogramMarker::new(0.32, "p50 · 0.17ms", Tone::Success),
+                HistogramMarker::new(0.68, "p95 · 0.29ms", Tone::Warning),
+                HistogramMarker::new(0.88, "p99 · 0.39ms", Tone::Danger),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.card().title("Frame tessellation latency distribution").pad(16.0).show(|ui| {
+                    ui.histogram("lat_hist", &buckets, &counts, &markers, 196.0);
+                });
+            });
+        }
+        "kpi-strip" => {
+            let metrics = [
+                KpiMetric::new("Throughput", "142.8k/s", 14.2, vec![94.0, 102.0, 99.0, 112.0, 118.0, 126.0, 134.0, 142.8]),
+                KpiMetric::new("Median frame", "0.18 ms", 8.4, vec![0.26, 0.24, 0.23, 0.21, 0.20, 0.19, 0.19, 0.18]),
+                KpiMetric::new("5xx error burn", "0.02%", -0.4, vec![0.06, 0.05, 0.05, 0.04, 0.03, 0.03, 0.02, 0.02]),
+            ];
+            ui.column().fill_width().max_width(620.0).show(|ui| {
+                ui.kpi_strip("exec_kpis", &metrics);
+            });
+        }
+        "day-schedule" => {
+            let days = ["Mon 16", "Tue 17", "Wed 18", "Thu 19"];
+            let events = [
+                ScheduleEvent::new(0, 9.5, 2.0, "WGSL shader audit", Tone::Accent).room("Lab A"),
+                ScheduleEvent::new(1, 11.0, 2.2, "OKLab contrast", Tone::Success).room("Design"),
+                ScheduleEvent::new(2, 10.0, 1.8, "WebGPU bundle", Tone::Info),
+                ScheduleEvent::new(2, 14.0, 2.2, "Canary rollout", Tone::Warning).room("Release"),
+                ScheduleEvent::new(3, 12.5, 2.0, "v0.5 RC sign-off", Tone::Accent),
+            ];
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                ui.day_schedule("sprint_cal", &days, 9, 17, Some((2, 13.3)), &events, 250.0);
+            });
+        }
+        "node-editor" => {
+            let wires = [
+                GraphWire::new(0, 0, 1, 0),
+                GraphWire::new(0, 1, 2, 1),
+                GraphWire::new(1, 0, 2, 0),
+            ];
+            ui.column().fill_width().max_width(600.0).show(|ui| {
+                ui.node_editor("shader_graph", &mut s.graph_nodes, &wires, 224.0);
+            });
+        }
+        "commit-graph" => {
+            let commits = [
+                CommitRow::new("f3d0731", "widgets: add pro inputs, shuttle & editor tabs", "AL", "4m ago", 0, vec![0, 1]).badge("HEAD → ethereal"),
+                CommitRow::new("825366a", "widgets: smooth Gaussian spotlight & flame ellipsis", "LF", "22m ago", 1, vec![0]),
+                CommitRow::new("6ca5a39", "widgets: AI interfaces, waterfall & window chrome", "JB", "1h ago", 0, vec![0]).badge("v0.5-rc1"),
+                CommitRow::new("f58d8e2", "widgets: activity rings, radar, funnel & kanban", "PN", "3h ago", 0, vec![0]),
+                CommitRow::new("26ce625", "widgets: sortable table, tree & syntax code block", "AK", "5h ago", 0, vec![]),
+            ];
+            ui.column().fill_width().max_width(620.0).show(|ui| {
+                ui.commit_graph("repo_log", &commits, &mut s.commit_sel);
+            });
+        }
+        "test-explorer" => {
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                if ui.test_explorer("core_suite", &s.test_cases) {
+                    for tc in &mut s.test_cases {
+                        tc.state = lumen::TestState::Passed;
+                        tc.failure_msg = None;
+                    }
+                    ui.toast(Toast::new("All 4 tests passed (0.58 ms)").success());
+                }
+            });
+        }
+        "data-grid" => {
+            let cols = [
+                GridColumn::new("Region"),
+                GridColumn::new("PoPs").mono(),
+                GridColumn::new("RPS Cap").mono(),
+                GridColumn::new("P99 Latency").mono(),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.data_grid("cap_grid", &cols, &mut s.grid_rows);
+            });
+        }
+        "filter-bar" => {
+            const PRESETS: [(&str, &str, &str); 4] = [
+                ("Status", "is", "Healthy"),
+                ("Backend", "is", "WebGPU"),
+                ("Region", "in", "EU, US"),
+                ("Scale", "≥", "2× Retina"),
+            ];
+            const NODES: [(&str, &str, &str); 3] = [
+                ("fra-gpu-01", "Healthy", "WebGPU · EU"),
+                ("iad-gpu-04", "Healthy", "WebGPU · US"),
+                ("nrt-gl2-02", "Degraded", "WebGL2 · APAC"),
+            ];
+            ui.column().fill_width().max_width(580.0).gap(10).show(|ui| {
+                ui.filter_bar("cluster_flt", &mut s.facets, &PRESETS);
+                ui.card().pad(10.0).show(|ui| {
+                    for (name, status, meta) in NODES {
+                        let ok_status = !s.facets.iter().any(|f| f.field == "Status" && f.value != status);
+                        let ok_back = !s.facets.iter().any(|f| f.field == "Backend" && !meta.contains(&f.value));
+                        if ok_status && ok_back {
+                            ui.row().fill_width().pad(6.0).align(Align::Center).gap(10).show(|ui| {
+                                ui.status(name, if status == "Healthy" { Tone::Success } else { Tone::Warning });
+                                ui.spacer();
+                                ui.label(meta).small().muted();
+                            });
+                        }
+                    }
+                });
+            });
+        }
+        "ai-citations" => {
+            let segs = [
+                ("lumen batches rounded rectangles, borders, shadows and glyphs into one unified WGSL shader,", Some(1)),
+                ("interpolating every semantic token in perceptual OKLab", Some(2)),
+                ("while closed-form springs settle to exact zero idle wakeups.", Some(3)),
+            ];
+            let sources = [
+                CitationSource::new(1, "paint.rs · Uber-shader", "lumen-core/src", "64-byte vertices carry mode & SDF radii."),
+                CitationSource::new(2, "color.rs · OKLab mix", "lumen-core/src", "Uniform lightness across theme blends."),
+                CitationSource::new(3, "anim.rs · Closed form", "lumen-core/src", "Analytical harmonic integration."),
+            ];
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.cited_answer("arch_cite", &segs, &sources);
+            });
+        }
+        "text-effects" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| {
+                ui.text_effects_card(
+                    "kinetic_hero",
+                    "Kinetic Typography",
+                    "Closed-form springs meet perceptual OKLab.",
+                    "Each word rises on its own harmonic oscillator and settles to zero idle frame wakeups.",
+                );
+            });
+        }
+        "rotary-knob" => {
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.card().title("Synth filter stage").pad(18.0).show(|ui| {
+                    ui.row().fill_width().justify(Justify::SpaceBetween).align(Align::Center).show(|ui| {
+                        ui.rotary_knob("Drive", &mut s.knobs[0], 0.0..=100.0).unit("%");
+                        ui.rotary_knob("Cutoff", &mut s.knobs[1], 80.0..=2400.0).unit(" Hz");
+                        ui.rotary_knob("Resonance", &mut s.knobs[2], 0.0..=100.0).unit("%");
+                    });
+                });
+            });
+        }
+        "compare-slider" => {
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.compare_split("sdf_split", &mut s.cmp_ratio, "Wireframe mesh", "SDF shaded").height(212.0);
+            });
+        }
+        "countdown" => {
+            ui.column().fill_width().max_width(480.0).show(|ui| {
+                ui.countdown_card("canary_bake", "Canary bake window · eu-central-1", &mut s.cd_secs, 900, &mut s.cd_running);
+            });
+        }
+        "checklist-card" => {
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.checklist_card("rc_steps", "v0.5 Release readiness", &mut s.check_steps);
             });
         }
         _ => {

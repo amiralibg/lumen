@@ -1495,6 +1495,177 @@ if out.undo_clicked { restore_runner(); }`,
     ],
     keys: [["Enter / Space", "Toggle zoom when loaded"]],
   },
+  {
+    slug: "sankey-chart", name: "Sankey chart", group: "Charts", demo: "sankey-chart",
+    summary: "Multi-stage flow diagram rendered with smooth cubic-Bezier gradient ribbons, automatic column layout, and conversion hover tooltips.",
+    code: `let nodes = ["Ingress", "Edge Cache", "Origin API", "2xx Cached", "2xx Dynamic"];
+let links = [SankeyLink::new(0, 1, 84.0), SankeyLink::new(1, 3, 78.0)];
+ui.sankey_chart("flow", &nodes, &links, 210.0);`,
+    options: [
+      ["SankeyLink::new(from, to, value)", "Directed flow volume between node indices; stage columns resolve automatically."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "contribution-graph", name: "Contribution graph", group: "Charts", demo: "contribution-graph",
+    summary: "GitHub-style 7-weekday × N-week calendar heatmap with month headers, perceptual OKLab color ramp, legend, and per-day hover tooltips.",
+    code: `ui.contribution_graph("commits", &weeks, &["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"]);`,
+    options: [
+      ["weeks: &[[u8; 7]]", "Each column holds 7 daily counts (Sun..Sat) scaled across a 5-stop OKLab ramp."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "histogram", name: "Histogram", group: "Charts", demo: "histogram",
+    summary: "Distribution bucket histogram with spring-growing bars, vertical dashed percentile markers (p50, p95, p99), and sample share tooltips.",
+    code: `let markers = [
+    HistogramMarker::new(0.32, "p50 · 0.17ms", Tone::Success),
+    HistogramMarker::new(0.88, "p99 · 0.39ms", Tone::Danger),
+];
+ui.histogram("lat", &buckets, &counts, &markers, 196.0);`,
+    options: [
+      ["HistogramMarker::new(pos_0_to_1, label, Tone)", "Draws a dashed reference line and pill callout flag."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "kpi-strip", name: "KPI strip", group: "Charts", demo: "kpi-strip",
+    summary: "Executive multi-metric comparison strip inside one divided glass surface, pairing tabular readouts with delta badges and synchronized sparklines.",
+    code: `let kpis = [
+    KpiMetric::new("Throughput", "142.8k/s", 14.2, vec![94.0, 112.0, 142.8]),
+    KpiMetric::new("Median frame", "0.18 ms", 8.4, vec![0.24, 0.20, 0.18]),
+];
+ui.kpi_strip("kpis", &kpis);`,
+    options: [
+      ["KpiMetric::new(label, value, delta_pct, trend)", "Colors trend sparkline and delta badge automatically from delta sign."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "day-schedule", name: "Week schedule", group: "Planning", demo: "day-schedule",
+    summary: "Multi-day hourly time-block schedule calendar with tinted event cards, room tags, and a live current-time red needle.",
+    code: `let events = [
+    ScheduleEvent::new(0, 9.5, 2.0, "WGSL shader audit", Tone::Accent).room("Lab A"),
+];
+ui.day_schedule("cal", &["Mon 16", "Tue 17", "Wed 18"], 9, 17, Some((2, 13.3)), &events, 250.0);`,
+    options: [
+      ["ScheduleEvent::new(day, start_hr, dur_hr, title, Tone).room(..)", "Fractional hours place blocks accurately against the hour grid."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "node-editor", name: "Node editor", group: "Planning", demo: "node-editor",
+    summary: "Interactive shader and workflow node graph with dot-grid canvas, pointer-draggable node cards, typed sockets, and cubic-Bezier wires.",
+    code: `let wires = [GraphWire::new(0, 0, 1, 0), GraphWire::new(1, 0, 2, 0)];
+ui.node_editor("shader_graph", &mut s.nodes, &wires, 224.0);`,
+    options: [
+      ["GraphNode::new(title, pos, inputs, outputs, Tone)", "Drag any node card to reposition it live while wires stay attached."],
+      ["GraphWire::new(from_node, from_port, to_node, to_port)", "Anti-aliased cubic-Bezier connection."],
+    ],
+    keys: [["Pointer drag", "Move node cards within the canvas"]],
+  },
+  {
+    slug: "commit-graph", name: "Commit graph", group: "Developer tools", demo: "commit-graph",
+    summary: "Git branch and merge rail log with multi-lane Bezier curves, monospace short SHAs, HEAD/tag pills, and keyboard row selection.",
+    code: `let commits = [
+    CommitRow::new("f3d0731", "widgets: add pro inputs", "AL", "4m ago", 0, vec![0, 1])
+        .badge("HEAD → ethereal"),
+];
+ui.commit_graph("log", &commits, &mut s.selected);`,
+    options: [
+      ["CommitRow::new(sha, msg, author, time, lane, parents).badge(..)", "Connects each commit dot smoothly to its parent lane indices."],
+    ],
+    keys: [["↑ / ↓", "Move selected commit row"]],
+  },
+  {
+    slug: "test-explorer", name: "Test explorer", group: "Developer tools", demo: "test-explorer",
+    summary: "Interactive test runner card with pass/fail/skip badges, Failed-only filter chip, expandable assertion diff diagnostics, and Re-run trigger.",
+    code: `if ui.test_explorer("suite", &s.tests) {
+    rerun_suite(&mut s.tests);
+}`,
+    options: [
+      ["TestCase::passed(..) / ::failed(.., msg) / ::skipped(..)", "Clicking a failed test toggles its inline assertion diagnostic box."],
+    ],
+    keys: [["Tab + Space", "Filter failed tests, expand diagnostics or click Re-run"]],
+  },
+  {
+    slug: "data-grid", name: "Data grid", group: "Data", demo: "data-grid",
+    summary: "Spreadsheet-style editable cell grid with row gutter, active cell coordinate bar (A1, B2), arrow-key cell navigation, and Enter inline editing.",
+    code: `let cols = [GridColumn::new("Region"), GridColumn::new("RPS Cap").mono()];
+ui.data_grid("capacity", &cols, &mut s.rows);`,
+    options: [
+      ["GridColumn::new(title).mono()", "Column header with optional tabular monospace formatting."],
+    ],
+    keys: [["↑ / ↓ / ← / →", "Move active cell selection"], ["Enter", "Edit active cell inline or commit"], ["Escape", "Cancel cell edit"]],
+  },
+  {
+    slug: "filter-bar", name: "Filter bar", group: "Data", demo: "filter-bar",
+    summary: "Structured facet filter strip (Field · operator · Value ×) with an anchored + Add filter preset menu and one-click Clear.",
+    code: `ui.filter_bar("flt", &mut s.facets, &[("Status", "is", "Healthy")]);`,
+    options: [
+      ["FilterFacet::new(field, op, value)", "Removable structured filter token."],
+    ],
+    keys: [["Tab + Enter", "Open + Add filter menu or remove facets"]],
+  },
+  {
+    slug: "ai-citations", name: "AI citations", group: "AI", demo: "ai-citations",
+    summary: "Grounded AI synthesis card with interactive inline [1], [2] citation pills synchronized with source reference cards below.",
+    code: `ui.cited_answer("ans", &segments, &sources);`,
+    options: [
+      ["CitationSource::new(index, title, domain, snippet)", "Hovering or clicking either the inline badge or source card highlights both."],
+    ],
+    keys: [["Tab + Space", "Pin or unpin a citation highlight"]],
+  },
+  {
+    slug: "text-effects", name: "Text effects", group: "Motion", demo: "text-effects",
+    summary: "Ethereal kinetic typography: per-word staggered spring-rise headlines blended across perceptual OKLab accent gradients, with Replay and reduced-motion support.",
+    code: `ui.text_effects_card(
+    "hero_fx",
+    "Kinetic Typography",
+    "Closed-form springs meet perceptual OKLab.",
+    "Each word settles to exact zero idle frame wakeups.",
+);`,
+    options: [
+      ["ui.text_effects_card(key, tag, headline, caption)", "Renders immediately without motion when reduced_motion is active."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "rotary-knob", name: "Rotary knob", group: "Selection", demo: "rotary-knob",
+    summary: "Studio-grade parameter dial adjusted by vertical pointer drag or arrow keys, drawn with a 270° GPU arc band, radial ticks, press squash, and tabular readout.",
+    code: `ui.rotary_knob("Cutoff", &mut s.cutoff, 80.0..=2400.0).unit(" Hz");`,
+    options: [
+      [".unit(text) .diameter(px)", "Tabular suffix and outer arc diameter."],
+    ],
+    keys: [["↑ / ↓ / ← / →", "Adjust value in 5% steps"], ["Home / End", "Jump to min or max"]],
+  },
+  {
+    slug: "compare-slider", name: "Comparison slider", group: "Motion", demo: "compare-slider",
+    summary: "Interactive before/after split comparison frame with a draggable vertical divider, circular handle pill, and keyboard scrubbing.",
+    code: `ui.compare_split("cmp", &mut s.ratio, "Wireframe mesh", "SDF shaded").height(212.0);`,
+    options: [
+      ["ui.compare_split(key, &mut ratio, left_label, right_label)", "Clips left and right passes cleanly at physical pixel resolution."],
+    ],
+    keys: [["← / →", "Scrub split divider left or right"]],
+  },
+  {
+    slug: "countdown", name: "Countdown timer", group: "Feedback", demo: "countdown",
+    summary: "Circular arc-ring countdown and Pomodoro timer paired with segmented tabular MIN / SEC glass tiles, Start/Pause, and Reset.",
+    code: `ui.countdown_card("bake", "Canary bake window", &mut s.secs, 900, &mut s.running);`,
+    options: [
+      ["ui.countdown_card(key, title, &mut secs, total_secs, &mut running)", "Requests zero repaints while paused."],
+    ],
+    keys: [["Tab + Space", "Start/Pause or Reset"]],
+  },
+  {
+    slug: "checklist-card", name: "Checklist card", group: "Planning", demo: "checklist-card",
+    summary: "Onboarding and release-readiness checklist card with an animated completion progress bar, live n / m badge, and spring-checked rows.",
+    code: `ui.checklist_card("rc", "v0.5 Release readiness", &mut s.steps);`,
+    options: [
+      ["ChecklistStep::new(title, detail, tag, done)", "Clicking anywhere on a step row toggles completion and springs the progress bar."],
+    ],
+    keys: [["Tab + Space", "Toggle step checkbox"]],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -1701,7 +1872,7 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-18", items: [
-    "114 components across 14 groups: editable text, money & masked fields, @mention autocomplete, discrete step slider, transfer & reorderable lists, closable editor tabs, table of contents, nav bar, carousel, callout, undo snackbar & zoomable image frame.",
+    "130 components across 14 groups: Sankey flow ribbons, GitHub contribution calendar, percentile histogram, KPI strip, week schedule, draggable node editor, Git commit graph, test explorer, editable data grid, facet filter bar, AI citations, kinetic text effects, rotary knob, before/after split slider, countdown timer & checklist card.",
     "AI, data & workspace: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor, log console, split pane, menu bar, terminal, property inspector, flame graph, notifications & spotlight cards.",
     "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, treemap, radar, scatter, conversion funnel, OHLC candlestick, Gantt roadmap & Kanban board.",
     "DevTools, motion & chrome: unified diff viewer, trace waterfall, uptime strip, rolling odometer numbers, neighbor-magnifying dock, scrubbable audio waveform & look-aware window chrome.",

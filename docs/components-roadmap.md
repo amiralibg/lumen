@@ -1,6 +1,6 @@
 # Component roadmap
 
-lumen now ships **114 live components across 14 groups** (up from 28), covering Batch 2, Batch 3, Batch 4, and Batch 5 (AI interfaces, Developer tools, Profiling & Terminal, Motion set, and Native Window Chrome). Every widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors strictly from `Token::*`, closed-form springs, reduced-motion fallbacks, and zero idle wakeups at rest.
+lumen now ships **130 live components across 14 groups** (up from 28), completing every item in Batch 2, Batch 3, Batch 4, and Batch 5 (AI interfaces, Developer tools, Profiling & Terminal, Motion set, Node & Flow graphs, and Native Window Chrome). Every widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors strictly from `Token::*`, closed-form springs, reduced-motion fallbacks, and zero idle wakeups at rest.
 
 ## Design bar for every widget
 

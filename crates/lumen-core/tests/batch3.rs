@@ -465,6 +465,94 @@ fn group10_inputs_lists_nav_and_surfaces_interact_and_settle() {
     assert_eq!(settled2.repaint_after, None);
 }
 
+// ---------- Group 11: Pro Charts, Flow Graphs, DevTools & Tactile Controls
+
+struct Group11State {
+    knob_v: f32,
+    cmp_r: f32,
+    nodes: Vec<lumen_core::GraphNode>,
+    commit_sel: usize,
+    tests: Vec<lumen_core::TestCase>,
+    grid: Vec<Vec<String>>,
+    facets: Vec<lumen_core::FilterFacet>,
+    cd_secs: u32,
+    cd_run: bool,
+    steps: Vec<lumen_core::ChecklistStep>,
+}
+
+fn group11_view(ui: &mut Ui, s: &mut Group11State) {
+    let weeks = [[2u8; 7]; 8];
+    let links = [lumen_core::SankeyLink::new(0, 1, 50.0)];
+    let markers = [lumen_core::HistogramMarker::new(0.5, "p50", Tone::Success)];
+    let kpis = [lumen_core::KpiMetric::new("RPS", "10k", 5.0, vec![8.0, 9.0, 10.0])];
+    let events = [lumen_core::ScheduleEvent::new(0, 10.0, 1.5, "Sync", Tone::Accent)];
+    let wires = [lumen_core::GraphWire::new(0, 0, 1, 0)];
+    let commits = [
+        lumen_core::CommitRow::new("a1b2c3d", "init", "AL", "1m", 0, vec![0]).badge("HEAD"),
+        lumen_core::CommitRow::new("e4f5g6h", "root", "JB", "5m", 0, vec![]),
+    ];
+    let cols = [lumen_core::GridColumn::new("Region"), lumen_core::GridColumn::new("Cap").mono()];
+    let segs = [("Unified WGSL shader", Some(1))];
+    let srcs = [lumen_core::CitationSource::new(1, "paint.rs", "core", "64B vertex")];
+
+    ui.column().width(680.0).gap(8).show(|ui| {
+        ui.rotary_knob("Drive", &mut s.knob_v, 0.0..=100.0).unit("%");
+        ui.compare_split("cmp", &mut s.cmp_r, "Left", "Right").height(140.0);
+        ui.sankey_chart("sk", &["In", "Out"], &links, 140.0);
+        ui.contribution_graph("cg", &weeks, &["Oct", "Nov"]);
+        ui.histogram("hg", &["1ms", "2ms"], &[10.0, 20.0], &markers, 140.0);
+        ui.kpi_strip("ks", &kpis);
+        ui.day_schedule("ds", &["Mon", "Tue"], 9, 17, Some((0, 11.0)), &events, 160.0);
+        ui.node_editor("ne", &mut s.nodes, &wires, 160.0);
+        ui.commit_graph("cmg", &commits, &mut s.commit_sel);
+        ui.test_explorer("tx", &s.tests);
+        ui.data_grid("dg", &cols, &mut s.grid);
+        ui.filter_bar("fb", &mut s.facets, &[("Env", "is", "Prod")]);
+        ui.cited_answer("ca", &segs, &srcs);
+        ui.text_effects_card("tfx", "Motion", "Springs settle cleanly.", "Zero idle repaints.");
+        ui.countdown_card("cdc", "Timer", &mut s.cd_secs, 300, &mut s.cd_run);
+        ui.checklist_card("ckc", "Checklist", &mut s.steps);
+    });
+}
+
+#[test]
+fn group11_viz_graphs_grid_and_tactile_widgets_interact_and_settle() {
+    let mut h = Harness::new(
+        Group11State {
+            knob_v: 50.0,
+            cmp_r: 0.5,
+            nodes: vec![
+                lumen_core::GraphNode::new("UV", lumen_core::vec2(10.0, 20.0), &[], &["uv"], Tone::Info),
+                lumen_core::GraphNode::new("Out", lumen_core::vec2(190.0, 20.0), &["uv"], &["rgba"], Tone::Success),
+            ],
+            commit_sel: 0,
+            tests: vec![lumen_core::TestCase::passed("core", "spring", 0.1)],
+            grid: vec![vec!["eu-central".into(), "48000".into()]],
+            facets: vec![lumen_core::FilterFacet::new("Env", "is", "Prod")],
+            cd_secs: 180,
+            cd_run: false,
+            steps: vec![lumen_core::ChecklistStep::new("Test", "Run suite", "CI", true)],
+        },
+        group11_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all 16 Group 11 widgets must settle to zero idle wakeups");
+
+    // First Tab focuses RotaryKnob; ArrowUp increments by 5% (50 -> 55); second Tab focuses CompareSplit; ArrowRight moves ratio 0.5 -> 0.55!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowUp));
+    assert!((h.s.knob_v - 55.0).abs() < 1e-3);
+
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert!((h.s.cmp_r - 0.55).abs() < 1e-3);
+
+    let settled2 = h.idle(90);
+    assert_eq!(settled2.repaint_after, None);
+}
+
+
 
 
 
