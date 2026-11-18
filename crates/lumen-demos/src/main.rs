@@ -7,10 +7,11 @@
 use std::collections::BTreeSet;
 
 use lumen::{
-    Accent, Align, BarListItem, Candle, ChatMessage, Color, Command, Date, DockItem, FlameSpan, GanttTask, Justify,
-    KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, Look, Mode, NotificationItem, Placement, Platform, RingSpec,
-    ScatterPoint, ScatterSeries, Series, Sides, SortDir, TableCell, TableCol, TermLine, TextRole, Time, TimelineItem,
-    Toast, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui, UptimeStatus,
+    Accent, Align, BarListItem, Candle, CarouselSlide, ChatMessage, Color, Command, Currency, Date, DockItem,
+    EditorTab, FlameSpan, GanttTask, ImageStatus, Justify, KanbanCard, KanbanCol, KvPair, LogEntry, LogLevel, Look,
+    MentionCandidate, Mode, NavBarItem, NotificationItem, Placement, Platform, ReorderItem, RingSpec, ScatterPoint,
+    ScatterSeries, Series, Sides, SortDir, TableCell, TableCol, TermLine, TextRole, Time, TimelineItem, Toast,
+    TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, Ui, UptimeStatus,
 };
 
 /// Every demo: url name, title.
@@ -114,6 +115,20 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("flame-graph", "Flame graph"),
     ("notification-list", "Notification inbox"),
     ("spotlight-card", "Spotlight card"),
+    ("editable-text", "Editable text"),
+    ("money-field", "Money field"),
+    ("masked-input", "Masked input"),
+    ("mention-input", "Mention input"),
+    ("step-slider", "Step slider"),
+    ("transfer-list", "Transfer list"),
+    ("reorderable-list", "Reorderable list"),
+    ("editor-tabs", "Editor tabs"),
+    ("table-of-contents", "Table of contents"),
+    ("nav-bar", "Navigation bar"),
+    ("carousel", "Carousel"),
+    ("callout", "Callout"),
+    ("undo-toast", "Undo snackbar"),
+    ("image-frame", "Image frame"),
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
@@ -219,6 +234,27 @@ struct State {
     prop_opacity: f64,
     prop_clip: bool,
     notifs: Vec<NotificationItem>,
+    edit_heading: String,
+    edit_summary: String,
+    money_budget: f64,
+    money_cur: Currency,
+    money_alert: f64,
+    phone_mask: String,
+    license_mask: String,
+    mention_msg: String,
+    mem_stop: usize,
+    ret_stop: usize,
+    avail_scopes: Vec<String>,
+    assigned_scopes: Vec<String>,
+    reorder_items: Vec<ReorderItem>,
+    ed_tabs: Vec<EditorTab>,
+    ed_active: usize,
+    toc_active: usize,
+    nav_active: usize,
+    carousel_idx: usize,
+    undo_visible: bool,
+    undo_rem: f32,
+    img_status: ImageStatus,
 }
 
 impl State {
@@ -326,6 +362,46 @@ impl State {
                 NotificationItem::new("n2", "JB", "Canary rollout completed", "Zero error-budget burn across eu-central and us-east.", "18m ago", true),
                 NotificationItem::new("n3", "PN", "Weekly benchmark digest", "Median frame tessellation held at 0.19 ms on M3.", "2h ago", false),
             ],
+            edit_heading: "Production Edge Gateway".into(),
+            edit_summary: "Zero-downtime TLS termination and routing across 14 regions.".into(),
+            money_budget: 4250.0,
+            money_cur: Currency::Usd,
+            money_alert: 950.0,
+            phone_mask: "+1 (415) 890".into(),
+            license_mask: "LUMN-2026-CORE".into(),
+            mention_msg: "Ready to cut v0.5 — cc @lena".into(),
+            mem_stop: 2,
+            ret_stop: 3,
+            avail_scopes: vec![
+                "audit:export".into(),
+                "billing:write".into(),
+                "runners:delete".into(),
+                "secrets:rotate".into(),
+            ],
+            assigned_scopes: vec![
+                "deploys:read".into(),
+                "deploys:trigger".into(),
+                "metrics:read".into(),
+            ],
+            reorder_items: vec![
+                ReorderItem::new("lint", "Typecheck & clippy").subtitle("cargo clippy --workspace --deny warnings").badge("18s"),
+                ReorderItem::new("test", "Headless core suite").subtitle("120 deterministic layout & spring assertions").badge("0.4s"),
+                ReorderItem::new("wasm", "Build WebGPU bundle").subtitle("wasm-bindgen --target web --release").badge("24s"),
+                ReorderItem::new("edge", "Promote canary traffic").subtitle("Shift 10% → 100% on zero 5xx burn").badge("Gate"),
+            ],
+            ed_tabs: vec![
+                EditorTab::new("shader", "shader.wgsl").icon("sparkles"),
+                EditorTab::new("paint", "paint.rs").icon("file-code").dirty(true),
+                EditorTab::new("theme", "theme.rs").icon("palette"),
+                EditorTab::new("cargo", "Cargo.toml").icon("package"),
+            ],
+            ed_active: 1,
+            toc_active: 1,
+            nav_active: 0,
+            carousel_idx: 0,
+            undo_visible: true,
+            undo_rem: 0.68,
+            img_status: ImageStatus::Loaded,
         }
     }
 }
@@ -388,7 +464,8 @@ fn view(ui: &mut Ui, s: &mut State) {
         | "context-menu"
         | "confirm-popover"
         | "split-button"
-        | "menu-bar" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
+        | "menu-bar"
+        | "mention-input" => frame_at(ui, Justify::Start, |ui| component(ui, s, &demo)),
         _ => frame(ui, |ui| component(ui, s, &demo)),
     }
 }
@@ -1879,6 +1956,243 @@ ui.button("Ship release").primary().icon("rocket");
                 });
             });
         }
+        "editable-text" => {
+            ui.column().fill_width().max_width(480.0).gap(10).show(|ui| {
+                ui.card().pad(16.0).show(|ui| {
+                    ui.row().fill_width().align(Align::Center).show(|ui| {
+                        ui.badge("Click any line to edit inline", Tone::Accent);
+                        ui.spacer();
+                        ui.status("Live", Tone::Success);
+                    });
+                    ui.editable_text("ed_h", &mut s.edit_heading).heading();
+                    ui.editable_text("ed_s", &mut s.edit_summary).role(TextRole::Body);
+                });
+            });
+        }
+        "money-field" => {
+            ui.column().fill_width().max_width(380.0).gap(14).show(|ui| {
+                ui.money_field(&mut s.money_budget)
+                    .label("Monthly cluster budget")
+                    .switchable_currency(&mut s.money_cur)
+                    .step(100.0)
+                    .helper("Click the currency pill to cycle USD · EUR · GBP · JPY.")
+                    .fill_width();
+                ui.money_field(&mut s.money_alert)
+                    .label("Soft spend alert")
+                    .currency(Currency::Eur)
+                    .step(50.0)
+                    .fill_width();
+            });
+        }
+        "masked-input" => {
+            ui.column().fill_width().max_width(380.0).gap(14).show(|ui| {
+                ui.masked_input(&mut s.phone_mask, "+1 (###) ###-####")
+                    .label("On-call pager number")
+                    .icon("phone")
+                    .helper("Remaining template slots stay visible as you type.")
+                    .fill_width();
+                ui.masked_input(&mut s.license_mask, "AAAA-####-AAAA")
+                    .label("Enterprise license key")
+                    .icon("key-round")
+                    .fill_width();
+            });
+        }
+        "mention-input" => {
+            let team = [
+                MentionCandidate::new("lena", "Lena Fischer", "Graphics"),
+                MentionCandidate::new("jonas", "Jonas Berg", "Runtime"),
+                MentionCandidate::new("priya", "Priya Nair", "Design Systems"),
+                MentionCandidate::new("aiko", "Aiko Kato", "WebGPU"),
+            ];
+            ui.column().fill_width().max_width(460.0).gap(8).show(|ui| {
+                ui.mention_input(&mut s.mention_msg, &team)
+                    .label("Release review comment")
+                    .placeholder("Write a note — type @ to mention a teammate…");
+            });
+        }
+        "step-slider" => {
+            const MEM_STOPS: [&str; 5] = ["512 MB", "2 GB", "8 GB", "32 GB", "128 GB"];
+            const RET_STOPS: [&str; 5] = ["7d", "14d", "30d", "90d", "1y"];
+            ui.column().fill_width().max_width(440.0).show(|ui| {
+                ui.card().pad(18.0).show(|ui| {
+                    ui.step_slider("Worker memory tier", &mut s.mem_stop, &MEM_STOPS);
+                    ui.divider();
+                    ui.step_slider("Trace retention window", &mut s.ret_stop, &RET_STOPS);
+                });
+            });
+        }
+        "transfer-list" => {
+            ui.column().fill_width().max_width(580.0).show(|ui| {
+                ui.transfer_list("rbac_shuttle", &mut s.avail_scopes, &mut s.assigned_scopes)
+                    .titles("Available scopes", "Assigned to role")
+                    .height(152.0);
+            });
+        }
+        "reorderable-list" => {
+            ui.column().fill_width().max_width(500.0).gap(6).show(|ui| {
+                ui.reorderable_list("pipeline_order", &mut s.reorder_items);
+            });
+        }
+        "editor-tabs" => {
+            ui.column().fill_width().max_width(580.0).gap(10).show(|ui| {
+                let out = ui.editor_tabs("ide_tabs", &s.ed_tabs, &mut s.ed_active);
+                if let Some(ci) = out.closed {
+                    if s.ed_tabs.len() > 1 {
+                        s.ed_tabs.remove(ci);
+                        s.ed_active = s.ed_active.min(s.ed_tabs.len() - 1);
+                    }
+                }
+                if out.add_clicked {
+                    let n = s.ed_tabs.len() + 1;
+                    s.ed_tabs.push(EditorTab::new(format!("u{n}"), format!("untitled-{n}.rs")).icon("file-code").dirty(true));
+                    s.ed_active = s.ed_tabs.len() - 1;
+                }
+                let active_name = s.ed_tabs.get(s.ed_active).map(|t| t.label.as_str()).unwrap_or("main.rs");
+                let snippet = match active_name {
+                    "shader.wgsl" => "@fragment fn fs_main(in: Varyings) -> @location(0) vec4<f32> {\n    return sd_round_rect(in.local, in.half, in.radii);\n}",
+                    "paint.rs" => "pub fn rrect(&mut self, r: Rect, rad: Corners, fill: Color) {\n    self.push_sdf_quad(r, rad, fill);\n}",
+                    "theme.rs" => "pub fn blend(a: Color, b: Color, t: f32) -> Color {\n    a.mix_oklab(b, t.clamp(0.0, 1.0))\n}",
+                    _ => "[package]\nname = \"lumen-core\"\nedition = \"2021\"",
+                };
+                ui.code_block("tab_preview", snippet).language(if active_name.ends_with(".wgsl") { "wgsl" } else { "rust" });
+            });
+        }
+        "table-of-contents" => {
+            let items = [
+                TocItem::new("Architecture", 0),
+                TocItem::new("Immediate layout tree", 1),
+                TocItem::new("Unified WGSL shader", 1),
+                TocItem::new("Spring physics", 0),
+                TocItem::new("Perceptual tokens", 0),
+            ];
+            let descriptions = [
+                ("Architecture", "Five focused crates keep layout, text shaping and springs completely independent of the GPU backend."),
+                ("Immediate layout tree", "Widgets record lightweight flex nodes per frame and hit-test against previous-frame rectangles."),
+                ("Unified WGSL shader", "Every rounded rect, border, Gaussian shadow and glyph quad renders in a single Uber-shader."),
+                ("Spring physics", "Harmonic oscillators integrate analytically in closed form so motion is identical at 60 Hz or 240 Hz."),
+                ("Perceptual tokens", "All semantic surface and accent colors interpolate cleanly in OKLab during theme transitions."),
+            ];
+            ui.row().fill_width().max_width(580.0).gap(18).align(Align::Start).show(|ui| {
+                let (sec_t, sec_b) = descriptions[s.toc_active.min(descriptions.len() - 1)];
+                ui.column().fill_width().show(|ui| {
+                    ui.card().title(sec_t).pad(18.0).show(|ui| {
+                        ui.label(sec_b).secondary();
+                        ui.row().gap(8).show(|ui| {
+                            if ui.button("Previous").ghost().small().disabled(s.toc_active == 0).clicked() {
+                                s.toc_active = s.toc_active.saturating_sub(1);
+                            }
+                            if ui.button("Next section").secondary().small().disabled(s.toc_active + 1 >= items.len()).clicked() {
+                                s.toc_active += 1;
+                            }
+                        });
+                    });
+                });
+                ui.column().width(210.0).show(|ui| {
+                    ui.table_of_contents("guide_toc", &items, &mut s.toc_active);
+                });
+            });
+        }
+        "nav-bar" => {
+            let items = [
+                NavBarItem::new("Overview").icon("layout-dashboard"),
+                NavBarItem::new("Deployments").icon("rocket").badge("3"),
+                NavBarItem::new("Metrics").icon("activity"),
+                NavBarItem::new("Security").icon("shield-check"),
+            ];
+            let summaries = [
+                ("Cluster overview", "14 edge regions healthy · median frame time 0.19 ms · 0 active alerts."),
+                ("Active deployments", "3 progressive rollouts advancing across eu-central-1 and us-east-1."),
+                ("Real-time telemetry", "p99 TLS handshake 18.4 ms · 99.98% cache hit ratio."),
+                ("Zero-trust posture", "Hardware mTLS certificates rotated automatically every 24 hours."),
+            ];
+            ui.column().fill_width().max_width(560.0).gap(12).show(|ui| {
+                ui.nav_bar("app_nav", &items, &mut s.nav_active);
+                let (t, desc) = summaries[s.nav_active.min(summaries.len() - 1)];
+                ui.card().title(t).pad(16.0).show(|ui| {
+                    ui.label(desc).secondary();
+                });
+            });
+        }
+        "carousel" => {
+            let slides = [
+                CarouselSlide::new(
+                    "Renderer",
+                    "One shader for everything",
+                    "Rounded rectangles, hairline borders, analytical Gaussian shadows and subpixel glyphs batch into a single GPU pipeline.",
+                    "layers",
+                    Tone::Accent,
+                ),
+                CarouselSlide::new(
+                    "Motion",
+                    "Closed-form spring physics",
+                    "Springs preserve momentum across mid-flight retargets and settle to exact zero idle CPU/GPU wakeups.",
+                    "sparkles",
+                    Tone::Success,
+                ),
+                CarouselSlide::new(
+                    "Looks",
+                    "Four native design languages",
+                    "Morph live between Ethereal Lumen, macOS, Windows 11 and GNOME Adwaita with perceptual OKLab color blending.",
+                    "palette",
+                    Tone::Warning,
+                ),
+            ];
+            ui.column().fill_width().max_width(520.0).show(|ui| {
+                ui.carousel("feature_deck", &mut s.carousel_idx, &slides).height(182.0);
+            });
+        }
+        "callout" => {
+            ui.column().fill_width().max_width(520.0).gap(12).show(|ui| {
+                ui.callout(Tone::Info, "Zero idle frame wakeups").show(|ui| {
+                    ui.label("Once springs and fades settle within epsilon, FrameOutput::repaint_after returns None so the process sleeps.").secondary();
+                });
+                ui.callout(Tone::Warning, "Physical pixel snapping").show(|ui| {
+                    ui.label("Hairline strokes snap to physical device pixels using the active DPI scale factor to stay crisp on Retina panels.").secondary();
+                });
+            });
+        }
+        "undo-toast" => {
+            ui.column().fill_width().max_width(480.0).gap(14).show(|ui| {
+                ui.card().pad(14.0).show(|ui| {
+                    ui.row().fill_width().align(Align::Center).gap(10).show(|ui| {
+                        ui.avatar("EU", 2, 28.0, Some(true));
+                        ui.column().fill_width().gap(2).show(|ui| {
+                            ui.label("eu-central-canary-04").strong();
+                            ui.label(if s.undo_visible { "Pending archival…" } else { "Active · taking jobs" }).small().muted();
+                        });
+                        if !s.undo_visible && ui.button("Archive runner").secondary().small().clicked() {
+                            s.undo_visible = true;
+                            s.undo_rem = 0.72;
+                        }
+                    });
+                });
+                if s.undo_visible {
+                    let out = ui.undo_bar("runner_undo", "Archived runner “eu-central-canary-04”", s.undo_rem).show();
+                    if out.undo_clicked {
+                        s.undo_visible = false;
+                        ui.toast(Toast::new("Runner restored").success());
+                    } else if out.dismissed {
+                        s.undo_visible = false;
+                    }
+                }
+            });
+        }
+        "image-frame" => {
+            ui.column().fill_width().max_width(460.0).gap(10).align(Align::Center).show(|ui| {
+                ui.segmented(
+                    &mut s.img_status,
+                    &[
+                        (ImageStatus::Loaded, "Loaded"),
+                        (ImageStatus::Loading, "Loading"),
+                        (ImageStatus::Fallback, "Fallback"),
+                    ],
+                );
+                ui.image_frame("aurora_preview", "Ethereal Aurora Pass")
+                    .caption("Click frame to zoom · 2× DPI")
+                    .status(s.img_status)
+                    .height(190.0);
+            });
+        }
         _ => {
             ui.label(format!("Unknown demo “{demo}”.")).secondary();
         }
@@ -2114,6 +2428,7 @@ fn open_steps(demo: &str) -> Vec<lumen::ShotStep> {
         "dock" => vec![Hover(lumen::vec2(342.0, 212.0)), Wait(0.6)],
         "menu-bar" => vec![k(lumen::Key::Tab), k(lumen::Key::Enter), Wait(0.5)],
         "spotlight-card" => vec![Hover(lumen::vec2(235.0, 215.0)), Wait(0.4)],
+        "mention-input" => vec![k(lumen::Key::Tab), k(lumen::Key::End), Type(" @".into()), Wait(0.5)],
         _ => vec![],
     }
 }

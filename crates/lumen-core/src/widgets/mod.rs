@@ -42,6 +42,8 @@ pub mod ai_devtools;
 pub mod motion_chrome;
 pub mod workspace_pro;
 pub mod rich_views;
+pub mod inputs_pro;
+pub mod nav_surfaces;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -77,6 +79,14 @@ pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComp
 pub use motion_chrome::{DockItem, RollingNumber, Waveform, WindowChrome};
 pub use workspace_pro::{FlameSpan, MenuBarScope, PropertyInspector, SplitPane, TermLine, TermTone, Terminal};
 pub use rich_views::{GanttTask, NotificationItem, SpotlightCard, Treemap, TreemapItem};
+pub use inputs_pro::{
+    Currency, EditableText, MaskedInput, MentionCandidate, MentionInput, MoneyField, ReorderItem, ReorderableList,
+    StepSlider, TransferList,
+};
+pub use nav_surfaces::{
+    Callout, Carousel, CarouselSlide, EditorTab, EditorTabsOut, ImageFrame, ImageStatus, NavBarItem, TocItem, UndoBar,
+    UndoBarOut,
+};
 
 use crate::color::Color;
 use crate::theme::Token;

@@ -383,5 +383,88 @@ fn split_pane_menubar_terminal_flame_and_rich_views_interact_and_settle() {
     assert!((h.s.ratio - 0.50).abs() < 1e-4);
 }
 
+// ------------------------- Group 10: Pro Inputs, Lists, Nav & Surfaces
+
+struct Group10State {
+    step_idx: usize,
+    heading: String,
+    money: f64,
+    cur: lumen_core::Currency,
+    masked: String,
+    mention: String,
+    avail: Vec<String>,
+    assigned: Vec<String>,
+    reorder: Vec<lumen_core::ReorderItem>,
+    tabs: Vec<lumen_core::EditorTab>,
+    tab_act: usize,
+    toc_act: usize,
+    nav_act: usize,
+    slide_act: usize,
+}
+
+fn group10_view(ui: &mut Ui, s: &mut Group10State) {
+    let team = [lumen_core::MentionCandidate::new("lena", "Lena Fischer", "GPU")];
+    let toc = [lumen_core::TocItem::new("Intro", 0), lumen_core::TocItem::new("Shader", 1)];
+    let nav = [lumen_core::NavBarItem::new("Home").icon("home"), lumen_core::NavBarItem::new("Deploy").badge("2")];
+    let slides = [
+        lumen_core::CarouselSlide::new("GPU", "Single shader", "SDF + glyphs", "layers", Tone::Accent),
+        lumen_core::CarouselSlide::new("Motion", "Springs", "Closed form", "sparkles", Tone::Success),
+    ];
+    ui.column().width(660.0).gap(8).show(|ui| {
+        ui.step_slider("Tier", &mut s.step_idx, &["1 GB", "4 GB", "16 GB"]);
+        ui.editable_text("et", &mut s.heading).heading();
+        ui.money_field(&mut s.money).switchable_currency(&mut s.cur);
+        ui.masked_input(&mut s.masked, "###-###");
+        ui.mention_input(&mut s.mention, &team);
+        ui.transfer_list("tf", &mut s.avail, &mut s.assigned).height(120.0);
+        ui.reorderable_list("ro", &mut s.reorder);
+        ui.editor_tabs("etabs", &s.tabs, &mut s.tab_act);
+        ui.table_of_contents("toc", &toc, &mut s.toc_act);
+        ui.nav_bar("nb", &nav, &mut s.nav_act);
+        ui.carousel("car", &mut s.slide_act, &slides).height(140.0);
+        ui.callout(Tone::Info, "Tip").show(|ui| { ui.label("Body"); });
+        ui.undo_bar("ub", "Archived item", 0.65).show();
+        ui.image_frame("imf", "Preview").status(lumen_core::ImageStatus::Loaded).height(120.0);
+    });
+}
+
+#[test]
+fn group10_inputs_lists_nav_and_surfaces_interact_and_settle() {
+    let mut h = Harness::new(
+        Group10State {
+            step_idx: 0,
+            heading: "Gateway".into(),
+            money: 1250.0,
+            cur: lumen_core::Currency::Usd,
+            masked: "415890".into(),
+            mention: "Hi @lena".into(),
+            avail: vec!["read".into()],
+            assigned: vec!["write".into()],
+            reorder: vec![lumen_core::ReorderItem::new("a", "Lint"), lumen_core::ReorderItem::new("b", "Test")],
+            tabs: vec![lumen_core::EditorTab::new("1", "main.rs").dirty(true), lumen_core::EditorTab::new("2", "lib.rs")],
+            tab_act: 0,
+            toc_act: 0,
+            nav_act: 0,
+            slide_act: 0,
+        },
+        group10_view,
+    );
+
+    let settled = h.idle(120);
+    assert_eq!(settled.repaint_after, None, "all 14 Group 10 widgets must settle to zero idle wakeups");
+    assert_eq!(h.s.masked, "415-890", "MaskedInput should format digits automatically");
+
+    // First Tab focuses StepSlider; ArrowRight advances stop_idx from 0 -> 1; End jumps to 2!
+    h.frame(key(Key::Tab));
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.step_idx, 1);
+    h.frame(key(Key::End));
+    assert_eq!(h.s.step_idx, 2);
+
+    let settled2 = h.idle(90);
+    assert_eq!(settled2.repaint_after, None);
+}
+
+
 
 

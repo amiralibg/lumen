@@ -1326,6 +1326,175 @@ ui.flame_graph("profile", &spans);`,
     ],
     keys: [],
   },
+  {
+    slug: "editable-text", name: "Editable text", group: "Inputs", demo: "editable-text",
+    summary: "Click-to-edit inline typography or heading that morphs seamlessly into an inline text editor on click or Enter, with Escape to revert.",
+    code: `ui.editable_text("title", &mut s.heading).heading();
+ui.editable_text("summary", &mut s.summary)
+    .role(TextRole::Body)
+    .placeholder("Add a description…");`,
+    options: [
+      [".heading() .role(TextRole)", "Typography role used in both rest and active inline-editing states."],
+      [".placeholder(text) .disabled(bool)", "Fallback text shown when empty, and read-only lock."],
+    ],
+    keys: [["Enter / Space", "Begin editing or commit changes"], ["Escape", "Revert to the value before editing began"]],
+  },
+  {
+    slug: "money-field", name: "Money field", group: "Inputs", demo: "money-field",
+    summary: "Formatted currency input with live thousands separators, tabular digits, step buttons, and an optional cycleable currency pill (USD, EUR, GBP, JPY).",
+    code: `ui.money_field(&mut s.budget)
+    .label("Monthly cluster budget")
+    .switchable_currency(&mut s.currency)
+    .step(100.0)
+    .fill_width();`,
+    options: [
+      [".currency(Currency) .switchable_currency(&mut Currency)", "Fixed or interactive USD / EUR / GBP / JPY symbol & decimal precision."],
+      [".range(min, max) .step(f64) .label(text) .helper(text)", "Bounds, increment step and field captions."],
+    ],
+    keys: [["↑ / ↓", "Step amount up or down"], ["Enter", "Re-apply thousands grouping"]],
+  },
+  {
+    slug: "masked-input", name: "Masked input", group: "Inputs", demo: "masked-input",
+    summary: "Pattern-guided input (# = digit, A = letter, * = alphanumeric) that auto-inserts separators and keeps remaining template slots visible.",
+    code: `ui.masked_input(&mut s.phone, "+1 (###) ###-####")
+    .label("On-call pager")
+    .icon("phone")
+    .fill_width();
+ui.masked_input(&mut s.key, "AAAA-####-AAAA").icon("key-round");`,
+    options: [
+      ["# / A / * / literals", "# matches ASCII digits, A uppercases letters, * matches alphanumerics; literals auto-insert."],
+      [".label(text) .helper(text) .icon(name) .fill_width()", "Standard field chrome and leading icon."],
+    ],
+    keys: [["Backspace", "Steps cleanly across literal separators"]],
+  },
+  {
+    slug: "mention-input", name: "Mention input", group: "Inputs", demo: "mention-input",
+    summary: "Inline @mention composer: typing @ opens a floating teammate picker filtered live by handle or name, with recipient pills below.",
+    code: `let team = [
+    MentionCandidate::new("lena", "Lena Fischer", "Graphics"),
+    MentionCandidate::new("jonas", "Jonas Berg", "Runtime"),
+];
+ui.mention_input(&mut s.note, &team).label("Review comment");`,
+    options: [
+      ["MentionCandidate::new(handle, name, role)", "Candidate shown with avatar, @handle and role inside the anchored popover."],
+      [".label(text) .placeholder(text)", "Field label and placeholder hint."],
+    ],
+    keys: [["@", "Open candidate popover"], ["↑ / ↓ + Enter", "Navigate and insert @handle"], ["Escape", "Dismiss popover"]],
+  },
+  {
+    slug: "step-slider", name: "Step slider", group: "Selection", demo: "step-slider",
+    summary: "Discrete snapped slider over named tick stops, with spring thumb motion, press squash, cutout tick dots, and an active value badge.",
+    code: `const TIERS: [&str; 5] = ["512 MB", "2 GB", "8 GB", "32 GB", "128 GB"];
+ui.step_slider("Worker memory tier", &mut s.tier_idx, &TIERS);`,
+    options: [
+      ["ui.step_slider(label, &mut index, stops)", "Snaps pointer drags and clicks to discrete named stops."],
+      [".disabled(bool) .changed()", "Disable interaction or inspect whether the stop index changed."],
+    ],
+    keys: [["← / →", "Previous / next stop"], ["Home / End", "Jump to first or last stop"]],
+  },
+  {
+    slug: "transfer-list", name: "Transfer list", group: "Selection", demo: "transfer-list",
+    summary: "Dual-pane shuttle for moving permissions, columns or items between Available and Assigned sets, with search filter and batch controls.",
+    code: `ui.transfer_list("rbac", &mut s.available, &mut s.assigned)
+    .titles("Available scopes", "Assigned to role")
+    .height(160.0);`,
+    options: [
+      [".titles(left, right) .height(px)", "Custom pane headers with live selected/total badges and scroll viewport height."],
+    ],
+    keys: [["Tab + Space", "Toggle item checkboxes or trigger > / >> / < / << shuttle buttons"]],
+  },
+  {
+    slug: "reorderable-list", name: "Reorderable list", group: "Data", demo: "reorderable-list",
+    summary: "Sortable priority list with drag-grip pointer reordering, keyboard ArrowUp/ArrowDown swaps, and step buttons.",
+    code: `ui.reorderable_list("stages", &mut s.stages);`,
+    options: [
+      ["ReorderItem::new(id, title).subtitle(..).badge(..)", "Row model with stable key, secondary subtitle and right-aligned pill."],
+    ],
+    keys: [["↑ / ↓", "Swap focused item up or down"], ["Pointer drag", "Drag row across neighbor threshold to swap"]],
+  },
+  {
+    slug: "editor-tabs", name: "Editor tabs", group: "Navigation", demo: "editor-tabs",
+    summary: "Closable IDE and browser tab strip with file icons, unsaved dot indicator (•), hover close button (×), + new tab action, and a spring-gliding active card.",
+    code: `let out = ui.editor_tabs("files", &s.tabs, &mut s.active);
+if let Some(i) = out.closed { s.tabs.remove(i); }
+if out.add_clicked { /* open new tab */ }`,
+    options: [
+      ["EditorTab::new(id, label).icon(name).dirty(bool)", "Shows a warning dot when dirty that reveals × on hover."],
+      ["EditorTabsOut { changed, closed, add_clicked }", "Reports selection changes, closed tab index and + clicks."],
+    ],
+    keys: [["← / →", "Cycle active tab when focused"]],
+  },
+  {
+    slug: "table-of-contents", name: "Table of contents", group: "Navigation", demo: "table-of-contents",
+    summary: "Vertical “On this page” anchor rail with nested section indentation and a spring-sliding vertical accent bar.",
+    code: `let items = [
+    TocItem::new("Architecture", 0),
+    TocItem::new("Unified WGSL shader", 1),
+    TocItem::new("Spring physics", 0),
+];
+ui.table_of_contents("toc", &items, &mut s.section);`,
+    options: [
+      ["TocItem::new(label, depth)", "Depth indents sub-headings while keeping one continuous left rail."],
+    ],
+    keys: [["↑ / ↓", "Move active section up or down"]],
+  },
+  {
+    slug: "nav-bar", name: "Navigation bar", group: "Navigation", demo: "nav-bar",
+    summary: "Top horizontal application navigation bar with a spring-gliding active pill, Lucide icons, and notification count badges.",
+    code: `let items = [
+    NavBarItem::new("Overview").icon("layout-dashboard"),
+    NavBarItem::new("Deployments").icon("rocket").badge("3"),
+];
+ui.nav_bar("main_nav", &items, &mut s.section);`,
+    options: [
+      ["NavBarItem::new(label).icon(name).badge(text)", "Horizontal nav destination with optional leading icon and count pill."],
+    ],
+    keys: [["← / →", "Switch active destination"]],
+  },
+  {
+    slug: "carousel", name: "Carousel", group: "Layout and surfaces", demo: "carousel",
+    summary: "Spring-sliding horizontal feature and media deck with previous/next controls, slide counter, and stretching pill dot indicators.",
+    code: `ui.carousel("deck", &mut s.slide, &slides).height(182.0);`,
+    options: [
+      ["CarouselSlide::new(tag, title, body, icon, tone)", "Slide card with ambient OKLab corner glow, tag pill and body copy."],
+      [".height(px)", "Viewport height in logical pixels."],
+    ],
+    keys: [["← / →", "Slide to previous or next card"]],
+  },
+  {
+    slug: "callout", name: "Callout", group: "Feedback", demo: "callout",
+    summary: "Documentation and inline note/tip/warning/danger callout box with a 3.5 px tone accent bar, icon, heading, and rich body slot.",
+    code: `ui.callout(Tone::Info, "Zero idle frame wakeups").show(|ui| {
+    ui.label("FrameOutput::repaint_after returns None once springs settle.").secondary();
+});`,
+    options: [
+      ["ui.callout(Tone, title).icon(name).show(|ui| ..)", "Supports Neutral, Info/Accent, Success, Warning and Danger tones."],
+    ],
+    keys: [],
+  },
+  {
+    slug: "undo-toast", name: "Undo snackbar", group: "Feedback", demo: "undo-toast",
+    summary: "Elevated action snackbar for reversible destructive actions, pairing a remaining-window progress strip with an Undo button and dismiss ×.",
+    code: `let out = ui.undo_bar("arch", "Archived runner “eu-central-04”", 0.7).show();
+if out.undo_clicked { restore_runner(); }`,
+    options: [
+      [".action_label(text) .show() -> UndoBarOut", "Returns undo_clicked and dismissed flags."],
+    ],
+    keys: [["Tab + Enter", "Trigger Undo or dismiss"]],
+  },
+  {
+    slug: "image-frame", name: "Image frame", group: "Layout and surfaces", demo: "image-frame",
+    summary: "Aspect-framed media surface with procedural high-DPI artwork, loading shimmer state, graceful broken-image fallback, caption bar, and click-to-zoom.",
+    code: `ui.image_frame("shot", "Ethereal Aurora Pass")
+    .caption("Click frame to zoom · 2× DPI")
+    .status(ImageStatus::Loaded)
+    .height(190.0);`,
+    options: [
+      [".status(ImageStatus::Loaded | Loading | Fallback)", "Draws artwork, loading pulse or broken-image empty state."],
+      [".caption(text) .height(px)", "Floating glass caption bar and click-to-zoom spring."],
+    ],
+    keys: [["Enter / Space", "Toggle zoom when loaded"]],
+  },
 ];
 
 const code = (s) => `<pre><code class="lang-rust">${esc(s)}</code></pre>`;
@@ -1532,8 +1701,8 @@ lumen        facade</code></pre>
 
 export const CHANGELOG = [
   { v: "Unreleased", date: "2026-11-18", items: [
-    "100 components across 14 groups: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor & log console.",
-    "Workspace, inspector & profiling: resizable split pane, desktop menu bar, interactive terminal, two-column property inspector, click-to-zoom flame graph, notification inbox & Ethereal spotlight cards.",
+    "114 components across 14 groups: editable text, money & masked fields, @mention autocomplete, discrete step slider, transfer & reorderable lists, closable editor tabs, table of contents, nav bar, carousel, callout, undo snackbar & zoomable image frame.",
+    "AI, data & workspace: AI reasoning, tool calls, prompt composer & chat; data table, tree, accordion, timeline, markdown, syntax code block, JSON viewer, key-value editor, log console, split pane, menu bar, terminal, property inspector, flame graph, notifications & spotlight cards.",
     "Charts & planning: progress and concentric activity rings, bar list, OKLab heatmap, treemap, radar, scatter, conversion funnel, OHLC candlestick, Gantt roadmap & Kanban board.",
     "DevTools, motion & chrome: unified diff viewer, trace waterfall, uptime strip, rolling odometer numbers, neighbor-magnifying dock, scrubbable audio waveform & look-aware window chrome.",
     "Inputs, pickers & overlays: combobox, multi-select, time & HSV/hex color pickers, sheet/drawer, ⌘K command palette, hover card, context menu, confirm popover, text area, scrubbable number field, tag input, OTP code, password strength, search field, alert/banner, skeleton, empty state, breadcrumb, pagination, wizard steps, radio cards, rating, dual-thumb range slider, shortcut recorder, split/hold/copy buttons, dropzone, toolbar, status bar & segmented meter.",
