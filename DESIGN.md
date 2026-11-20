@@ -220,9 +220,9 @@ Usage: 2 between stacked nav items; 4 between title and description; 6 between a
 
 | Size | Height | Horizontal padding | Icon | Icon-text gap | Radius | Text |
 |---|---|---|---|---|---|---|
-| `sm` | 28 | 10 | 14 | 6 | 6 | Inter 500, 12/16 |
-| `md` (default) | 32 | 12 | 16 | 6 | 8 | Inter 500, 13/20 |
-| `lg` | 40 | 16 | 18 | 8 | 10 | Inter 500, 14/20 |
+| `sm` | 28 | 10 | 14 | 6 | 6 | Geist 500, 12/16 |
+| `md` (default) | 32 | 12 | 16 | 6 | 8 | Geist 500, 13/20 |
+| `lg` | 40 | 16 | 18 | 8 | 10 | Geist 500, 14/20 |
 
 Padding is measured from the outer edge and includes the border. Icon-only controls are square (width = height). Pointer hit targets extend to at least 28x28 even when the drawn control is smaller (checkbox, swatch). Standalone icon size outside controls is 16; 20 is allowed in empty states only.
 
@@ -238,17 +238,17 @@ All borders are inside borders: the stated size of a widget is its outer size. S
 
 ## 4. Type
 
-Inter for all UI text. Geist only at 24px and above. Geist Mono for code, keys and IDs. Letter-spacing is in em.
+Geist for all UI text, from captions to display. Geist Mono for code, keys and IDs. Letter-spacing is in em.
 
 | Role | Font | Weight | Size | Line height | Tracking | Default color | Use |
 |---|---|---|---|---|---|---|---|
-| `caption` | Inter | 400 | 11 | 16 | +0.005 | `TEXT_MUTED` | timestamps, counts, fine print |
-| `label` | Inter | 500 | 12 | 16 | 0 | `FOREGROUND` | field labels, tooltips, sm buttons, section labels |
-| `body` | Inter | 400 | 13 | 20 | 0 | `FOREGROUND` | default text, inputs, descriptions |
-| `body-strong` | Inter | 500 | 13 | 20 | 0 | `FOREGROUND` | md buttons, nav items, row titles |
-| `heading-4` | Inter | 600 | 14 | 20 | -0.006 | `FOREGROUND` | card titles |
-| `heading-3` | Inter | 600 | 16 | 24 | -0.011 | `FOREGROUND` | section titles |
-| `heading-2` | Inter | 600 | 20 | 28 | -0.017 | `FOREGROUND` | page sub-titles, dialog titles |
+| `caption` | Geist | 400 | 11 | 16 | +0.005 | `TEXT_MUTED` | timestamps, counts, fine print |
+| `label` | Geist | 500 | 12 | 16 | 0 | `FOREGROUND` | field labels, tooltips, sm buttons, section labels |
+| `body` | Geist | 400 | 13 | 20 | 0 | `FOREGROUND` | default text, inputs, descriptions |
+| `body-strong` | Geist | 500 | 13 | 20 | 0 | `FOREGROUND` | md buttons, nav items, row titles |
+| `heading-4` | Geist | 600 | 14 | 20 | -0.006 | `FOREGROUND` | card titles |
+| `heading-3` | Geist | 600 | 16 | 24 | -0.011 | `FOREGROUND` | section titles |
+| `heading-2` | Geist | 600 | 20 | 28 | -0.017 | `FOREGROUND` | page sub-titles, dialog titles |
 | `heading-1` | Geist | 600 | 24 | 32 | -0.020 | `FOREGROUND` | page titles |
 | `display` | Geist | 600 | 32 | 40 | -0.025 | `FOREGROUND` | hero numbers, gallery title |
 | `mono` | Geist Mono | 400 | 12 | 20 | 0 | `FOREGROUND` | code, keys, IDs, shortcuts |
@@ -389,7 +389,7 @@ Everything above describes the **Lumen** look, which is the default. A look (`lu
 | Text input | outline + halo | outline + halo | accent underline | filled |
 | Focus ring | 2px, gap 4→2 | 3.5px, 60%, hugging | 2px foreground | 2px, 50% |
 | Sidebar selection | accent-subtle | neutral | neutral + accent bar | neutral |
-| Fonts | Inter, Geist | SF Pro | Segoe UI Variable | Adwaita Sans, Cantarell |
+| Fonts | Geist | SF Pro | Segoe UI Variable | Adwaita Sans, Cantarell |
 | Native accent | blue (#0E6EE6) | #007AFF / #0A84FF | #005FB8 / #60CDFF | #3584E4 |
 
 Rules:

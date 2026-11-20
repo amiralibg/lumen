@@ -1,6 +1,6 @@
 //! Text shaping, layout and glyph rasterization for lumen.
 //!
-//! `TextSystem` owns the font database (with Inter, Geist, Geist Mono and
+//! `TextSystem` owns the font database (with Geist, Geist Mono and
 //! Lucide bundled), lays text out into [`Galley`]s in logical pixels, and
 //! rasterizes glyphs into a single-channel [`Atlas`] at physical resolution.
 //! It knows nothing about windows or GPUs: the renderer uploads
@@ -23,7 +23,7 @@ use cosmic_text::{
 /// Font family role. Each role maps to a bundled family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum FontFamily {
-    /// Inter: body text, labels, controls.
+    /// Geist: body text, labels, controls.
     #[default]
     Sans,
     /// Geist: large display headings.
@@ -37,7 +37,7 @@ pub enum FontFamily {
 impl FontFamily {
     fn name(self) -> &'static str {
         match self {
-            FontFamily::Sans => "Inter",
+            FontFamily::Sans => "Geist",
             FontFamily::Display => "Geist",
             FontFamily::Mono => "Geist Mono",
             FontFamily::Icons => "lucide",
@@ -204,12 +204,13 @@ pub struct GlyphQuad {
     pub glyph: AtlasGlyph,
 }
 
-static INTER_REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf");
-static INTER_MEDIUM: &[u8] = include_bytes!("../fonts/Inter-Medium.ttf");
-static INTER_SEMIBOLD: &[u8] = include_bytes!("../fonts/Inter-SemiBold.ttf");
+static GEIST_REGULAR: &[u8] = include_bytes!("../fonts/Geist-Regular.ttf");
 static GEIST_MEDIUM: &[u8] = include_bytes!("../fonts/Geist-Medium.ttf");
 static GEIST_SEMIBOLD: &[u8] = include_bytes!("../fonts/Geist-SemiBold.ttf");
 static GEIST_MONO: &[u8] = include_bytes!("../fonts/GeistMono-Regular.ttf");
+/// ⌘ ⌥ ⌃ ⌫ ⏎ ✓ and other keyboard symbols Geist lacks: a 14 KB subset of
+/// Inter, renamed, used only as a fallback.
+static SYMBOLS: &[u8] = include_bytes!("../fonts/LumenSymbols.ttf");
 static LUCIDE: &[u8] = include_bytes!("../fonts/Lucide.ttf");
 
 struct CachedGalley {
@@ -242,10 +243,10 @@ impl TextSystem {
     /// every platform, including the web).
     pub fn new() -> Self {
         let mut db = fontdb::Database::new();
-        for data in [INTER_REGULAR, INTER_MEDIUM, INTER_SEMIBOLD, GEIST_MEDIUM, GEIST_SEMIBOLD, GEIST_MONO, LUCIDE] {
+        for data in [GEIST_REGULAR, GEIST_MEDIUM, GEIST_SEMIBOLD, GEIST_MONO, SYMBOLS, LUCIDE] {
             db.load_font_source(fontdb::Source::Binary(Arc::new(data)));
         }
-        db.set_sans_serif_family("Inter");
+        db.set_sans_serif_family("Geist");
         db.set_monospace_family("Geist Mono");
         let fonts = FontSystem::new_with_locale_and_db("en-US".into(), db);
         Self {
@@ -581,15 +582,26 @@ mod tests {
     }
 
     #[test]
+    fn keyboard_symbols_have_glyphs() {
+        // Geist has no ⌘ ⌥ ⌃; the bundled symbol fallback must cover them.
+        let mut ts = TextSystem::new();
+        let g = ts.layout("⌘⌥⌃⇧K", &body(), None, TextAlign::Start);
+        assert_eq!(g.glyphs.len(), 5);
+        for gl in &g.glyphs {
+            assert_ne!(gl.glyph.glyph_id, 0, "missing glyph in {:?}", g.text);
+        }
+    }
+
+    #[test]
     fn family_override_falls_back() {
         let mut ts = TextSystem::new();
-        assert!(ts.has_family("Inter"));
-        ts.set_family(FontFamily::Sans, Some("Geist"));
-        assert_eq!(ts.family_name(FontFamily::Sans), "Geist");
+        assert!(ts.has_family("Geist"));
+        ts.set_family(FontFamily::Sans, Some("Geist Mono"));
+        assert_eq!(ts.family_name(FontFamily::Sans), "Geist Mono");
         let g = ts.layout("Hello", &body(), None, TextAlign::Start);
         assert!(g.width > 0.0);
         ts.set_family(FontFamily::Sans, None);
-        assert_eq!(ts.family_name(FontFamily::Sans), "Inter");
+        assert_eq!(ts.family_name(FontFamily::Sans), "Geist");
     }
 
     #[test]
@@ -605,7 +617,7 @@ mod tests {
     #[test]
     fn rtl_text_shapes() {
         let mut ts = TextSystem::new();
-        // Inter covers Latin only; Hebrew falls back to notdef but must not panic.
+        // Geist covers Latin only; Hebrew falls back to notdef but must not panic.
         let g = ts.layout("abc שלום", &body(), None, TextAlign::Start);
         assert!(!g.glyphs.is_empty());
     }

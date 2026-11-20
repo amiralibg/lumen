@@ -1,15 +1,14 @@
 /* lumen site: Ethereal (see site/DESIGN.md). Night sky, light as the only
    material, frosted glass on top. Colors are tokens on .t-dark / .t-light. */
 
-@font-face { font-family: "Inter"; src: url("fonts/Inter-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Inter"; src: url("fonts/Inter-Medium.ttf") format("truetype"); font-weight: 500; font-display: swap; }
-@font-face { font-family: "Inter"; src: url("fonts/Inter-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("fonts/Geist-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("fonts/Geist-Medium.ttf") format("truetype"); font-weight: 500; font-display: swap; }
 @font-face { font-family: "Geist"; src: url("fonts/Geist-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
 @font-face { font-family: "Geist Mono"; src: url("fonts/GeistMono-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
 
 :root {
-  --font-ui: "Inter", system-ui, sans-serif;
-  --font-display: "Geist", "Inter", sans-serif;
+  --font-ui: "Geist", system-ui, sans-serif;
+  --font-display: "Geist", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, Menlo, monospace;
   --accent: #3b82f6;
   --m: 1;

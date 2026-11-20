@@ -18,7 +18,7 @@ These are the rules. Break one only on purpose.
 
 - Radii: 10 for controls, 14 for bars and small cards, 18 to 26 for frames. Pills for chips and tags.
 - Spacing on a 4 px grid. Bands are 120 px apart. Content max width is 1240.
-- Type: Geist SemiBold for display (-0.05em at 112 px, -0.04em at 64 px), Inter for everything else, Geist Mono for code and kickers.
+- Type: Geist everywhere: SemiBold for display (-0.05em at 112 px, -0.04em at 64 px), Regular and Medium for UI and reading text, Geist Mono for code and kickers.
 
 ## Light
 

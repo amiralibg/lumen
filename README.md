@@ -195,4 +195,4 @@ Combobox, command palette, number and tag inputs; a table and a virtualized data
 
 ## License
 
-MIT or Apache-2.0, at your option. Bundled fonts: Inter and Geist (SIL OFL 1.1), Lucide icons (ISC). See [THIRD_PARTY.md](THIRD_PARTY.md).
+MIT or Apache-2.0, at your option. Bundled fonts: Geist and Geist Mono (SIL OFL 1.1), Lucide icons (ISC). See [THIRD_PARTY.md](THIRD_PARTY.md).

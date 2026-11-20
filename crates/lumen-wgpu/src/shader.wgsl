@@ -101,6 +101,19 @@ fn rounded_box_shadow(p: vec2<f32>, half_size: vec2<f32>, sigma: f32, corner: f3
     return value;
 }
 
+// Text contrast correction. lumen blends in gamma space, which renders
+// light text on dark backgrounds thin and washed out (and dark on light a
+// little heavy). Boost partial coverage more for light text, and more at
+// 1x where stems are only a pixel or two wide, the way DirectWrite and
+// browsers do.
+fn text_coverage(cov: f32, rgb: vec3<f32>, scale: f32) -> f32 {
+    let brightness = dot(rgb, vec3<f32>(0.30, 0.59, 0.11));
+    let light = smoothstep(0.25, 0.85, brightness);
+    let density = select(0.55, 1.0, scale < 1.5);
+    let k = (0.25 + 1.15 * light) * density;
+    return cov * (k + 1.0) / (cov * k + 1.0);
+}
+
 @fragment
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     switch i.mode {
@@ -127,8 +140,8 @@ fn fs_main(i: VOut) -> @location(0) vec4<f32> {
             return premul(i.color) * a;
         }
         default: {
-            let cov = textureLoad(atlas, vec2<i32>(floor(i.uv)), 0).r;
-            return premul(i.color) * cov;
+            let raw = textureLoad(atlas, vec2<i32>(floor(i.uv)), 0).r;
+            return premul(i.color) * text_coverage(raw, i.color.rgb, u.scale);
         }
     }
 }

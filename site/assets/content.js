@@ -2190,7 +2190,7 @@ ui.scroll("list").show(|ui| { /* long content */ });`)}
 <tr><td>Buttons</td><td>raised + border</td><td>bevel + hairline shadow</td><td>bottom edge</td><td>flat filled</td></tr>
 <tr><td>Switch</td><td>36×20</td><td>38×22</td><td>outlined off</td><td>46×26</td></tr>
 <tr><td>Inputs</td><td>outline + halo</td><td>outline + halo</td><td>accent underline</td><td>filled</td></tr>
-<tr><td>Font</td><td>Inter / Geist</td><td>SF Pro</td><td>Segoe UI Variable</td><td>Adwaita Sans</td></tr></table>
+<tr><td>Font</td><td>Geist</td><td>SF Pro</td><td>Segoe UI Variable</td><td>Adwaita Sans</td></tr></table>
 ${code(`let look = Look::mac()
     .rounded(1.5)                     // 150% radii
     .density(Density::Compact)

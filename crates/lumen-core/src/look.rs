@@ -392,7 +392,7 @@ impl Motion {
 }
 
 /// Font families to try for each text role, in order. Empty uses the
-/// bundled fonts (Inter, Geist, Geist Mono).
+/// bundled fonts (Geist, Geist Mono).
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct Fonts {
     pub sans: &'static [&'static str],
@@ -885,7 +885,7 @@ impl Look {
         self
     }
 
-    /// Use the bundled Inter / Geist fonts even for platform looks.
+    /// Use the bundled Geist fonts even for platform looks.
     pub fn bundled_fonts(mut self) -> Look {
         self.fonts = Fonts::BUNDLED;
         self
