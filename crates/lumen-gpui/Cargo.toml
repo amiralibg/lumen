@@ -1,0 +1,22 @@
+[package]
+name = "lumen-gpui"
+description = "Host lumen widgets inside a GPUI (Zed) application"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/amiralibg/lumen"
+publish = false
+
+# GPUI is a large dependency with its own platform requirements (Xcode's
+# Metal toolchain on macOS, Wayland/X11 headers on Linux), so this crate
+# lives outside the main workspace and keeps its own Cargo.lock.
+[workspace]
+
+[dependencies]
+lumen-core = { path = "../lumen-core" }
+lumen-wgpu = { path = "../lumen-wgpu" }
+gpui = "0.2.2"
+image = { version = "0.25", default-features = false }
+wgpu = { version = "30", default-features = false, features = ["wgsl", "metal", "vulkan", "dx12", "std"] }
+pollster = "1"
+web-time = "1.1"

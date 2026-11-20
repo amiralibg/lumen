@@ -262,45 +262,83 @@ pub mod offscreen {
 
     /// Render `data` and read back tightly packed RGBA8 pixels.
     pub fn capture(device: &wgpu::Device, queue: &wgpu::Queue, renderer: &mut Renderer, data: &DrawData) -> Vec<u8> {
-        let [w, h] = data.size_px;
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("lumen capture"),
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = tex.create_view(&Default::default());
-        renderer.draw_to(device, queue, &view, data);
-        let row = (w * 4).div_ceil(256) * 256;
-        let buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("lumen readback"),
-            size: (row * h) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut enc = device.create_command_encoder(&Default::default());
-        enc.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        );
-        queue.submit([enc.finish()]);
-        let slice = buf.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map readback"));
-        let _ = device.poll(wgpu::PollType::wait_indefinitely());
-        let mapped = slice.get_mapped_range().expect("mapped range");
-        let mut out = Vec::with_capacity((w * h * 4) as usize);
-        for y in 0..h {
-            let s = (y * row) as usize;
-            out.extend_from_slice(&mapped[s..s + (w * 4) as usize]);
+        let mut rb = Readback::default();
+        rb.render(device, queue, renderer, data).to_vec()
+    }
+
+    /// An offscreen render target plus readback buffer, reused across
+    /// frames. Hosts that composite lumen into another renderer (GPUI,
+    /// a game engine's UI layer) render into this and upload the pixels.
+    pub struct Readback {
+        format: wgpu::TextureFormat,
+        target: Option<(wgpu::Texture, wgpu::TextureView, wgpu::Buffer, [u32; 2])>,
+        pixels: Vec<u8>,
+    }
+
+    impl Default for Readback {
+        fn default() -> Self {
+            Self::with_format(FORMAT)
         }
-        drop(mapped);
-        buf.unmap();
-        out
+    }
+
+    impl Readback {
+        /// Read back in another 8-bit, 4-channel, non-sRGB format, such as
+        /// `Bgra8Unorm` for hosts that upload BGRA. The [`Renderer`] passed
+        /// to [`render`](Self::render) must be created with the same format.
+        pub fn with_format(format: wgpu::TextureFormat) -> Self {
+            Readback { format, target: None, pixels: Vec::new() }
+        }
+
+        /// Render `data` at `data.size_px` and return tightly packed,
+        /// premultiplied pixels (RGBA8 unless made [`with_format`](Self::with_format)).
+        /// Blocks until the GPU is done.
+        pub fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, renderer: &mut Renderer, data: &DrawData) -> &[u8] {
+            let [w, h] = [data.size_px[0].max(1), data.size_px[1].max(1)];
+            let row = (w * 4).div_ceil(256) * 256;
+            if self.target.as_ref().is_none_or(|t| t.3 != [w, h]) {
+                let tex = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("lumen offscreen"),
+                    size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let view = tex.create_view(&Default::default());
+                let buf = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("lumen readback"),
+                    size: (row * h) as u64,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+                self.target = Some((tex, view, buf, [w, h]));
+            }
+            let (tex, view, buf, _) = self.target.as_ref().unwrap();
+            renderer.draw_to(device, queue, view, data);
+            let mut enc = device.create_command_encoder(&Default::default());
+            enc.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyBufferInfo { buffer: buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            );
+            queue.submit([enc.finish()]);
+            let slice = buf.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |r| r.expect("map readback"));
+            let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            {
+                let mapped = slice.get_mapped_range().expect("mapped range");
+                self.pixels.clear();
+                self.pixels.reserve((w * h * 4) as usize);
+                for y in 0..h {
+                    let s = (y * row) as usize;
+                    self.pixels.extend_from_slice(&mapped[s..s + (w * 4) as usize]);
+                }
+            }
+            buf.unmap();
+            &self.pixels
+        }
     }
 
     /// Create a headless device.

@@ -1,6 +1,6 @@
 # Component roadmap
 
-lumen now ships **170 live components across 14 groups** (up from 28), completing every item in Batch 2, Batch 3, Batch 4, and Batch 5 plus full CUI-parity collaboration, studio, enterprise, AI, developer-tools, visualization, date, and motion components. Every widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors strictly from `Token::*`, closed-form springs, reduced-motion fallbacks, and zero idle wakeups at rest.
+lumen now ships **171 live components across 14 groups** (up from 28) and seven complete apps, completing every item in Batch 2, Batch 3, Batch 4, and Batch 5 plus full CUI-parity collaboration, studio, enterprise, AI, developer-tools, visualization, date, and motion components. Every widget follows the look system: geometry and motion from `ui.look()` / `ui.motion()`, colors strictly from `Token::*`, closed-form springs, reduced-motion fallbacks, and zero idle wakeups at rest.
 
 ## Design bar for every widget
 
@@ -45,3 +45,15 @@ CUI's site has Overview, Guide, Components (17 groups, each page with a live exa
 - Apps and Showcase entries have no source link, size or platform tags. Ours get "Open live", "View source", binary size and platform chips.
 - Its component count does not match its index. Ours is generated from `content.js`, so it is always accurate.
 - Settings panel parity: accent, theme, renderer, motion speed, pixel ratio, reduced motion and side by side. We add look, density, roundness and a custom accent picker.
+
+## Next round (from the November 2026 CUI comparison)
+
+CUI lists 174 component entries (several bundle more than one component) and 11 apps. Gaps worth closing, roughly in order:
+
+- **Apps:** a settings app and a small "caffeine curve" style toy app; lumen now has mail, music, tracker, notes, assistant, finance and to-do.
+- **Inputs and pickers:** signature pad, avatar upload, wheel picker and time dial, emoji picker, aspect-ratio picker, ruler slider.
+- **Data and devtools:** code editor, hex viewer, tree table with path bar, file browser, problems panel, query builder, regex tester, stack trace, blame and coverage views, feature flags, dependency graph.
+- **Overlays and feedback:** guided tour, veil, onboarding checklist, swipe actions, docking panels.
+- **Charts:** calendar heatmap, bubble chart, chart annotations, dot-matrix display.
+- **Voice AI:** recorder, voice note and live session.
+- **Platform:** virtualized lists, IME and accessibility for `lumen-gpui`.

@@ -75,7 +75,7 @@ fn main() {
 | | How it draws | Where lumen differs |
 |---|---|---|
 | egui | Immediate mode, own widgets | Same model. lumen spends its effort on finish: OKLab theming, springs, real type, platform looks. |
-| GPUI | Retained elements, own renderer | Zed's framework, desktop only. lumen is immediate mode and also runs in the browser. The two don't combine. |
+| GPUI | Retained elements, own renderer | Zed's framework, desktop only. lumen is immediate mode and also runs in the browser. You can put lumen views inside a GPUI app with [`lumen-gpui`](#inside-a-gpui-app). |
 | iced, Slint | Elm-style messages, or a markup language | lumen is plain Rust functions over your state. |
 | Tauri, Electron | A web view | lumen is one native binary drawing with the GPU, with no browser engine. |
 | AppKit, WinUI, GTK | The OS's own widgets | lumen doesn't wrap them. Its platform looks follow their conventions, but they're lumen widgets. |
@@ -147,6 +147,22 @@ ui.override_color(Mode::Dark, Token::Background, Some(Color::hex(0x101418)));
 
 Charts pick round-number axes, thin out labels to fit, spring to new data, and show a crosshair with a tooltip on hover. Calendars slide between months, walk with the arrow keys, and join ranges across weeks.
 
+## Inside a GPUI app
+
+[`lumen-gpui`](crates/lumen-gpui) puts a lumen UI inside a [GPUI](https://gpui.rs) (Zed) app as an ordinary view. Build the app in GPUI and use lumen for panels, charts, forms and dialogs next to your GPUI elements. Mouse, scroll, keyboard, clipboard, cursors and the window's dark mode are wired up.
+
+```rust
+let panel = lumen_gpui::LumenView::build(Settings::default(), |ui, s| {
+    ui.switch("Notifications", &mut s.notify);
+    ui.slider("Volume", &mut s.volume, 0.0..=1.0);
+}, window, cx);
+
+div().size_full().child(panel.clone())                       // a GPUI element tree
+panel.update(cx, |p, cx| p.update(cx, |s| s.volume = 0.2));  // GPUI → lumen state
+```
+
+GPUI can't host another renderer directly, so lumen renders offscreen and hands GPUI the pixels. Idle views cost nothing. While animating, a Retina-sized panel takes a few milliseconds a frame. The [guide](https://amiralibg.github.io/lumen/#/guide/gpui) covers setup, state sharing and limits. Run `cargo run --example dashboard` in `crates/lumen-gpui` to see it.
+
 ## Platforms
 
 | Platform | Window and input | Renderer |
@@ -161,7 +177,8 @@ Charts pick round-number axes, thin out labels to fit, spring to new data, and s
 - **Early.** The API will change. There's no crates.io release yet.
 - **No screen reader support yet.** Everything is keyboard reachable with visible focus; AccessKit is planned.
 - **Platform looks are lumen widgets.** They follow each OS's conventions closely but aren't the OS's own controls.
-- **No combobox, data table, tree, code editor or docking yet.** They're next.
+- **No code editor or docking panels yet.**
+- **GPUI hosting goes through a pixel readback**, and doesn't forward IME composition yet. See [the guide](https://amiralibg.github.io/lumen/#/guide/gpui).
 - **OS accent and reduce-motion detection** is tested on macOS and the web. Windows and GNOME use registry and `gsettings` queries that haven't run on real machines yet.
 
 ## Architecture
@@ -172,6 +189,7 @@ lumen-core    ids, input, layout, looks, springs, widgets → DrawData
 lumen-wgpu    one pipeline, one WGSL shader
 lumen-app     winit event loop (native + wasm), clipboard, OS preferences, screenshots
 lumen         facade
+lumen-gpui    optional: lumen views inside a GPUI app (its own workspace)
 ```
 
 `lumen-core` never touches a window or a GPU. Each 64-byte vertex carries its own shape data (SDF rounded rect, blurred shadow, glyph or plain mesh), so a renderer backend is one shader.
@@ -194,12 +212,13 @@ cargo test --workspace
 | [Looks and theming](https://amiralibg.github.io/lumen/#/guide/looks) | Looks, accents, tokens, following the OS |
 | [Motion](https://amiralibg.github.io/lumen/#/guide/motion) | Springs, fades, motion presets, reduced motion |
 | [Custom widgets](https://amiralibg.github.io/lumen/#/guide/custom-widgets) | Interaction, memory, painting, layers |
+| [Using lumen in GPUI](https://amiralibg.github.io/lumen/#/guide/gpui) | `LumenView`, sharing state, cost and limits |
 | [FAQ](https://amiralibg.github.io/lumen/#/guide/faq) | Native UI, GPUI, platforms, roadmap |
 | [DESIGN.md](DESIGN.md) | Every token, spring and look parameter |
 
 ## What's next
 
-Combobox, command palette, number and tag inputs; a table and a virtualized data grid; tree; code editor; docking panels; AccessKit. Then **Vault**, a password manager built with lumen.
+A code editor, docking panels, virtualized lists, AccessKit, and IME for GPUI hosting. Then **Vault**, a password manager built with lumen.
 
 ## License
 

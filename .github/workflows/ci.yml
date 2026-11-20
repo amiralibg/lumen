@@ -20,3 +20,13 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: Check the web build
         run: cargo check -p lumen-gallery -p lumen-demos --target wasm32-unknown-unknown
+  gpui:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/lumen-gpui
+      - name: Test the GPUI adapter
+        run: cargo test --manifest-path crates/lumen-gpui/Cargo.toml --all-targets

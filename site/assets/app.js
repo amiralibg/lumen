@@ -412,7 +412,7 @@ lumen::App::new("Settings").run(State::default(), |ui, s| {
       <thead><tr><th></th><th>How it draws</th><th>Where lumen differs</th></tr></thead>
       <tbody>
         <tr><td>egui</td><td>Immediate mode, own widgets</td><td>Same model. lumen spends its effort on finish: OKLab theming, springs, real type, platform looks.</td></tr>
-        <tr><td>GPUI</td><td>Retained elements, own renderer</td><td>Zed's framework, desktop only. lumen is immediate mode and runs in the browser too.</td></tr>
+        <tr><td>GPUI</td><td>Retained elements, own renderer</td><td>Zed's framework, desktop only. lumen is immediate mode, runs in the browser too, and can live inside a GPUI app through <a href="#/guide/gpui">lumen-gpui</a>.</td></tr>
         <tr><td>iced, Slint</td><td>Retained or declarative, own widgets</td><td>Elm-style messages or a markup language. lumen is plain Rust functions over your state.</td></tr>
         <tr><td>Tauri, Electron</td><td>A web view</td><td>Those ship HTML and a browser engine. lumen is one native binary drawing with the GPU.</td></tr>
         <tr><td>AppKit, WinUI, GTK</td><td>The OS's own widgets</td><td>lumen doesn't wrap them. Its looks follow their conventions, but they're lumen widgets.</td></tr>

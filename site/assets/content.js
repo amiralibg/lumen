@@ -2270,6 +2270,73 @@ ${code(`fn rating(ui: &mut Ui, value: &mut u8) {
 </ul>`,
   },
   {
+    slug: "gpui", title: "Using lumen in GPUI", lead: "Put lumen panels inside a GPUI (Zed) app, next to your own GPUI elements.",
+    body: `
+<p><code>lumen-gpui</code> wraps a lumen UI in an ordinary GPUI view. Drop it anywhere in your element tree, give it a size like any other child, and it draws lumen's widgets, looks and motion there. Mouse, scroll, keyboard, clipboard, cursors and the window's light or dark appearance are wired up for you.</p>
+<figure style="margin:24px auto;max-width:460px"><img src="img/gpui-dashboard.png" alt="A GPUI window: a GPUI header and region sidebar on the left, and a lumen dashboard with stat cards, a traffic chart, a text input, a switch, a slider and a deploy button filling the rest." style="width:100%;height:auto;display:block" loading="lazy"><figcaption style="text-align:center;font-size:13px;opacity:.7;margin-top:8px">The header and sidebar are GPUI elements. Everything right of the sidebar is one <code>LumenView</code>.</figcaption></figure>
+<p>It targets <code>gpui 0.2.2</code> from crates.io. GPUI builds on macOS (Xcode's Metal toolchain required), Linux and Windows.</p>
+<h2>Add it</h2>
+${code(`[dependencies]
+gpui = "0.2.2"
+lumen-gpui = { git = "https://github.com/amiralibg/lumen" }`, "toml")}
+<h2>A lumen panel in a GPUI window</h2>
+${code(`use gpui::{prelude::*, div, px, size, App, Application, Bounds, Context, Entity, Window, WindowBounds, WindowOptions};
+use lumen_gpui::LumenView;
+
+struct Settings { notify: bool, volume: f32 }
+
+struct Shell { panel: Entity<LumenView<Settings>> }
+
+impl Render for Shell {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().flex().flex_col()
+            .child(div().p_2().child("A GPUI header"))
+            .child(div().flex_1().child(self.panel.clone())) // lumen fills this
+    }
+}
+
+fn main() {
+    Application::new().run(|cx: &mut App| {
+        let bounds = Bounds::centered(None, size(px(720.), px(480.)), cx);
+        let opts = WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() };
+        cx.open_window(opts, |window, cx| {
+            let panel = LumenView::build(Settings { notify: true, volume: 0.6 }, |ui, s| {
+                ui.column().pad(24).gap(14).show(|ui| {
+                    ui.heading("General");
+                    ui.switch("Notifications", &mut s.notify);
+                    ui.slider("Volume", &mut s.volume, 0.0..=1.0);
+                });
+            }, window, cx);
+            cx.new(|_| Shell { panel })
+        }).unwrap();
+    });
+}`)}
+<h2>Sharing state with GPUI</h2>
+<p>The view owns your state struct, the same way <code>lumen::App</code> does. GPUI code reads it with <code>state()</code> and changes it with <code>update()</code>, which also schedules a redraw:</p>
+${code(`// GPUI → lumen: a GPUI click changes what lumen shows.
+panel.update(cx, |p, cx| p.update(cx, |s| s.region = 2));
+
+// lumen → GPUI: re-render a GPUI view whenever lumen handles input.
+let _watch = cx.observe(&panel, |_, _, cx| cx.notify());
+let deploys = panel.read(cx).state().deploys;`)}
+<h2>Looks and options</h2>
+${code(`cx.new(|cx| LumenView::new(state, view, window, cx)
+    .look(Look::mac())        // any look, or change it later with ui.set_look
+    .accent(Accent::Violet)
+    .mode(Mode::Dark)         // default: follow the GPUI window's appearance
+    .transparent())           // let GPUI content show between widgets`)}
+<h2>How it works, and what it costs</h2>
+<p>GPUI has no hook for another renderer to draw into its frame, so lumen renders offscreen with wgpu (one device shared by every view), reads the pixels back in GPUI's BGRA layout and paints them as a GPUI image. A view at rest renders nothing. It only produces frames after input, a state change, a resize, a theme change, or while something animates.</p>
+<p>While animating, a 880×676-point panel on a Retina Mac (1760×1352 pixels) took 3 to 9 ms per frame on Apple silicon in our measurements, mostly waiting for the GPU readback. That's fine for panels, inspectors, charts, forms and dialogs. For a whole window of lumen, use <code>lumen::App</code>, which presents directly. Set <code>LUMEN_GPUI_TRACE=1</code> to print the time of each frame.</p>
+<h2>Limits today</h2>
+<ul>
+<li>IME composition isn't forwarded. Typed characters arrive as committed text, which covers Latin layouts and dead keys, but not CJK input methods.</li>
+<li>lumen overlays (menus, popovers, toasts) stay inside the view's bounds. Give a view the area its popovers need.</li>
+<li>Accessibility trees aren't bridged to GPUI.</li>
+</ul>
+<p>Run the example: <code>cd crates/lumen-gpui && cargo run --example dashboard</code>. It shows a GPUI sidebar driving a lumen dashboard, and a lumen Deploy button updating the GPUI header.</p>`,
+  },
+  {
     slug: "architecture", title: "Architecture", lead: "Five small crates. The core never touches a window or a GPU.",
     body: `
 <pre><code>lumen-text   cosmic-text shaping, bundled fonts, glyph atlas
@@ -2280,7 +2347,9 @@ lumen-wgpu   one pipeline, one WGSL shader (SDF rects, shadows, glyphs, meshes)
    ↓
 lumen-app    winit event loop (native + wasm), clipboard, OS preferences, screenshots
    ↓
-lumen        facade</code></pre>
+lumen        facade
+
+lumen-gpui   optional: hosts lumen views inside a GPUI app (separate workspace)</code></pre>
 <p>Each frame your closure records a layout tree. Widgets resolve interaction against the previous frame's hit rects. After the closure returns, the tree is laid out (hug, fixed or fill sizing, padding, gap, align, justify), then painted into one vertex buffer. Each 64-byte vertex carries its own shape data, so a backend is one shader.</p>`,
   },
   {
@@ -2289,7 +2358,7 @@ lumen        facade</code></pre>
 <h2>Is lumen "native UI components for Rust"?</h2>
 <p>It's native code, not a web view: your app compiles to a single binary that draws with the GPU through wgpu (Metal, Vulkan, DirectX 12, OpenGL) and to WebAssembly for the browser. lumen <em>draws its own components</em>, the way egui, GPUI, iced, Slint and Flutter do. It doesn't wrap AppKit, Win32 or GTK widgets. The platform looks reproduce each OS's control conventions (sizes, shapes, focus rings, fonts, accent color, motion) closely, but they're lumen widgets. If you need the OS's actual widgets, use bindings to those toolkits.</p>
 <h2>Does lumen work with GPUI?</h2>
-<p>Not directly. GPUI (Zed's framework) and lumen are separate UI frameworks with their own event loops, layout and renderers, so you pick one per window. <code>lumen-core</code> only produces triangles, so you could draw a lumen UI inside a GPUI app if you wire an adapter for input and GPU textures yourself, but nothing in lumen does that today. lumen runs on winit + wgpu and also runs in the browser.</p>
+<p>Yes, through the <code>lumen-gpui</code> crate. A <code>LumenView</code> is a regular GPUI view, so you can build your app in GPUI and use lumen for panels, charts, forms and dialogs inside it. See <a href="#/guide/gpui">Using lumen in GPUI</a> for setup, state sharing and the cost of the offscreen bridge. For a window that's entirely lumen, <code>lumen::App</code> is still the faster path, and it also runs in the browser.</p>
 <h2>Platforms?</h2>
 <p>macOS, Windows, Linux (X11 and Wayland through winit), and browsers with WebGPU or WebGL2.</p>
 <h2>Accessibility?</h2>
@@ -2300,7 +2369,15 @@ lumen        facade</code></pre>
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-18", items: [
+  { v: "Unreleased", date: "2026-11-20", items: [
+    "GPUI support: the new lumen-gpui crate hosts lumen views inside a GPUI (Zed) app, with mouse, keyboard, clipboard, cursors and dark mode forwarded. See the GPUI guide.",
+    "Seven complete apps, live on the Apps page: Postbox (mail), Cadence (music), Relay (issue tracker), Margin (notes), Lumi (AI assistant), Tally (finance) and Today (to-do).",
+    "New list view: a selectable master list with a gliding highlight, staggered row entrances, unread dots that pop, springy stars and arrow-key navigation.",
+    "Painter layers: push_layer(opacity, offset) fades and moves a whole group at once, so entrances move rows and everything in them together.",
+    "Fixes: waveform playback now runs on real elapsed time instead of assuming 60 fps, and its bars fit narrow cards; gantt and trace labels end in an ellipsis instead of cutting glyphs; the equalizer header stacks in narrow cards.",
+    "Eight showcase scenes: AI coding workspace, observability console, shader studio, release control plane, analytics terminal, RFC studio, cloud governance and an on-call launch room.",
+  ] },
+  { v: "Earlier", date: "2026-11-18", items: [
     "170 components across 14 groups: full CUI-parity suite adding presence pile, threaded comments, reaction bar, attachment list, story progress steps, shortcut bar, view switcher, OKLab gradient slider, cron schedule & fiscal quarter pickers, win-loss & 10×10 waffle charts, schema viewer, guarded environment switcher, GPU memory arena, AI patch suggestion, prompt templates, pricing cards, A/B comparison & 8-band graphic equalizer.",
     "Enterprise & tactile controls: floating action bar, speed-dial FAB, numeric keypad, CSS/CAD dimension input, stacked meter, announcement bar, quantity & swatch pickers, week date strip, world clocks, bullet & watchlist charts, AI model picker, context-window meter, REST API inspector, RBAC permission matrix, description list, masonry grid, collapsible card & marquee ticker.",
     "Visualizations, graphs & tactile controls: Sankey flow ribbons, GitHub contribution calendar, percentile histogram, KPI strip, week schedule, draggable node editor, Git commit graph, test explorer, editable data grid, facet filter bar, AI citations, kinetic text effects, rotary knob, before/after split slider, countdown timer & checklist card.",
