@@ -1304,6 +1304,21 @@ ui.flame_graph("profile", &spans);`,
     keys: [],
   },
   {
+    slug: "list-view", name: "List view", group: "Data", demo: "list-view",
+    summary: "The master list of a mail, notes, music or files app. One highlight glides between rows, rows rise in sequence on first show, unread dots pop, and stars spring in.",
+    code: `let rows = vec![
+    ListRow::new("Brand guidelines.pdf").subtitle("PDF · 6.2 MB").icon("file-text").meta("Yesterday").starred(true),
+    ListRow::new("Q4 planning.key").subtitle("Keynote").avatar("PN", 2).unread(true),
+];
+let out = ui.list_view("files", &rows, &mut selected); // selected: Option<usize>
+if let Some(i) = out.activated { open(i) }            // double click or Enter`,
+    options: [
+      ["ListRow::new(title) .subtitle .preview .meta .icon .avatar(initials, tone) .unread .starred .badge(text, tone)", "Every field but the title is optional."],
+      ["ListOut { changed, activated, starred }", "activated fires on double click or Enter; starred when a row's star is clicked."],
+    ],
+    keys: [["↑ ↓", "Move the selection"], ["Home / End", "First / last row"], ["Enter", "Open the selected row"]],
+  },
+  {
     slug: "notification-list", name: "Notification inbox", group: "Feedback", demo: "notification-list",
     summary: "Filterable All / Unread notification feed with unread accent dots, Mark all read button, avatars and per-item archive.",
     code: `ui.notification_list("inbox", &mut s.notifications);`,

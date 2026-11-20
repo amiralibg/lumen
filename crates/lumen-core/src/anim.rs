@@ -167,6 +167,13 @@ impl AnimStore {
         self.fades.retain(|_, (_, seen)| f - *seen < 4);
     }
 
+    /// Report a time-based animation (a stagger, a typewriter) that isn't a
+    /// spring or fade, so the frame counts as animating: the app keeps
+    /// drawing and screenshots wait for it.
+    pub fn keep_alive(&mut self) {
+        self.active = true;
+    }
+
     /// True if any animation needs another frame.
     pub fn is_active(&self) -> bool {
         self.active

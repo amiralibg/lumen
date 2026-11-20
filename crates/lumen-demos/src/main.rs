@@ -6,6 +6,8 @@
 
 use std::collections::BTreeSet;
 
+mod apps;
+
 use lumen::{
     vec2, Accent, AiModelSpec, Align, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle, CarouselSlide,
     ChatMessage, ChecklistStep, CitationSource, Color, Command, CommentEntry, CommitRow, ContextSlice, Currency, Date,
@@ -119,6 +121,7 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("property-grid", "Property inspector"),
     ("flame-graph", "Flame graph"),
     ("notification-list", "Notification inbox"),
+    ("list-view", "List view"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -193,6 +196,13 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
+    ("app-mail", "Postbox (mail)"),
+    ("app-music", "Cadence (music)"),
+    ("app-tracker", "Relay (issue tracker)"),
+    ("app-notes", "Margin (notes)"),
+    ("app-assistant", "Lumi (AI assistant)"),
+    ("app-finance", "Tally (finance)"),
+    ("app-todo", "Today (to-do)"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -295,6 +305,8 @@ struct State {
     prop_opacity: f64,
     prop_clip: bool,
     notifs: Vec<NotificationItem>,
+    list_sel: Option<usize>,
+    list_rows: Vec<lumen::ListRow>,
     edit_heading: String,
     edit_summary: String,
     money_budget: f64,
@@ -363,6 +375,7 @@ struct State {
     selected_tier_plan: usize,
     eq_bands: [f32; 8],
     eq_preset: usize,
+    apps: apps::Apps,
 }
 
 impl State {
@@ -465,6 +478,14 @@ impl State {
             prop_radius: 16.0,
             prop_opacity: 94.0,
             prop_clip: true,
+            list_sel: Some(1),
+            list_rows: vec![
+                lumen::ListRow::new("Q4 planning.key").subtitle("Keynote · 18.4 MB").icon("presentation").meta("09:12").unread(true),
+                lumen::ListRow::new("Brand guidelines.pdf").subtitle("PDF · 6.2 MB").icon("file-text").meta("Yesterday").starred(true).badge("Shared", Tone::Accent),
+                lumen::ListRow::new("Hero render.png").subtitle("Image · 3.1 MB").icon("image").meta("Mon"),
+                lumen::ListRow::new("Budget 2027.numbers").subtitle("Spreadsheet · 412 KB").icon("sheet").meta("Oct 30").unread(true),
+                lumen::ListRow::new("Interview audio.m4a").subtitle("Audio · 48 MB").icon("audio-lines").meta("Oct 28"),
+            ],
             notifs: vec![
                 NotificationItem::new("n1", "LF", "Merged PR #142 into ethereal", "Added GPU arc-band activity rings and radar meshes.", "3m ago", true),
                 NotificationItem::new("n2", "JB", "Canary rollout completed", "Zero error-budget burn across eu-central and us-east.", "18m ago", true),
@@ -614,6 +635,7 @@ impl State {
             selected_tier_plan: 1,
             eq_bands: [-2.5, -1.0, 1.5, 4.5, 5.2, 3.0, 1.0, -0.5],
             eq_preset: 1,
+            apps: apps::Apps::default(),
         }
     }
 }
@@ -651,7 +673,10 @@ fn view(ui: &mut Ui, s: &mut State) {
     }
     let demo = s.demo.clone();
     // Embedded component demos sit on the host page's white card.
-    if s.embed && !matches!(demo.as_str(), "hero" | "vault" | "bento") {
+    if s.embed
+        && !matches!(demo.as_str(), "hero" | "vault" | "bento")
+        && !demo.starts_with("app-")
+    {
         for m in [Mode::Light, Mode::Dark] {
             let surf = ui.theme.target_look().neutrals(m).surface;
             ui.override_color(m, lumen::Token::Background, Some(surf));
@@ -662,6 +687,13 @@ fn view(ui: &mut Ui, s: &mut State) {
         "bento" => bento(ui, s),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
+        "app-mail" => apps::mail::view(ui, &mut s.apps.mail),
+        "app-music" => apps::music::view(ui, &mut s.apps.music),
+        "app-tracker" => apps::tracker::view(ui, &mut s.apps.tracker),
+        "app-notes" => apps::notes::view(ui, &mut s.apps.notes),
+        "app-assistant" => apps::assistant::view(ui, &mut s.apps.assistant),
+        "app-finance" => apps::finance::view(ui, &mut s.apps.finance),
+        "app-todo" => apps::todo::view(ui, &mut s.apps.todo),
         "menu"
         | "popover"
         | "select"
@@ -2151,6 +2183,25 @@ ui.button("Ship release").primary().icon("rocket");
             ];
             ui.column().fill_width().max_width(620.0).gap(6).show(|ui| {
                 ui.flame_graph("cpu_flame", &frames);
+            });
+        }
+        "list-view" => {
+            ui.column().fill_width().max_width(520.0).gap(10).show(|ui| {
+                let out = ui.list_view("files", &s.list_rows, &mut s.list_sel);
+                if let Some(i) = out.starred {
+                    s.list_rows[i].starred = !s.list_rows[i].starred;
+                }
+                if out.changed {
+                    if let Some(i) = s.list_sel {
+                        s.list_rows[i].unread = false;
+                    }
+                }
+                if let Some(i) = out.activated {
+                    let name = s.list_rows[i].title.clone();
+                    ui.toast(Toast::new(format!("Opened {name}")));
+                }
+                let pick = s.list_sel.map(|i| s.list_rows[i].title.clone()).unwrap_or_else(|| "nothing".into());
+                ui.label(format!("Selected: {pick}. Use ↑ ↓ to move, Enter to open.")).muted().small();
             });
         }
         "notification-list" => {

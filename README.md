@@ -32,7 +32,7 @@
 
 lumen is a UI toolkit for Rust in the immediate-mode style of egui, built for finish: real typography, spring motion everywhere, OKLab-blended themes, and charts, date pickers and overlays that feel considered. It can look like itself, or like macOS, Windows 11 or GNOME.
 
-- **170 components**, each with a live page on the [site](https://amiralibg.github.io/lumen/#/components).
+- **171 components**, each with a live page on the [site](https://amiralibg.github.io/lumen/#/components).
 - **Four looks.** Switching blends colors, corner radii, control sizes and motion together. `App::native()` follows the OS look, accent color, fonts and dark mode.
 - **One codebase, native and web.** winit + wgpu on macOS, Windows and Linux; WebAssembly with WebGPU or WebGL2 in the browser.
 - **Idle means idle.** A UI at rest requests no frames.
@@ -41,6 +41,7 @@ lumen is a UI toolkit for Rust in the immediate-mode style of egui, built for fi
 
 - **In the browser:** every component page on the [site](https://amiralibg.github.io/lumen/#/components) runs the real Rust code as WebAssembly.
 - **On your machine:** `cargo run -p lumen-gallery` opens a complete settings app. `cargo run -p lumen-demos -- --list` lists one demo per component.
+- **As complete apps:** mail, music, an issue tracker, notes, an AI assistant, finance and a to-do list, each a whole window you can [open live](https://amiralibg.github.io/lumen/#/apps) or run with `cargo run -p lumen-demos -- app-mail`.
 - **As a tutorial:** [build a small expense tracker](https://amiralibg.github.io/lumen/#/guide/tutorial) with a form, a chart and a toast.
 
 ## A small program
@@ -99,17 +100,24 @@ cargo install wasm-bindgen-cli --version 0.2.130   # must match Cargo.toml
 
 ## What's in it
 
+171 components in 14 groups. Each one has a live page on the [site](https://amiralibg.github.io/lumen/#/components).
+
 | Group | Components |
 |---|---|
-| Actions | button, icon button |
-| Inputs | text input, select, slider |
-| Selection | switch, checkbox, radio, segmented control |
-| Navigation | tabs, sidebar with sections and badges |
-| Overlays | menu, popover, dialog, tooltip |
-| Feedback | toast, badge, status, progress, spinner |
-| Dates | calendar, range calendar, date picker, date range picker |
-| Charts | line, area, bar, stacked bar, donut, gauge, sparkline, stat tile |
-| Layout and surfaces | row, column, stack, scroll, card, settings rows, accent picker |
+| Actions | button, split button, hold and copy buttons, floating action bar, speed dial, reaction bar |
+| Inputs | text input and area, number, tag, one-time code, password, search, select, combobox, multi-select, color picker, sliders, shortcut recorder, dropzone, stepper, editable text, money, masked, mention, keypad, dimension input, attachments |
+| Selection | switch, checkbox, radio, radio cards, rating, segmented control, chips, toggle group, step slider, transfer list, rotary knob, quantity and swatch pickers, view switcher, gradient slider |
+| Navigation | tabs, breadcrumb, pagination, steps, sidebar, toolbar, status bar, menu bar, editor tabs, table of contents, navigation bar, progress steps, shortcut bar |
+| Overlays | menu, popover, dialog, sheet, command palette, hover card, context menu, confirm popover |
+| Feedback | toast, tooltip, badge, progress, meters, alert, skeleton, empty state, notification inbox, callout, undo snackbar, countdown, announcement bar, presence pile, comment thread |
+| Data | list view, accordion, data table, tree, timeline, code block, JSON viewer, key–value editor, log viewer, markdown, reorderable list, editable data grid, filter bar, permission matrix, description list, A/B comparison |
+| Charts | line, area, bar, donut, gauge, sparkline, rings, bar list, heatmap, radar, scatter, funnel, candlestick, treemap, Sankey, contribution graph, histogram, KPI strip, bullet, watchlist, win–loss, waffle |
+| Dates | calendar, date and range pickers, time picker, date strip, world clocks, schedule picker, quarter picker |
+| Planning | kanban, Gantt, week schedule, node editor, checklist |
+| AI | reasoning and tool calls, prompt composer, chat thread, citations, model picker, context meter, code suggestion, prompt templates |
+| Developer tools | diff viewer, trace waterfall, uptime, terminal, property inspector, flame graph, commit graph, test explorer, API inspector, schema viewer, environment switcher, memory profiler |
+| Motion | rolling number, magnifying dock, waveform, spotlight card, text effects, comparison slider, marquee, equalizer |
+| Layout and surfaces | rows, columns, stacks, scroll, cards, settings rows, window chrome, split pane, carousel, masonry, collapsible card, pricing cards |
 | Your own | `ui.interact`, per-widget memory, springs, layers, and a painter with rounded rects, shadows, text, icons, polylines, fills and arcs |
 
 Every component reads its geometry from the current look and its colors from named tokens, so it follows theme, accent and look changes, animated.

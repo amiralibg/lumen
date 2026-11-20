@@ -515,6 +515,7 @@ function component(slug) {
 }
 
 const SRC = `${REPO}/blob/main/crates/lumen-demos/src/main.rs`;
+const SRC_DIR = `${REPO}/blob/main/crates/lumen-demos/src`;
 const SHOWS = [
   ["bento", "Overview", "Forms, stats, settings, people and a calendar in one scene: segmented control, input, select, chips, stepper, switches, slider, avatars, badges, progress, range calendar and a toggle group.", ["Forms", "Selection", "Dates", "Charts"]],
   ["hero", "Northwind dashboard", "A sidebar, a segmented range, a date picker, stat tiles with sparklines, an area chart and a donut.", ["Navigation", "Charts", "Dates"]],
@@ -536,29 +537,34 @@ function showcase() {
 }
 
 const APPS = [
-  ["vault", "Vault", "In progress", "A local-first password manager: an item list, a password field with copy and reveal, a one-time code and a password health gauge.", "#/apps"],
-  ["hero", "Northwind", "Example", "An analytics dashboard with stat tiles, an area chart, a donut and a date picker.", ""],
-  ["bento", "Runners", "Example", "A CI runner console: add runners, pick labels and concurrency, choose a release window.", ""],
-  ["looks", "Looks", "Example", "One settings card in all four looks, to compare them side by side.", ""],
+  ["app-mail", "Postbox", "Mail", "Folders, a searchable message list with unread dots and stars, a reading pane with a quick reply, and a compose dialog.", "apps/mail.rs"],
+  ["app-music", "Cadence", "Music", "A library you can search and star, a now-playing panel with a scrubbable waveform, transport, volume and an 8-band equalizer.", "apps/music.rs"],
+  ["app-tracker", "Relay", "Issue tracker", "Issues as a filterable list or a board, a detail sheet with status, priority and activity, and a new-issue dialog.", "apps/tracker.rs"],
+  ["app-notes", "Margin", "Notes", "Markdown notes with write, preview and split modes, pinned notes, tags and a live word count.", "apps/notes.rs"],
+  ["app-assistant", "Lumi", "AI assistant", "Chat history, replies that stream in word by word, a composer with model choice and attachments, and starter prompts.", "apps/assistant.rs"],
+  ["app-finance", "Tally", "Finance", "Balance and spending stats, a cash-flow chart, budgets that fill as you spend, transactions and an add dialog.", "apps/finance.rs"],
+  ["app-todo", "Today", "To-do", "The tutorial app: add tasks, tick them off, filter and clear, in about 70 lines.", "apps/todo.rs"],
+  ["vault", "Vault", "In progress", "A local-first password manager: an item list, a password field with copy and reveal, a one-time code and a password health gauge.", "main.rs"],
 ];
 function apps() {
   return docsShell(guideNav(), `
     <p class="crumb">Apps</p>
-    <h1>Apps built with lumen.</h1>
-    <p class="lead">Complete windows, not snippets. Every one runs live here and natively from the same source.</p>
-    <div class="apps">${APPS.map(([d, n, tag, p]) => `
+    <h1>${APPS.length} apps built with lumen.</h1>
+    <p class="lead">Complete windows, not snippets: each has its own navigation, data and flows. Every one runs live here and natively from the same source.</p>
+    <div class="apps">${APPS.map(([d, n, tag, p, src]) => `
       <article class="app glass glow">
         <div class="thumb"><img loading="lazy" alt="" data-l="${poster(d, false)}" data-d="${poster(d, true)}" src="${poster(d, isDark())}"></div>
         <div class="t">
           <div class="row"><h3>${n}</h3><span class="chip ${tag === "In progress" ? "acc" : ""}">${tag}</span></div>
           <p>${p}</p>
           <div class="row"><span class="chip">macOS</span><span class="chip">Windows</span><span class="chip">Linux</span><span class="chip">Web</span></div>
-          <div class="acts"><a class="btn sm main" href="${demoSrc(d)}" target="_blank" rel="noopener">Open live ↗</a><a class="btn sm" href="${SRC}" target="_blank" rel="noopener">View source</a></div>
+          <div class="acts"><a class="btn sm main" href="${demoSrc(d)}" target="_blank" rel="noopener">Open live ↗</a><a class="btn sm" href="${SRC_DIR}/${src}" target="_blank" rel="noopener">View source</a></div>
         </div>
       </article>`).join("")}</div>
+    <h2>Run them natively</h2>
+    ${pre("cargo run -p lumen-demos -- app-mail          # or app-music, app-tracker, app-notes,\n                                              #    app-assistant, app-finance, app-todo\ncargo run -p lumen-demos -- app-notes --look mac", "sh")}
     <h2>Vault</h2>
-    <p>The first full application on the kit. <b>Local first:</b> the vault is an encrypted file you own, and sync is optional. <b>Native on every platform:</b> macOS, Windows and GNOME looks with the system accent and fonts, from one codebase. The feature set, cryptography and threat model are being researched before any code is written.</p>
-    ${pre("cargo run -p lumen-demos -- vault --look mac", "sh")}`, true);
+    <p>The first app that will ship on its own. <b>Local first:</b> the vault is an encrypted file you own, and sync is optional. <b>Native on every platform:</b> macOS, Windows and GNOME looks with the system accent and fonts, from one codebase. The feature set, cryptography and threat model are being researched before any code is written.</p>`, true);
 }
 
 function changelog() {

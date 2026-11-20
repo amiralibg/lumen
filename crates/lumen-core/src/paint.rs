@@ -74,6 +74,10 @@ pub struct Painter {
     clip: Rect,
     scale: f32,
     screen: Vec2,
+    /// Group opacity and offset applied to everything drawn (see
+    /// [`Painter::push_layer`]).
+    layer: (f32, Vec2),
+    layer_stack: Vec<(f32, Vec2)>,
 }
 
 impl Painter {
@@ -86,6 +90,8 @@ impl Painter {
             clip: full,
             scale,
             screen,
+            layer: (1.0, Vec2::ZERO),
+            layer_stack: vec![],
         }
     }
 
@@ -126,6 +132,28 @@ impl Painter {
         self.clip = self.clip_stack.pop().unwrap_or(Rect::from_min_size(Vec2::ZERO, self.screen));
     }
 
+    /// Multiply the opacity of, and move, everything drawn until the
+    /// matching [`pop_layer`](Self::pop_layer). Nests. Used for group
+    /// entrances: a row and all its children fade and rise as one.
+    pub fn push_layer(&mut self, opacity: f32, offset: Vec2) {
+        self.layer_stack.push(self.layer);
+        self.layer = (self.layer.0 * opacity.clamp(0.0, 1.0), self.layer.1 + offset);
+    }
+
+    pub fn pop_layer(&mut self) {
+        self.layer = self.layer_stack.pop().unwrap_or((1.0, Vec2::ZERO));
+    }
+
+    fn apply_layer(&self, v: &mut Vertex) {
+        let (a, o) = self.layer;
+        if a < 1.0 {
+            v.color[3] = (v.color[3] as f32 * a).round() as u8;
+            v.border_color[3] = (v.border_color[3] as f32 * a).round() as u8;
+        }
+        v.pos[0] += o.x;
+        v.pos[1] += o.y;
+    }
+
     fn clip_px(&self) -> [u32; 4] {
         let s = self.scale;
         let c = self.clip;
@@ -136,9 +164,14 @@ impl Painter {
         [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]
     }
 
-    fn push_quad(&mut self, v: [Vertex; 4]) {
+    fn push_quad(&mut self, mut v: [Vertex; 4]) {
         if self.clip.is_empty() {
             return;
+        }
+        if self.layer != (1.0, Vec2::ZERO) {
+            for x in &mut v {
+                self.apply_layer(x);
+            }
         }
         let clip = self.clip_px();
         let base = self.data.vertices.len() as u32;
@@ -299,7 +332,14 @@ impl Painter {
         }
         let clip = self.clip_px();
         let base = self.data.vertices.len() as u32;
-        self.data.vertices.extend(verts.iter().map(|(p, c)| Vertex { pos: [p.x, p.y], mode: mode::SOLID, color: c.to_u8(), ..Default::default() }));
+        let layered = self.layer != (1.0, Vec2::ZERO);
+        for (p, c) in verts {
+            let mut v = Vertex { pos: [p.x, p.y], mode: mode::SOLID, color: c.to_u8(), ..Default::default() };
+            if layered {
+                self.apply_layer(&mut v);
+            }
+            self.data.vertices.push(v);
+        }
         let start = self.data.indices.len() as u32;
         self.data.indices.extend(indices.iter().map(|i| base + i));
         let n = indices.len() as u32;

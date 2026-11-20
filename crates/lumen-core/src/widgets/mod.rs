@@ -50,6 +50,7 @@ pub mod controls_suite;
 pub mod enterprise_suite;
 pub mod collab_suite;
 pub mod studio_suite;
+pub mod list_view;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -108,6 +109,7 @@ pub use enterprise_suite::{
 pub use collab_suite::{
     AttachmentItem, CommentEntry, PresencePeer, ReactionChip, ScheduleRule, ShortcutHint, ViewMode,
 };
+pub use list_view::{ListOut, ListRow};
 pub use studio_suite::{
     ArenaSlab, DivergingBar, PlanSpec, PromptTemplate, SchemaField, SuggestionDecision, WaffleSlice,
 };
