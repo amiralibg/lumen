@@ -199,7 +199,9 @@ impl<'u, 'a> Waveform<'u, 'a> {
 
         // Advance playback smoothly when playing!
         if *self.playing {
-            let dt = (1.0 / 60.0f32).min(0.05);
+            // Real elapsed time, so playback speed is the same at any frame
+            // rate; capped so a stalled frame doesn't skip ahead.
+            let dt = ui.dt().min(0.1);
             *self.progress += dt / self.duration_secs;
             if *self.progress >= 1.0 {
                 *self.progress = 0.0;
@@ -299,12 +301,26 @@ impl<'u, 'a> Waveform<'u, 'a> {
             sense_scrub,
             CursorIcon::Pointer,
             Some(Box::new(move |cx, r| {
-                let nb = samples_vec.len().max(1);
                 let gap = 2.5;
+                // Fit the bars to the width: when there are more samples than
+                // 2 px bars fit, pool neighbours (peak) instead of overflowing.
+                let fit = (((r.width() + gap) / (2.0 + gap)).floor() as usize).max(1);
+                let bars: Vec<f32> = if samples_vec.len() <= fit {
+                    samples_vec.clone()
+                } else {
+                    (0..fit)
+                        .map(|b| {
+                            let a = b * samples_vec.len() / fit;
+                            let z = ((b + 1) * samples_vec.len() / fit).max(a + 1);
+                            samples_vec[a..z].iter().copied().fold(0.0, f32::max)
+                        })
+                        .collect()
+                };
+                let nb = bars.len().max(1);
                 let bw = ((r.width() - gap * (nb.saturating_sub(1)) as f32) / nb as f32).max(2.0);
                 let play_x = r.min.x + r.width() * prog;
 
-                for (i, &amp) in samples_vec.iter().enumerate() {
+                for (i, &amp) in bars.iter().enumerate() {
                     let x = r.min.x + i as f32 * (bw + gap);
                     let bh = (amp.clamp(0.12, 1.0) * (r.height() - 4.0) * enter).max(4.0);
                     let br = Rect::from_xywh(x, r.center().y - bh * 0.5, bw, bh);

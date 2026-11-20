@@ -409,3 +409,32 @@ fn look_switch_morphs_control_size() {
     assert_eq!(h.s.btn.height(), 34.0);
     assert_eq!(h.ui.color(Token::Background).to_hex(), 0xFAFAFB);
 }
+
+/// Regression: clicking a control with a tooltip parks the tooltip until the
+/// pointer re-enters, which used to schedule a repaint "infinity" seconds
+/// out and crash the native runner converting it to a `Duration`.
+#[test]
+fn clicking_a_tooltip_button_keeps_repaint_finite() {
+    #[derive(Default)]
+    struct S {
+        rect: Rect,
+    }
+    let mut h = Harness::new(S::default(), |ui, s| {
+        ui.column().pad(20).show(|ui| {
+            let r = ui.icon_button("archive").tooltip("Archive").show();
+            s.rect = r.rect;
+        });
+    });
+    h.idle(2);
+    let c = h.s.rect.center();
+    h.frame(vec![Event::PointerMoved(c)]);
+    for _ in 0..40 {
+        let out = h.frame(vec![]);
+        assert!(out.repaint_after.is_none_or(|s| s.is_finite()));
+    }
+    h.frame(vec![press(c)]);
+    for _ in 0..40 {
+        let out = h.frame(vec![release(c)]);
+        assert!(out.repaint_after.is_none_or(|s| s.is_finite()), "repaint_after = {:?}", out.repaint_after);
+    }
+}

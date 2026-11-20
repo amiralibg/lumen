@@ -1034,8 +1034,12 @@ impl Ui {
             Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(r_card), bg_c, 1.0, bd_c))),
         );
 
-        // Header + Preset selector.
-        self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 10.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        // Header + Preset selector. Narrow cards (last frame's width) stack
+        // the title above the presets instead of cutting it short.
+        let narrow = self.rect_of(id).is_some_and(|r| r.width() < 440.0);
+        let dir = if narrow { Dir::Column } else { Dir::Row };
+        let align = if narrow { Align::Start } else { Align::Center };
+        self.begin(Style { dir, width: Size::FILL, gap: 10.0, align, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         self.text_leaf("8-Band Parametric EQ", self.text_style(TextRole::BodyStrong), self.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
         if self.scope("eq_pre", |ui| ui.segmented(preset, &[(0usize, "Flat"), (1, "Vocal"), (2, "Warm"), (3, "Air")]).changed()) {
             *bands_db = presets[*preset];

@@ -899,10 +899,8 @@ impl Ui {
                     }
 
                     let indent = sp.depth as f32 * 12.0;
-                    cx.painter.push_clip(Rect::from_xywh(r.min.x + 10.0, ry, label_w - 16.0, row_h));
-                    let g_nm = cx.galley(&sp.name, &st_mono);
+                    let g_nm = cx.galley_fit(&sp.name, &st_mono, label_w - 20.0 - indent);
                     cx.painter.text(cx.text, &g_nm, vec2(r.min.x + 12.0 + indent, ry + (row_h - g_nm.height) * 0.5), fg_c);
-                    cx.painter.pop_clip();
 
                     let bx = tl_x0 + (sp.start_ms / total_ms) * tl_w * enter;
                     let bw = ((sp.duration_ms / total_ms) * tl_w * enter).max(4.0);

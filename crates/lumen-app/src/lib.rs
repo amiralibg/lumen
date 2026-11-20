@@ -309,7 +309,7 @@ impl<S> Runner<S> {
             });
         }
         window.set_ime_allowed(out.wants_text_input);
-        self.next_frame = out.repaint_after.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s));
+        self.next_frame = out.repaint_after.and_then(|s| std::time::Duration::try_from_secs_f64(s).ok()).map(|d| Instant::now() + d);
         if out.repaint_after == Some(0.0) {
             self.request_redraw();
         }

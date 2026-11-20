@@ -129,6 +129,17 @@ impl PaintCx<'_> {
         self.text.layout(text, style, None, TextAlign::Start)
     }
 
+    /// One line of text, shortened with an ellipsis when it's wider than
+    /// `max_width`. Use it instead of clipping, which cuts glyphs in half.
+    pub fn galley_fit(&mut self, text: &str, style: &TextStyle, max_width: f32) -> Arc<Galley> {
+        let g = self.galley(text, style);
+        if g.width <= max_width || text.is_empty() {
+            g
+        } else {
+            truncate(self.text, text, style, max_width.max(0.0))
+        }
+    }
+
     /// Paint later, above the rest of the tree, clipped only by the nearest
     /// scroll container (focus rings, pills that must not be covered).
     pub fn defer(&mut self, rect: Rect, f: PaintFn) {
@@ -949,6 +960,10 @@ impl Ui {
     }
     /// Ask for another frame within `secs`.
     pub fn request_repaint_after(&mut self, secs: f64) {
+        // A NaN or infinite delay means "no timer"; never schedule it.
+        if !secs.is_finite() {
+            return;
+        }
         let t = self.time + secs.max(0.0);
         self.repaint_at = Some(self.repaint_at.map_or(t, |r| r.min(t)));
     }
@@ -1359,7 +1374,9 @@ impl Ui {
                 let open_at = if warm { since } else { since + durations::TOOLTIP_DELAY };
                 if now >= open_at {
                     self.tip = Some(TipState { anchor: c, spec: self.tooltips[&c].clone(), opened_at: now, closing_at: None, warm });
-                } else {
+                } else if open_at.is_finite() {
+                    // After a click, `since` is infinite: the tip waits for
+                    // the pointer to leave and come back, not for a timer.
                     self.request_repaint_after(open_at - now);
                 }
             }

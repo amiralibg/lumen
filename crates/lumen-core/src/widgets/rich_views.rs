@@ -644,10 +644,8 @@ impl Ui {
                         cx.painter.rrect(rr, Corners::all(5.0), hov_bg, 0.0, Color::TRANSPARENT);
                     }
 
-                    cx.painter.push_clip(Rect::from_xywh(r.min.x + 12.0, ry, left_w - 20.0, row_h));
-                    let g_nm = cx.galley(&t.name, &st_name);
+                    let g_nm = cx.galley_fit(&t.name, &st_name, left_w - 26.0);
                     cx.painter.text(cx.text, &g_nm, vec2(r.min.x + 14.0, ry + (row_h - g_nm.height) * 0.5), fg_c);
-                    cx.painter.pop_clip();
 
                     let col = task_cols[ti];
                     let cy = ry + row_h * 0.5;
