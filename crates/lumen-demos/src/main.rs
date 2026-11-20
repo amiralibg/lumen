@@ -7,6 +7,7 @@
 use std::collections::BTreeSet;
 
 mod apps;
+mod scenes;
 
 use lumen::{
     vec2, Accent, AiModelSpec, Align, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle, CarouselSlide,
@@ -196,6 +197,14 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("sparkline", "Sparkline and stats"),
     ("looks", "Looks"),
     ("vault", "Vault (password manager preview)"),
+    ("scene-ide", "AI coding workspace"),
+    ("scene-observability", "Observability & profiling console"),
+    ("scene-shader", "Visual shader studio"),
+    ("scene-release", "Release control plane"),
+    ("scene-finance", "Financial & analytics terminal"),
+    ("scene-collab", "Collaborative spec & RFC studio"),
+    ("scene-governance", "Cloud governance & FinOps"),
+    ("scene-schedule", "Global on-call & launch room"),
     ("app-mail", "Postbox (mail)"),
     ("app-music", "Cadence (music)"),
     ("app-tracker", "Relay (issue tracker)"),
@@ -243,7 +252,6 @@ struct State {
     progress: f32,
     t: u32,
     search: String,
-    os: u8,
     runner: String,
     labels: [bool; 5],
     jobs: i64,
@@ -375,6 +383,7 @@ struct State {
     selected_tier_plan: usize,
     eq_bands: [f32; 8],
     eq_preset: usize,
+    scenes: scenes::Scenes,
     apps: apps::Apps,
 }
 
@@ -402,7 +411,6 @@ impl State {
             progress: 0.42,
             t: 0,
             search: String::new(),
-            os: 0,
             runner: "linux-arm64-02".into(),
             labels: [true, true, false, false, false],
             jobs: 4,
@@ -635,6 +643,7 @@ impl State {
             selected_tier_plan: 1,
             eq_bands: [-2.5, -1.0, 1.5, 4.5, 5.2, 3.0, 1.0, -0.5],
             eq_preset: 1,
+            scenes: scenes::Scenes::default(),
             apps: apps::Apps::default(),
         }
     }
@@ -675,6 +684,7 @@ fn view(ui: &mut Ui, s: &mut State) {
     // Embedded component demos sit on the host page's white card.
     if s.embed
         && !matches!(demo.as_str(), "hero" | "vault" | "bento")
+        && !demo.starts_with("scene-")
         && !demo.starts_with("app-")
     {
         for m in [Mode::Light, Mode::Dark] {
@@ -684,9 +694,17 @@ fn view(ui: &mut Ui, s: &mut State) {
     }
     match demo.as_str() {
         "hero" => hero(ui, s),
-        "bento" => bento(ui, s),
+        "bento" => scenes::bento::view(ui, &mut s.scenes.bento),
         "looks" => looks(ui, s),
         "vault" => vault(ui, s),
+        "scene-ide" => scenes::ide::view(ui, &mut s.scenes.ide),
+        "scene-observability" => scenes::observability::view(ui, &mut s.scenes.observability),
+        "scene-shader" => scenes::shader::view(ui, &mut s.scenes.shader),
+        "scene-release" => scenes::release::view(ui, &mut s.scenes.release),
+        "scene-finance" => scenes::finance::view(ui, &mut s.scenes.finance),
+        "scene-collab" => scenes::collab::view(ui, &mut s.scenes.collab),
+        "scene-governance" => scenes::governance::view(ui, &mut s.scenes.governance),
+        "scene-schedule" => scenes::schedule::view(ui, &mut s.scenes.schedule),
         "app-mail" => apps::mail::view(ui, &mut s.apps.mail),
         "app-music" => apps::music::view(ui, &mut s.apps.music),
         "app-tracker" => apps::tracker::view(ui, &mut s.apps.tracker),
@@ -3135,87 +3153,6 @@ ui.button("Ship release").primary().icon("rocket");
             ui.label(format!("Unknown demo “{demo}”.")).secondary();
         }
     }
-}
-
-/// The overview bento on the site: one scene of everyday components, all of
-/// them live. Mirrors the Ethereal concept in site/concepts.
-fn bento(ui: &mut Ui, s: &mut State) {
-    ui.row().fill().pad(24).gap(16).align(Align::Start).show(|ui| {
-        ui.column().fill_width().gap(16).show(|ui| {
-            ui.card().title("Add a runner").description("Runners pick up jobs for the platforms you choose.").show(|ui| {
-                ui.segmented(&mut s.os, &[(0, "Linux"), (1, "macOS"), (2, "Windows")]);
-                ui.text_input(&mut s.runner).label("Name").fill_width();
-                ui.select(&mut s.region, &[(Region::Frankfurt, "Frankfurt"), (Region::Virginia, "Virginia"), (Region::Tokyo, "Tokyo"), (Region::Sydney, "Sydney")]).label("Region").fill_width();
-                ui.column().gap(6).show(|ui| {
-                    ui.label("Labels").strong();
-                    ui.row().gap(6).show(|ui| {
-                        for (i, l) in ["arm64", "gpu", "docker", "nightly"].iter().enumerate() {
-                            ui.chip(l, &mut s.labels[i]);
-                        }
-                    });
-                });
-                ui.row().fill_width().align(Align::Center).show(|ui| {
-                    ui.label("Concurrent jobs").strong();
-                    ui.spacer();
-                    ui.stepper("jobs", &mut s.jobs, 1, 16);
-                });
-                ui.row().fill_width().gap(8).show(|ui| {
-                    ui.spacer();
-                    ui.button("Cancel").ghost();
-                    if ui.button("Add runner").primary().clicked() {
-                        let d = format!("{} is online and taking jobs.", s.runner);
-                        ui.toast(Toast::new("Runner added").description(d).success());
-                    }
-                });
-            });
-            ui.card().title("Traffic").show(|ui| {
-                ui.donut_sized("bento-traffic", &[("Search", 42.0), ("Direct", 26.0), ("Social", 17.0), ("Other", 15.0)], 120.0);
-            });
-        });
-        ui.column().fill_width().gap(16).show(|ui| {
-            ui.card().show(|ui| ui.stat("Deploys", "1,284", Some(12.4), Some(&[9.0, 8.6, 9.4, 10.8, 10.0, 11.1, 11.3, 12.4, 12.6, 13.8, 15.1])));
-            ui.card().title("Quick settings").show(|ui| {
-                ui.settings(|rows| {
-                    rows.row("Wi-Fi", "", |ui| {
-                        ui.switch("", &mut s.on[0]);
-                    });
-                    rows.row("Bluetooth", "", |ui| {
-                        ui.switch("", &mut s.on[1]);
-                    });
-                    rows.row("Focus", "", |ui| {
-                        ui.switch("", &mut s.on[2]);
-                    });
-                });
-                let v = format!("{:.0}%", s.vol * 100.0);
-                ui.slider("Volume", &mut s.vol, 0.0..=1.0).readout(v).width(f32::INFINITY);
-            });
-            ui.card().title("Reviewers").show(|ui| {
-                for (i, (ini, name, mail, req)) in [("JB", "Jonas Berg", "jonas@northlight.io", "Required"), ("PN", "Priya Nair", "priya@harbor.dev", "Required"), ("TR", "Tomas Rivera", "tomas@kiln.app", "Optional")].iter().enumerate() {
-                    ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
-                        ui.avatar(ini, i, 34.0, [Some(true), Some(false), None][i]);
-                        ui.column().gap(1).fill_width().show(|ui| {
-                            ui.label(*name).strong();
-                            ui.label(*mail).muted();
-                        });
-                        ui.badge(*req, if i < 2 { Tone::Accent } else { Tone::Neutral });
-                    });
-                }
-                ui.progress(Some(0.66));
-            });
-        });
-        ui.column().fill_width().gap(16).show(|ui| {
-            ui.card().show(|ui| ui.stat("Active users", "8,214", Some(4.1), Some(&[3.0, 3.4, 3.2, 4.1, 4.0, 4.8, 5.2, 5.0, 6.1, 6.4, 7.2])));
-            ui.card().show(|ui| {
-                ui.calendar_range(&mut s.span);
-                ui.divider();
-                ui.column().gap(2).show(|ui| {
-                    ui.label("Release 2.4").strong();
-                    ui.label("Pick a window while the freeze holds.").muted();
-                });
-                ui.toggle_group("slots", &mut s.slot, &[(0, "09:00"), (1, "11:30"), (2, "14:00"), (3, "16:30")]);
-            });
-        });
-    });
 }
 
 /// The landing-page hero: a compact analytics dashboard.
