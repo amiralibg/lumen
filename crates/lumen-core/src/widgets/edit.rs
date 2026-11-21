@@ -190,6 +190,17 @@ impl TextEdit {
         self.anchor = self.cursor;
     }
 
+    /// Replace `range` with `text` as one undo step, keeping newlines
+    /// (multi-line editors rewriting whole lines). The caret goes to the
+    /// end of the new text.
+    pub fn replace(&mut self, s: &mut String, range: std::ops::Range<usize>, text: &str) {
+        self.snapshot(s, false);
+        self.marked = None;
+        s.replace_range(range.clone(), text);
+        self.cursor = range.start + text.len();
+        self.anchor = self.cursor;
+    }
+
     /// Insert a line break at the caret (multi-line editors).
     pub fn insert_newline(&mut self, s: &mut String) {
         self.snapshot(s, false);

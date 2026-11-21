@@ -397,6 +397,10 @@ pub struct Ui {
     keys_down: Vec<Key>,
     text_input: Vec<TextIn>,
     text_field: Option<TextFieldState>,
+    /// A focused widget that takes Tab itself (a code editor), set each
+    /// frame by [`Ui::capture_tab`].
+    tab_capture: Option<Id>,
+    tab_capture_next: Option<Id>,
     scroll_delta: Vec2,
     scroll_target: Option<Id>,
     modifiers: Modifiers,
@@ -479,6 +483,8 @@ impl Ui {
             keys_down: vec![],
             text_input: vec![],
             text_field: None,
+            tab_capture: None,
+            tab_capture_next: None,
             scroll_delta: Vec2::ZERO,
             scroll_target: None,
             modifiers: Modifiers::default(),
@@ -547,6 +553,7 @@ impl Ui {
         self.copied = None;
         self.wants_text_input = false;
         self.text_field = None;
+        self.tab_capture = self.tab_capture_next.take();
         self.any_press = false;
         self.any_key = false;
         self.press_at = None;
@@ -661,7 +668,8 @@ impl Ui {
                     if !self.keys_down.contains(&key) {
                         self.keys_down.push(key);
                     }
-                    if key == Key::Tab && !modifiers.command() {
+                    let captured = self.tab_capture.is_some() && self.tab_capture == self.focused;
+                    if key == Key::Tab && !modifiers.command() && !captured {
                         self.move_focus(!modifiers.shift);
                     } else if key == Key::Escape && self.tip.is_some() {
                         // Escape closes tooltips; still delivered to widgets.
@@ -1112,6 +1120,13 @@ impl Ui {
         } else {
             vec![]
         }
+    }
+
+    /// While `id` is focused, deliver Tab and Shift+Tab to it (as keys)
+    /// instead of moving focus. Call it every frame the widget wants Tab;
+    /// stop calling it (on Escape, say) to let Tab leave.
+    pub fn capture_tab(&mut self, id: Id) {
+        self.tab_capture_next = Some(id);
     }
 
     /// Report the focused field to the host's input method.
@@ -1848,11 +1863,12 @@ pub struct Container<'u> {
     border: Option<Token>,
     radius: f32,
     clip: bool,
+    layer: Option<(f32, Vec2)>,
 }
 
 impl<'u> Container<'u> {
     fn new(ui: &'u mut Ui, dir: Dir) -> Self {
-        Container { ui, style: Style { dir, ..Default::default() }, id: None, fill: None, border: None, radius: 0.0, clip: false }
+        Container { ui, style: Style { dir, ..Default::default() }, id: None, fill: None, border: None, radius: 0.0, clip: false, layer: None }
     }
     pub fn pad(mut self, p: impl Into<Sides>) -> Self {
         self.style.pad = p.into();
@@ -1954,18 +1970,37 @@ impl<'u> Container<'u> {
         self
     }
 
+    /// Fade (`opacity`) and move (`offset`) the container and everything
+    /// in it as one group, for entrances: drive them from a spring or an
+    /// eased time. Layout is unaffected.
+    pub fn layer(mut self, opacity: f32, offset: Vec2) -> Self {
+        self.layer = Some((opacity, offset));
+        self
+    }
+
     pub fn show<R>(self, f: impl FnOnce(&mut Ui) -> R) -> Shown<R> {
-        let Container { ui, style, id, fill, border, radius, clip } = self;
-        let paint: Option<PaintFn> = if fill.is_some() || border.is_some() {
+        let Container { ui, style, id, fill, border, radius, clip, layer } = self;
+        let paint: Option<PaintFn> = if fill.is_some() || border.is_some() || layer.is_some() {
             let fc = fill.map(|t| ui.color(t)).unwrap_or(Color::TRANSPARENT);
             let bc = border.map(|t| ui.color(t)).unwrap_or(Color::TRANSPARENT);
             let bw = if border.is_some() { 1.0 } else { 0.0 };
-            Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(radius), fc, bw, bc)))
+            let has_frame = fill.is_some() || border.is_some();
+            Some(Box::new(move |cx, r| {
+                if let Some((a, o)) = layer {
+                    cx.painter.push_layer(a, o);
+                }
+                if has_frame {
+                    cx.painter.rrect(r, Corners::all(radius), fc, bw, bc);
+                }
+            }))
         } else {
             None
         };
         let rect = id.and_then(|i| ui.rect_of(i)).unwrap_or(Rect::ZERO);
-        ui.begin(style, id, Sense::NONE, CursorIcon::Default, clip, paint);
+        let node = ui.begin(style, id, Sense::NONE, CursorIcon::Default, clip, paint);
+        if layer.is_some() {
+            ui.set_paint_after(node, Box::new(|cx, _| cx.painter.pop_layer()));
+        }
         if let Some(i) = id {
             ui.id_scope.push(i);
         }

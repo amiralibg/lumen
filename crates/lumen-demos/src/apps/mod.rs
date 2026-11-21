@@ -6,6 +6,7 @@ pub mod finance;
 pub mod mail;
 pub mod music;
 pub mod notes;
+pub mod settings;
 pub mod todo;
 pub mod tracker;
 
@@ -18,4 +19,5 @@ pub struct Apps {
     pub assistant: assistant::State,
     pub finance: finance::State,
     pub todo: todo::State,
+    pub settings: settings::State,
 }

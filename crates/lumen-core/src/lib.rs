@@ -38,7 +38,7 @@ pub use widgets::{
     CarouselSlide, ChartKind, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
     ComposerOut, ContextSlice, Currency, DateStripDay, DescPair, DimensionUnit, DivergingBar, DockItem, EditorTab,
     EditorTabsOut, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod,
-    ImageStatus, KanbanCard, KanbanCol, KpiMetric, KvPair, ListOut, ListRow, LogEntry, LogLevel, MasonryCard, MentionCandidate,
+    ImageStatus, KanbanCard, KanbanCol, KpiMetric, KvPair, ListOut, ListRow, TourStep, FileEntry, FileOut, LogEntry, LogLevel, MasonryCard, MentionCandidate,
     MeterSegment, MetricRow, NavBarItem, NotificationItem, PlanSpec, PresencePeer, PromptTemplate, ReactionChip,
     ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, ScheduleRule, SchemaField, Series,
     ShortcutHint, SortDir, SpeedDialItem, SuggestionDecision, TableCell, TableCol, TermLine, TermTone, TestCase,

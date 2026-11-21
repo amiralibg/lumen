@@ -123,6 +123,12 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("flame-graph", "Flame graph"),
     ("notification-list", "Notification inbox"),
     ("list-view", "List view"),
+    ("code-editor", "Code editor"),
+    ("emoji-picker", "Emoji picker"),
+    ("wheel-picker", "Wheel and time picker"),
+    ("calendar-heatmap", "Calendar heatmap"),
+    ("file-browser", "File browser"),
+    ("tour", "Guided tour"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -212,6 +218,7 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("app-assistant", "Lumi (AI assistant)"),
     ("app-finance", "Tally (finance)"),
     ("app-todo", "Today (to-do)"),
+    ("app-settings", "Preferences (settings)"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -314,6 +321,14 @@ struct State {
     prop_clip: bool,
     notifs: Vec<NotificationItem>,
     list_sel: Option<usize>,
+    code: String,
+    emoji: String,
+    wheel_size: usize,
+    wheel_time: lumen::Time,
+    heat_sel: Option<Date>,
+    fb_path: Vec<String>,
+    fb_sel: Option<usize>,
+    tour_step: Option<usize>,
     list_rows: Vec<lumen::ListRow>,
     edit_heading: String,
     edit_summary: String,
@@ -487,6 +502,14 @@ impl State {
             prop_opacity: 94.0,
             prop_clip: true,
             list_sel: Some(1),
+            code: CODE_SAMPLE.into(),
+            emoji: "Ship it".into(),
+            wheel_size: 3,
+            wheel_time: lumen::Time::new(9, 30),
+            heat_sel: None,
+            fb_path: vec!["lumen".into(), "crates".into()],
+            fb_sel: Some(1),
+            tour_step: None,
             list_rows: vec![
                 lumen::ListRow::new("Q4 planning.key").subtitle("Keynote · 18.4 MB").icon("presentation").meta("09:12").unread(true),
                 lumen::ListRow::new("Brand guidelines.pdf").subtitle("PDF · 6.2 MB").icon("file-text").meta("Yesterday").starred(true).badge("Shared", Tone::Accent),
@@ -712,6 +735,7 @@ fn view(ui: &mut Ui, s: &mut State) {
         "app-assistant" => apps::assistant::view(ui, &mut s.apps.assistant),
         "app-finance" => apps::finance::view(ui, &mut s.apps.finance),
         "app-todo" => apps::todo::view(ui, &mut s.apps.todo),
+        "app-settings" => apps::settings::view(ui, &mut s.apps.settings),
         "menu"
         | "popover"
         | "select"
@@ -2204,6 +2228,105 @@ ui.button("Ship release").primary().icon("rocket");
                 ui.flame_graph("cpu_flame", &frames);
             });
         }
+        "emoji-picker" => {
+            ui.row().gap(24).align(Align::Start).show(|ui| {
+                ui.card().pad(12.0).show(|ui| {
+                    if let Some(e) = ui.emoji_picker("demo") {
+                        s.emoji.push(' ');
+                        s.emoji.push_str(e);
+                    }
+                });
+                ui.column().gap(6).width(200.0).show(|ui| {
+                    ui.label("Message").strong();
+                    ui.text_input(&mut s.emoji).id("emoji-msg").fill_width();
+                    ui.label("Pick to append. ↑ ↓ ← → and Enter work on the grid.").muted().small();
+                });
+            });
+        }
+        "wheel-picker" => {
+            ui.row().gap(40).align(Align::Center).show(|ui| {
+                ui.column().gap(8).align(Align::Center).show(|ui| {
+                    ui.label("Shirt size").strong();
+                    ui.wheel_picker("size", &mut s.wheel_size, &["XXS", "XS", "S", "M", "L", "XL", "XXL"]);
+                });
+                ui.column().gap(8).align(Align::Center).show(|ui| {
+                    ui.label("Reminder").strong();
+                    ui.time_wheel("alarm", &mut s.wheel_time, 5);
+                    ui.label(format!("Rings at {}", s.wheel_time.format_12())).muted().small();
+                });
+            });
+        }
+        "calendar-heatmap" => {
+            let first = Date::new(2026, 10, 1);
+            let vals: Vec<(Date, f32)> = (0..61)
+                .map(|k| {
+                    let d = first.add_days(k);
+                    let wk = d.weekday();
+                    let base = if wk >= 5 { 0.0 } else { ((k as f32 * 0.37).sin() * 3.0 + 4.0).max(0.0) };
+                    (d, (base + ((k * 7919) % 5) as f32 * 0.6).round())
+                })
+                .collect();
+            ui.column().fill_width().gap(8).show(|ui| {
+                ui.calendar_heatmap("deploys", first, 2, &vals, "deploys", &mut s.heat_sel);
+            });
+        }
+        "file-browser" => {
+            let entries = demo_files(&s.fb_path);
+            ui.column().fill_width().max_width(680.0).show(|ui| {
+                let path: Vec<&str> = s.fb_path.iter().map(|p| p.as_str()).collect();
+                let out = ui.file_browser("files", &path, &entries, &mut s.fb_sel);
+                if let Some(k) = out.navigate {
+                    s.fb_path.truncate(k + 1);
+                    s.fb_sel = None;
+                }
+                if out.up && s.fb_path.len() > 1 {
+                    s.fb_path.pop();
+                    s.fb_sel = None;
+                }
+                if let Some(i) = out.opened {
+                    if entries[i].folder {
+                        s.fb_path.push(entries[i].name.clone());
+                        s.fb_sel = None;
+                    } else {
+                        ui.toast(Toast::new(format!("Opened {}", entries[i].name)));
+                    }
+                }
+            });
+        }
+        "tour" => {
+            if std::mem::take(&mut s.force_open) {
+                s.tour_step = Some(1);
+            }
+            let mut ids = vec![];
+            ui.column().fill_width().max_width(560.0).gap(14).show(|ui| {
+                ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                    ids.push(ui.search_field(&mut s.search).placeholder("Search projects").show().id);
+                    ui.spacer();
+                    ids.push(ui.button("New project").primary().icon("plus").show().id);
+                });
+                ui.card().title("Northwind").description("3 environments · deployed 4m ago").show(|ui| {
+                    ids.push(ui.segmented(&mut s.range, &[(Range::Day, "Day"), (Range::Week, "Week"), (Range::Month, "Month")]).id);
+                    ui.progress(Some(0.66));
+                });
+                if ui.button("Start the tour").icon("sparkles").show().clicked() {
+                    s.tour_step = Some(0);
+                }
+            });
+            let steps = [
+                lumen::TourStep::new(ids[0], "Find anything", "Search projects, people and settings. Press / from anywhere."),
+                lumen::TourStep::new(ids[1], "Start a project", "Pick a template or import a repository. You can change everything later."),
+                lumen::TourStep::new(ids[2], "Pick a time range", "Every chart on the page follows this range."),
+            ];
+            ui.tour("onboarding", &steps, &mut s.tour_step);
+        }
+        "code-editor" => {
+            ui.column().fill_width().max_width(640.0).gap(8).show(|ui| {
+                if ui.code_editor("demo", &mut s.code).lang("rust").rows(11).changed() {
+                    s.t += 1;
+                }
+                ui.label("Tab indents, ⌘/ comments, Esc then Tab leaves.").muted().small();
+            });
+        }
         "list-view" => {
             ui.column().fill_width().max_width(520.0).gap(10).show(|ui| {
                 let out = ui.list_view("files", &s.list_rows, &mut s.list_sel);
@@ -3155,6 +3278,55 @@ ui.button("Ship release").primary().icon("rocket");
         }
     }
 }
+
+fn demo_files(path: &[String]) -> Vec<lumen::FileEntry> {
+    use lumen::FileEntry as F;
+    match path.last().map(|s| s.as_str()) {
+        Some("crates") => vec![
+            F::folder("lumen-core", "Today, 09:12", 9),
+            F::folder("lumen-text", "Yesterday", 8),
+            F::folder("lumen-wgpu", "Yesterday", 7),
+            F::folder("lumen-gpui", "Nov 20", 6),
+            F::file("README.md", 4_812, "Nov 18", 5),
+            F::file("Cargo.toml", 812, "Nov 17", 4),
+        ],
+        Some("lumen-core") => vec![
+            F::folder("src", "Today, 09:12", 9),
+            F::folder("tests", "Today, 08:40", 8),
+            F::file("Cargo.toml", 1_204, "Nov 19", 5),
+        ],
+        Some("src") => vec![
+            F::file("ui.rs", 96_400, "Today, 09:12", 9),
+            F::file("layout.rs", 31_800, "Today, 08:57", 8),
+            F::file("paint.rs", 24_100, "Yesterday", 7),
+            F::file("look.rs", 41_900, "Nov 19", 6),
+        ],
+        _ => vec![
+            F::folder("crates", "Today, 09:12", 9),
+            F::folder("site", "Yesterday", 8),
+            F::folder("docs", "Nov 20", 7),
+            F::file("hero.png", 3_100_000, "Nov 18", 6),
+            F::file("demo.m4a", 48_000_000, "Nov 12", 5),
+            F::file("LICENSE-MIT", 1_070, "Nov 2", 4),
+        ],
+    }
+}
+
+const CODE_SAMPLE: &str = "use lumen::prelude::*;
+
+/// A settings panel with live motion.
+fn panel(ui: &mut Ui, s: &mut State) {
+    ui.card().title(\"Rendering\").show(|ui| {
+        // Springs settle; values never overshoot.
+        ui.switch(\"Reduce motion\", &mut s.reduced);
+        let fps = s.frames as f32 / s.elapsed.max(1e-3);
+        ui.slider(\"Scale\", &mut s.scale, 0.5..=2.0);
+        if ui.button(\"Apply\").primary().clicked() {
+            s.apply(fps);
+        }
+    });
+}
+";
 
 /// The landing-page hero: a compact analytics dashboard.
 fn hero(ui: &mut Ui, s: &mut State) {

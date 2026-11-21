@@ -51,6 +51,12 @@ pub mod enterprise_suite;
 pub mod collab_suite;
 pub mod studio_suite;
 pub mod list_view;
+pub mod code_editor;
+pub mod emoji_picker;
+pub mod wheel_picker;
+pub mod calendar_heatmap;
+pub mod tour;
+pub mod file_browser;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -110,6 +116,8 @@ pub use collab_suite::{
     AttachmentItem, CommentEntry, PresencePeer, ReactionChip, ScheduleRule, ShortcutHint, ViewMode,
 };
 pub use list_view::{ListOut, ListRow};
+pub use tour::TourStep;
+pub use file_browser::{FileEntry, FileOut};
 pub use studio_suite::{
     ArenaSlab, DivergingBar, PlanSpec, PromptTemplate, SchemaField, SuggestionDecision, WaffleSlice,
 };

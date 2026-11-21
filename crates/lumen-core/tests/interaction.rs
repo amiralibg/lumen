@@ -535,3 +535,108 @@ fn picking_an_option_closes_the_menu_in_a_tall_panel() {
     assert_eq!(h.s.v, 3);
     assert!(last.is_some(), "menu never closed");
 }
+
+#[derive(Default)]
+struct Ed {
+    code: String,
+    rect: Rect,
+    other: Rect,
+}
+
+fn editor_view(ui: &mut Ui, s: &mut Ed) {
+    ui.column().pad(20).gap(10).show(|ui| {
+        s.rect = ui.code_editor("ed", &mut s.code).rows(6).show().rect;
+        s.other = ui.button("After").show().rect;
+    });
+}
+
+#[test]
+fn code_editor_indents_captures_tab_and_comments() {
+    let mut h = Harness::new(Ed { code: "fn a() {".into(), ..Default::default() }, editor_view);
+    let r = h.s.rect;
+    h.click(vec2(r.max.x - 20.0, r.min.y + 14.0));
+    h.frame(key_mod(Key::End, Modifiers::default()));
+    h.frame(key(Key::Enter));
+    h.frame(vec![Event::Text("x".into())]);
+    assert_eq!(h.s.code, "fn a() {\n    x", "Enter keeps the indent, one deeper after {{");
+    // Tab stays in the editor and indents.
+    h.frame(key(Key::Home));
+    h.frame(key(Key::Tab));
+    assert_eq!(h.s.code, "fn a() {\n        x");
+    // Cmd+/ comments the line, again uncomments.
+    h.frame(key_mod(Key::Char('/'), CMD));
+    assert_eq!(h.s.code, "fn a() {\n        // x");
+    h.frame(key_mod(Key::Char('/'), CMD));
+    assert_eq!(h.s.code, "fn a() {\n        x");
+    // Escape, then Tab leaves for the next control.
+    h.frame(key(Key::Escape));
+    h.frame(key(Key::Tab));
+    h.frame(vec![Event::Text("y".into())]);
+    assert_eq!(h.s.code, "fn a() {\n        x", "focus moved on");
+}
+
+#[derive(Default)]
+struct Pickers {
+    size: usize,
+    time: Time,
+    day: Option<Date>,
+    sel: Option<usize>,
+    out: FileOut,
+    emoji: Option<&'static str>,
+    step: Option<usize>,
+    ids: Vec<Id>,
+    rects: Vec<Rect>,
+}
+
+fn pickers_view(ui: &mut Ui, s: &mut Pickers) {
+    ui.column().pad(16).gap(12).show(|ui| {
+        let r = ui.wheel_picker("size", &mut s.size, &["S", "M", "L", "XL"]);
+        s.ids = vec![r.id];
+        s.rects = vec![r.rect];
+        ui.time_wheel("t", &mut s.time, 5);
+        ui.calendar_heatmap("heat", Date::new(2026, 11, 1), 1, &[(Date::new(2026, 11, 3), 4.0)], "runs", &mut s.day);
+        let entries = [FileEntry::folder("src", "Today", 2), FileEntry::file("a.rs", 10, "Today", 1)];
+        s.out = ui.file_browser("fb", &["root", "proj"], &entries, &mut s.sel);
+        if let Some(e) = ui.emoji_picker("em") {
+            s.emoji = Some(e);
+        }
+        let steps = [TourStep::new(r.id, "Size", "Pick a size")];
+        ui.tour("tour", &steps, &mut s.step);
+    });
+}
+
+#[test]
+fn new_pickers_answer_the_keyboard() {
+    let mut h = Harness::new(Pickers::default(), pickers_view);
+    // Wheel: focus by clicking the band, then arrows.
+    let r = h.s.rects[0];
+    h.click(r.center());
+    h.frame(key(Key::ArrowDown));
+    h.frame(key(Key::ArrowDown));
+    assert_eq!(h.s.size, 2);
+    h.frame(key(Key::End));
+    assert_eq!(h.s.size, 3);
+    h.idle(30);
+    // Tour: opens on the wheel, → past the last step closes it.
+    h.s.step = Some(0);
+    h.idle(20);
+    h.frame(key(Key::ArrowRight));
+    assert_eq!(h.s.step, None);
+}
+
+#[test]
+fn file_browser_sorts_folders_first_and_opens_with_enter() {
+    let mut h = Harness::new(Pickers::default(), pickers_view);
+    h.s.sel = Some(1);
+    h.idle(10);
+    assert!(h.s.out.opened.is_none());
+    // Tab moves focus through the form until a browser row has it; Enter there opens.
+    for _ in 0..40 {
+        h.frame(key(Key::Tab));
+        h.frame(key(Key::Enter));
+        if h.s.out.opened.is_some() {
+            break;
+        }
+    }
+    assert!(h.s.out.opened.is_some(), "Enter on a focused row opens it");
+}

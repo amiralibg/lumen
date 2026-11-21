@@ -20,8 +20,8 @@ use super::field::{fuzzy_match, paint_highlighted, Chrome, EditOpts};
 
 // ============================================================== CodeBlock
 
-#[derive(Clone, Copy)]
-enum SynKind {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SynKind {
     Plain,
     Keyword,
     TypeName,
@@ -32,7 +32,7 @@ enum SynKind {
     MacroOrAttr,
 }
 
-fn syn_token(k: SynKind) -> Token {
+pub(crate) fn syn_token(k: SynKind) -> Token {
     match k {
         SynKind::Plain => Token::Foreground,
         SynKind::Keyword => Token::AccentStrong,
@@ -52,7 +52,7 @@ const KEYWORDS: &[&str] = &[
     "import", "from", "default", "class", "new", "try", "catch", "def", "elif", "then", "fi",
 ];
 
-fn tokenize_line(line: &str, lang: &str) -> Vec<(Range<usize>, SynKind)> {
+pub(crate) fn tokenize_line(line: &str, lang: &str) -> Vec<(Range<usize>, SynKind)> {
     let bytes = line.as_bytes();
     let n = bytes.len();
     let mut out = Vec::new();

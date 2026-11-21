@@ -1319,6 +1319,68 @@ if let Some(i) = out.activated { open(i) }            // double click or Enter`,
     keys: [["↑ ↓", "Move the selection"], ["Home / End", "First / last row"], ["Enter", "Open the selected row"]],
   },
   {
+    slug: "code-editor", name: "Code editor", group: "Developer tools", demo: "code-editor",
+    summary: "A syntax-colored editor with a line-number gutter. The current-line band and the caret glide between lines, matching brackets light up, Enter keeps the indent, Tab indents and ⌘/ toggles comments. Undo, multi-line paste and IME work.",
+    code: `let r = ui.code_editor("main", &mut source).lang("rust").rows(14).show();
+if r.changed { recompile(&source) }`,
+    options: [
+      [".lang(\"rust\" | \"wgsl\" | \"toml\" | \"json\" | \"sh\" | \"js\" | \"py\")", "Syntax colors come from the theme's tokens, so they follow every look and accent."],
+      [".rows(n)", "Visible lines; longer code scrolls, following the caret."],
+    ],
+    keys: [["Tab / ⇧Tab", "Indent / outdent (Esc, then Tab leaves)"], ["⌘ /", "Toggle line comments"], ["Home", "Indent, then column 0"], ["⌘ C / ⌘ X", "Copy or cut the line when nothing is selected"], ["⌘ Z / ⇧⌘ Z", "Undo / redo"]],
+  },
+  {
+    slug: "file-browser", name: "File browser and path bar", group: "Data", demo: "file-browser",
+    summary: "A folder listing with a breadcrumb path bar. Folders stay first, headers sort with an arrow that turns, the selection glides, rows rise in when the folder changes, and typing jumps to a name.",
+    code: `let out = ui.file_browser("files", &path, &entries, &mut selected);
+if let Some(i) = out.opened { if entries[i].folder { path.push(entries[i].name.clone()) } }
+if let Some(k) = out.navigate { path.truncate(k + 1) }
+if out.up { path.pop(); }
+// Or just the breadcrumb:
+if let Some(k) = ui.path_bar("crumbs", &["lumen", "crates", "lumen-core"]) { go_to(k) }`,
+    options: [
+      ["FileEntry::folder(name, modified, key) / ::file(name, bytes, modified, key)", "Icons follow the kind and extension unless you set .icon."],
+      ["FileOut { changed, opened, navigate, up }", "Indices refer to your entries, whatever the sort."],
+    ],
+    keys: [["↑ ↓", "Move the selection"], ["Enter", "Open"], ["⌫ / ⌘↑", "Parent folder"], ["Letters", "Jump to a matching name"]],
+  },
+  {
+    slug: "emoji-picker", name: "Emoji picker", group: "Inputs", demo: "emoji-picker",
+    summary: "Search by name, switch categories under a sliding pill, and pick from a grid whose cells pop on hover. Recents come first, and a preview names the emoji under the pointer. Color emoji come from the system font.",
+    code: `if let Some(e) = ui.emoji_picker("reactions") {
+    message.push_str(e);
+}`,
+    options: [["→ Option<&'static str>", "The emoji picked this frame; recents are remembered per picker."]],
+    keys: [["↓ from search", "Into the grid"], ["Arrows", "Move in the grid"], ["Enter", "Pick"], ["← → on categories", "Switch category"]],
+  },
+  {
+    slug: "wheel-picker", name: "Wheel and time picker", group: "Selection", demo: "wheel-picker",
+    summary: "A drum of values: drag it 1:1, throw it and it keeps its momentum before springing onto an item, or scroll a notch at a time. Items curve away and fade from the center band. time_wheel pairs two for hours and minutes.",
+    code: `ui.wheel_picker("size", &mut size, &["S", "M", "L", "XL"]);
+ui.time_wheel("alarm", &mut time, 5); // Time { hour, minute }, 5-minute steps`,
+    options: [["time_wheel(key, &mut Time, minute_step)", "24-hour; returns true when the time changed."]],
+    keys: [["↑ ↓", "Previous / next"], ["PageUp / PageDown", "Five at a time"], ["Home / End", "First / last"]],
+  },
+  {
+    slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
+    summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
+    code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,
+    options: [["values: &[(Date, f32)]", "Days not listed count as 0; five levels from the largest value."], ["unit", "Used in the readout, such as \"Nov 14 · 12 deploys\"."]],
+    keys: [["← →", "Previous / next day"], ["↑ ↓", "Week"], ["Home / End", "Month start / end"], ["PageUp / PageDown", "Month"]],
+  },
+  {
+    slug: "tour", name: "Guided tour", group: "Overlays", demo: "tour",
+    summary: "A modal walkthrough: the window dims, a rounded spotlight cuts out one widget at a time and glides to the next, and a card explains it with step dots, Back, Next and Skip.",
+    code: `let steps = [
+    TourStep::new(search.id, "Find anything", "Search projects, people and settings."),
+    TourStep::new(new_btn.id, "Start a project", "Pick a template or import a repository."),
+];
+if ui.button("Take the tour").clicked() { step = Some(0) }
+ui.tour("onboarding", &steps, &mut step); // step: Option<usize>`,
+    options: [["TourStep::new(anchor_id, title, body)", "Anchors are any widget's Response::id."]],
+    keys: [["→ / Enter", "Next"], ["←", "Back"], ["Esc", "End the tour"]],
+  },
+  {
     slug: "notification-list", name: "Notification inbox", group: "Feedback", demo: "notification-list",
     summary: "Filterable All / Unread notification feed with unread accent dots, Mark all read button, avatars and per-item archive.",
     code: `ui.notification_list("inbox", &mut s.notifications);`,
@@ -2373,7 +2435,12 @@ lumen-gpui   optional: hosts lumen views inside a GPUI app (separate workspace)<
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-20", items: [
+  { v: "Unreleased", date: "2026-11-21", items: [
+    "Six new components: code editor, file browser with path bar, emoji picker, wheel and time picker, calendar heatmap and guided tour (177 in all), plus Preferences, a settings app.",
+    "Color emoji: the glyph atlas is RGBA, so emoji keep their colors; scripts the bundled fonts lack load system fonts on first use.",
+    "Input methods: CJK composition, dead keys and press-and-hold accents show underlined in text fields, natively and inside GPUI.",
+    "GPUI: menus and popovers can overflow a lumen view, readback is pipelined (about half the main-thread time), and gpui-ce is supported behind a feature.",
+    "Layout: narrow rows no longer squeeze children below their descendants' fixed widths; a --check mode reports clipped and overlapping text in any demo.",
     "GPUI support: the new lumen-gpui crate hosts lumen views inside a GPUI (Zed) app, with mouse, keyboard, clipboard, cursors and dark mode forwarded. See the GPUI guide.",
     "Seven complete apps, live on the Apps page: Postbox (mail), Cadence (music), Relay (issue tracker), Margin (notes), Lumi (AI assistant), Tally (finance) and Today (to-do).",
     "New list view: a selectable master list with a gliding highlight, staggered row entrances, unread dots that pop, springy stars and arrow-key navigation.",
