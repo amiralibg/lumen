@@ -105,6 +105,25 @@ pub struct Painter {
     /// [`Painter::push_layer`]).
     layer: (f32, Vec2),
     layer_stack: Vec<(f32, Vec2)>,
+    /// With layout checking on: every text drawn, for [`TextDraw`] checks.
+    pub(crate) text_log: Option<Vec<TextDraw>>,
+    /// Which layer is being painted (0 = main tree), for the text log.
+    pub(crate) layer_index: u32,
+}
+
+/// One text draw, recorded when layout checking is on
+/// ([`crate::Ui::check_layout`]).
+#[derive(Clone, Debug)]
+pub struct TextDraw {
+    pub text: String,
+    /// Ink bounds of the glyphs, logical px.
+    pub ink: Rect,
+    /// The clip in force.
+    pub clip: Rect,
+    /// Effective opacity (color alpha times group opacity).
+    pub alpha: f32,
+    /// 0 for the main tree, then one per menu, dialog or tooltip layer.
+    pub layer: u32,
 }
 
 impl Painter {
@@ -119,6 +138,8 @@ impl Painter {
             screen,
             layer: (1.0, Vec2::ZERO),
             layer_stack: vec![],
+            text_log: None,
+            layer_index: 0,
         }
     }
 
@@ -334,6 +355,17 @@ impl Painter {
         let col = color.to_u8();
         let mut quads = Vec::with_capacity(galley.glyphs.len());
         text.glyph_quads(galley, (pos.x, pos.y), s, |q| quads.push(q));
+        if let Some(log) = self.text_log.as_mut() {
+            let mut ink: Option<Rect> = None;
+            for q in &quads {
+                let r = Rect::from_xywh(q.x as f32 / s, q.y as f32 / s, q.glyph.w as f32 / s, q.glyph.h as f32 / s);
+                ink = Some(ink.map_or(r, |i| i.union(&r)));
+            }
+            if let Some(ink) = ink {
+                let o = self.layer.1;
+                log.push(TextDraw { text: galley.text.clone(), ink: ink.translate(o), clip: self.clip, alpha: color.a * self.layer.0, layer: self.layer_index });
+            }
+        }
         for q in quads {
             let (x0, y0) = (q.x as f32 / s, q.y as f32 / s);
             let (x1, y1) = (x0 + q.glyph.w as f32 / s, y0 + q.glyph.h as f32 / s);

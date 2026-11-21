@@ -291,7 +291,9 @@ impl Ui {
         }
 
         // The selection: one rect that glides between rows.
-        let neutral = self.color(Token::Pressed);
+        // PRESSED is an overlay: composite it onto the surface first, or
+        // mixing it with an opaque color gives a heavy translucent gray.
+        let neutral = self.color(Token::Surface).over(self.color(Token::Pressed));
         let accent_sel = self.color(Token::AccentSubtle);
         let sel_fill = if focus_within || nl.accent_selection > 0.5 { accent_sel } else { neutral.mix(accent_sel, 0.35) };
         let bar = self.color(Token::Accent).multiply_alpha(nl.indicator.max(0.0));

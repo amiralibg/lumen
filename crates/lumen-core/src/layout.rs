@@ -135,6 +135,10 @@ pub struct Node {
     /// Scroll offset applied when placing children.
     pub scroll_offset: f32,
     pref_w: f32,
+    /// Narrowest this node can get without squeezing a descendant below
+    /// its fixed width or `min` (text and fixed-size content count as 0:
+    /// they wrap, ellipsize or scale).
+    min_w: f32,
     content_h: f32,
 }
 
@@ -161,6 +165,7 @@ impl Tree {
             content_size: Vec2::ZERO,
             scroll_offset: 0.0,
             pref_w: 0.0,
+            min_w: 0.0,
             content_h: 0.0,
         });
         self.nodes.len() - 1
@@ -203,10 +208,13 @@ impl Tree {
         let children = std::mem::take(&mut self.nodes[n].children);
         let mut sum = 0.0f32;
         let mut max = 0.0f32;
+        let (mut min_sum, mut min_max) = (0.0f32, 0.0f32);
         for &c in &children {
             let w = self.intrinsic(c, m);
             sum += w;
             max = max.max(w);
+            min_sum += self.nodes[c].min_w;
+            min_max = min_max.max(self.nodes[c].min_w);
         }
         let gaps = st.gap * children.len().saturating_sub(1) as f32;
         let content = match self.nodes[n].content {
@@ -224,6 +232,20 @@ impl Tree {
             _ => inner + st.pad.horizontal(),
         };
         let pref = clamp(pref, st.min.x, st.max.x);
+        // Fixed-size content (a gauge, a chart) is a preference: widgets
+        // draw it scaled to their rect, so it isn't a floor.
+        let inner_min = match st.dir {
+            Dir::Row if st.wrap => min_max,
+            Dir::Row => min_sum + gaps,
+            Dir::Column | Dir::Stack => min_max,
+        };
+        let min_w = match st.width {
+            Size::Fixed(w) => w,
+            // A scroll container scrolls its content instead.
+            _ if st.scroll => 0.0,
+            _ => inner_min + st.pad.horizontal(),
+        };
+        self.nodes[n].min_w = clamp(min_w.max(st.min.x), st.min.x, st.max.x).min(pref.max(st.min.x));
         self.nodes[n].children = children;
         self.nodes[n].pref_w = pref;
         pref
@@ -315,16 +337,23 @@ impl Tree {
                         .iter()
                         .enumerate()
                         .filter(|(_, &c)| self.nodes[c].style.width == Size::Hug)
-                        .map(|(i, &c)| cw[i] - self.nodes[c].style.min.x)
+                        .map(|(i, &c)| (cw[i] - self.nodes[c].min_w).max(0.0))
                         .sum();
                     if shrinkable > 0.0 {
                         let k = ((-free) / shrinkable).min(1.0);
                         for (i, &c) in children.iter().enumerate() {
-                            let cs = self.nodes[c].style;
-                            if cs.width == Size::Hug {
-                                cw[i] -= (cw[i] - cs.min.x) * k;
+                            if self.nodes[c].style.width == Size::Hug {
+                                let floor = self.nodes[c].min_w;
+                                cw[i] -= (cw[i] - floor).max(0.0) * k;
                             }
                         }
+                    }
+                }
+                // Fill children share space as usual, but never end up
+                // narrower than their content's fixed widths.
+                for (i, &c) in children.iter().enumerate() {
+                    if matches!(self.nodes[c].style.width, Size::Fill(_)) {
+                        cw[i] = cw[i].max(self.nodes[c].min_w);
                     }
                 }
             }
@@ -336,7 +365,7 @@ impl Tree {
                         Size::Fixed(f) => f,
                         Size::Fill(_) => inner,
                         Size::Hug if align == Align::Stretch => inner,
-                        Size::Hug => self.nodes[c].pref_w.min(inner),
+                        Size::Hug => self.nodes[c].pref_w.min(inner).max(self.nodes[c].min_w),
                     };
                     cw[i] = clamp(cw[i], cs.min.x, cs.max.x);
                 }
@@ -596,6 +625,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Regression (TODO.md): a row narrower than its content used to shrink
+    /// hugging children below their descendants' fixed widths, so siblings
+    /// overlapped. They now stop at their min-content width.
+    #[test]
+    fn narrow_row_keeps_descendant_min_widths() {
+        let mut t = Tree::new();
+        let row = t.add(Style { dir: Dir::Row, width: Size::Fixed(200.0), gap: 10.0, ..Default::default() }, Content::None);
+        let a = t.add_child(row, Style::default(), Content::None);
+        t.add_child(a, Style { width: Size::Fixed(150.0), ..Default::default() }, Content::Fixed(vec2(150.0, 20.0)));
+        let b = t.add_child(row, Style::default(), Content::None);
+        t.add_child(b, Style { min: vec2(120.0, 0.0), ..Default::default() }, Content::Fixed(vec2(120.0, 20.0)));
+        // A text child can still shrink (it wraps).
+        let txt = t.add_child(row, Style::default(), Content::Measured(0));
+        t.layout(row, Rect::from_xywh(0.0, 0.0, 200.0, 100.0), &mut text_measure(30));
+        assert_eq!(t.rect(a).width(), 150.0);
+        assert_eq!(t.rect(b).width(), 120.0);
+        assert!(t.rect(b).min.x >= t.rect(a).max.x, "siblings don't overlap");
+        assert!(t.rect(txt).width() < 300.0, "text still shrinks");
+    }
+
+    /// Fill children start from their min-content too.
+    #[test]
+    fn fill_child_keeps_fixed_descendant() {
+        let mut t = Tree::new();
+        let row = t.add(Style { dir: Dir::Row, width: Size::Fixed(100.0), ..Default::default() }, Content::None);
+        let a = t.add_child(row, Style { width: Size::FILL, ..Default::default() }, Content::None);
+        t.add_child(a, Style { width: Size::Fixed(80.0), ..Default::default() }, Content::None);
+        let b = t.add_child(row, Style { width: Size::FILL, ..Default::default() }, Content::None);
+        t.add_child(b, Style { width: Size::Fixed(80.0), ..Default::default() }, Content::None);
+        t.layout(row, Rect::from_xywh(0.0, 0.0, 100.0, 100.0), &mut no_measure());
+        assert_eq!((t.rect(a).width(), t.rect(b).width()), (80.0, 80.0));
+        assert!(t.rect(b).min.x >= t.rect(a).max.x);
     }
 
     #[test]

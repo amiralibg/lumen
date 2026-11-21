@@ -170,7 +170,8 @@ fn run_rollout_action(ui: &mut Ui, s: &mut State, action: RolloutAction, sha: &s
 }
 
 pub fn view(ui: &mut Ui, s: &mut State) {
-    ui.column().fill().pad(16).gap(12).show(|ui| {
+    // Scrolls when the window is shorter than the board.
+    ui.scroll("release").pad(16.0).gap(12.0).show(|ui| {
         // Top environment safety banner
         ui.env_banner("rel_env", &mut s.env_idx, "eu-central-1", &mut s.env_locked);
 

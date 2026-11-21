@@ -1540,7 +1540,8 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "calendar" => {
-            ui.row().gap(32).align(Align::Start).show(|ui| {
+            // Side by side when there's room, stacked on narrow embeds.
+            ui.row().fill_width().wrap().gap(32).align(Align::Start).show(|ui| {
                 ui.calendar(&mut s.date);
                 ui.calendar_range(&mut s.span);
             });
@@ -3338,10 +3339,12 @@ struct Params {
     open: bool,
     speed: f32,
     reduced: bool,
+    /// Print clipped and overlapping text (with --screenshot).
+    check: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3387,6 +3390,7 @@ fn params() -> Params {
                 }
                 "--embed" => p.embed = true,
                 "--open" => p.open = true,
+                "--check" => p.check = true,
                 "--scale" => {
                     p.scale = next.parse().unwrap_or(2.0);
                     i += 1;
@@ -3426,7 +3430,7 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(out) = &p.screenshot {
         let steps = if p.open { open_steps(&p.demo) } else { vec![] };
-        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, ..Default::default() };
+        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
         match lumen::screenshot(out, &shot, &mut state, view) {
             Ok(()) => println!("wrote {out}"),
             Err(e) => {

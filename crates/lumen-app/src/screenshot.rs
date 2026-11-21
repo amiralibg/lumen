@@ -36,11 +36,14 @@ pub struct Shot {
     /// Stand-in for the OS accent (for `Accent::Native`).
     pub native_accent: Option<Color>,
     pub steps: Vec<ShotStep>,
+    /// Print clipped and overlapping text found in the final frame to
+    /// stderr (see [`Ui::check_layout`]).
+    pub check_layout: bool,
 }
 
 impl Default for Shot {
     fn default() -> Self {
-        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Blue, look: Look::lumen(), native_accent: None, steps: vec![] }
+        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Blue, look: Look::lumen(), native_accent: None, steps: vec![], check_layout: false }
     }
 }
 
@@ -54,6 +57,7 @@ pub fn screenshot<S>(path: impl AsRef<Path>, shot: &Shot, state: &mut S, mut vie
     ui.set_native_accent(shot.native_accent);
     ui.theme.settle();
     ui.caret_blink = false;
+    ui.check_layout = shot.check_layout;
     let mut t = 1.0f64;
     let dt = 1.0 / 60.0;
     let screen = vec2(shot.size.0 as f32, shot.size.1 as f32);
@@ -114,6 +118,9 @@ pub fn screenshot<S>(path: impl AsRef<Path>, shot: &Shot, state: &mut S, mut vie
         }
     }
     let out = frame(&mut ui, vec![], &mut t, state);
+    for issue in ui.layout_issues() {
+        eprintln!("layout: {issue}");
+    }
     let px = offscreen::capture(&device, &queue, &mut renderer, &out.draw);
     let [w, h] = out.draw.size_px;
     write_png(path.as_ref(), w, h, &px)

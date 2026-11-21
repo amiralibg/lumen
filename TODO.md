@@ -19,6 +19,6 @@
 - [x] All batch-1 widgets read the look; new `segmented` widget
 - [x] lumen-app: live OS dark mode, OS accent, reduce motion; `App::native()` / `App::look()`
 - [x] Gallery Appearance: look, system fonts, accent hue, roundness, density, motion style
-- [ ] Screenshot review of each look in both modes, then per-platform polish
+- [x] Screenshot review of each look in both modes (`--check` sweep of every demo × 4 looks × 2 modes, 2026-11-21), then per-platform polish
 - [ ] Windows/Linux accent and reduce-motion queries are untested on real machines
-- [ ] Layout: rows narrower than their content shrink hugging children below their descendants' `min` widths (no min-content propagation), so siblings can overlap at very narrow widths
+- [x] Layout: rows narrower than their content shrank hugging children below their descendants' `min` widths; min-content widths now propagate (fixed widths and `min` only; text and fixed-size content still shrink)

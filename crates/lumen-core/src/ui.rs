@@ -358,6 +358,11 @@ pub struct SystemPrefs {
 pub struct Ui {
     /// Blink the text caret (on by default; screenshots turn it off).
     pub caret_blink: bool,
+    /// Record text draws and report clipped and overlapping text in
+    /// [`layout_issues`](Self::layout_issues) (debugging and visual tests;
+    /// costs time, off by default).
+    pub check_layout: bool,
+    issues: Vec<String>,
     /// Fill the background with `Token::Background` (on by default). Hosts
     /// that composite lumen over their own content turn it off.
     pub paint_background: bool,
@@ -445,6 +450,8 @@ impl Ui {
         Ui {
             caret_blink: true,
             paint_background: true,
+            check_layout: false,
+            issues: vec![],
             content: None,
             text: TextSystem::new(),
             theme: Theme::new(Mode::Light, Accent::Blue),
@@ -771,6 +778,9 @@ impl Ui {
             painter.rect(screen, bg);
         }
         let mut layer_rects = vec![];
+        if self.check_layout {
+            painter.text_log = Some(vec![]);
+        }
         let mut extras = std::mem::take(&mut self.extras);
         let mut deferred: Vec<(Rect, PaintFn)> = vec![];
         {
@@ -792,6 +802,7 @@ impl Ui {
                 cx.painter.pop_clip();
             }
             for ly in &self.layers {
+                cx.painter.layer_index += 1;
                 let start = cx.painter.data.vertices.len();
                 let clip = if ly.place == LayerPlace::Screen { screen } else { full };
                 if ly.place != LayerPlace::Screen && ly.alpha > 0.0 {
@@ -816,6 +827,7 @@ impl Ui {
                 }
             }
             for ov in &self.overlays {
+                cx.painter.layer_index += 1;
                 let r = self.tree.nodes[ov.root].rect;
                 let d = match ov.placement {
                     Placement::Top => vec2(0.0, ov.slide),
@@ -867,6 +879,9 @@ impl Ui {
         if animating {
             repaint = Some(0.0);
         }
+        if let Some(log) = painter.text_log.take() {
+            self.issues = text_issues(&log);
+        }
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
         FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input, text_field: self.text_field.take(), layer_rects, animating }
@@ -901,6 +916,13 @@ impl Ui {
     /// except for those layers.
     pub fn set_content_rect(&mut self, rect: Option<Rect>) {
         self.content = rect;
+    }
+
+    /// Problems found in the last frame when
+    /// [`check_layout`](Self::check_layout) is on: text cut by a clip, and
+    /// text drawn over other text.
+    pub fn layout_issues(&self) -> &[String] {
+        &self.issues
     }
 
     /// The area the main UI lays out in. It may extend past the screen
@@ -1601,6 +1623,48 @@ impl Ui {
     pub(crate) fn scroll_state(&mut self, id: Id) -> &mut ScrollState {
         self.mem::<ScrollState>(id)
     }
+}
+
+/// Clipped and overlapping text among a frame's text draws. Only text
+/// that's at least half opaque counts (fades and exits are fine).
+fn text_issues(log: &[crate::paint::TextDraw]) -> Vec<String> {
+    let mut out = vec![];
+    let shown: Vec<_> = log.iter().filter(|t| t.alpha >= 0.5 && !t.text.trim().is_empty()).collect();
+    let short = |s: &str| -> String {
+        let s: String = s.chars().take(32).collect();
+        s.replace('\n', " ")
+    };
+    for t in &shown {
+        let visible = t.ink.intersect(&t.clip);
+        // Partly clipped: some ink is cut, some shows (scrolled-away rows
+        // are fully outside and fine). Allow a pixel of antialiasing.
+        if !visible.is_empty() && !t.clip.expand(1.0).contains_rect(&t.ink) {
+            let cut_x = (t.ink.width() - visible.width()).max(0.0);
+            let cut_y = (t.ink.height() - visible.height()).max(0.0);
+            if cut_x > 1.5 || cut_y > 1.5 {
+                out.push(format!("clipped: {:?} cut by {:.0}x{:.0} px at ({:.0}, {:.0})", short(&t.text), cut_x, cut_y, t.ink.min.x, t.ink.min.y));
+            }
+        }
+    }
+    for (i, a) in shown.iter().enumerate() {
+        let va = a.ink.intersect(&a.clip);
+        if va.is_empty() {
+            continue;
+        }
+        for b in &shown[i + 1..] {
+            let vb = b.ink.intersect(&b.clip);
+            let o = va.intersect(&vb);
+            // A layer above hides the text under it.
+            if o.is_empty() || a.text == b.text || a.layer != b.layer {
+                continue;
+            }
+            let smaller = (va.width() * va.height()).min(vb.width() * vb.height()).max(1.0);
+            if o.width() > 2.0 && o.height() > 2.0 && o.width() * o.height() > 0.15 * smaller {
+                out.push(format!("overlap: {:?} and {:?} at ({:.0}, {:.0})", short(&a.text), short(&b.text), o.min.x, o.min.y));
+            }
+        }
+    }
+    out
 }
 
 fn rect_of_id(tree: &Tree, extras: &[NodeExtra], id: Id) -> Option<Rect> {

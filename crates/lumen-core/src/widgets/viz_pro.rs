@@ -1144,14 +1144,9 @@ impl Ui {
                     cx.painter.text(cx.text, &gm_r, vec2(right_x, cy - gm_r.height * 0.5), muted_c);
 
                     let avail_msg = (right_x - 10.0 - cur_x).max(20.0);
-                    let g_msg = cx.galley(&cm.message, &st_msg);
-                    if g_msg.width <= avail_msg {
-                        cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
-                    } else {
-                        cx.painter.push_clip(Rect::from_xywh(cur_x, cy - row_h * 0.5, avail_msg, row_h));
-                        cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
-                        cx.painter.pop_clip();
-                    }
+                    // Long messages end in an ellipsis instead of a cut glyph.
+                    let g_msg = cx.galley_fit(&cm.message, &st_msg, avail_msg);
+                    cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
                 }
                 cx.painter.ring(r, Corners::all(r_card), 1.0, bd_c);
             })),
