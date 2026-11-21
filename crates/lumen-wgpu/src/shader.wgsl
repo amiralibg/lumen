@@ -140,8 +140,12 @@ fn fs_main(i: VOut) -> @location(0) vec4<f32> {
             return premul(i.color) * a;
         }
         default: {
-            let raw = textureLoad(atlas, vec2<i32>(floor(i.uv)), 0).r;
-            return premul(i.color) * text_coverage(raw, i.color.rgb, u.scale);
+            let tex = textureLoad(atlas, vec2<i32>(floor(i.uv)), 0);
+            if (i.param > 0.5) {
+                // Color glyph (emoji): premultiplied texels, faded by alpha.
+                return tex * i.color.a;
+            }
+            return premul(i.color) * text_coverage(tex.a, i.color.rgb, u.scale);
         }
     }
 }

@@ -68,6 +68,9 @@ pub struct AtlasGlyph {
     pub left: i32,
     /// Offset from baseline up to the bitmap's top edge (physical px).
     pub top: i32,
+    /// A color glyph (emoji): the texels are its colors, not a coverage
+    /// mask to tint.
+    pub color: bool,
 }
 
 /// Region of the atlas the renderer must (re)upload.
@@ -79,7 +82,8 @@ pub struct AtlasDelta {
     pub y: u32,
     pub w: u32,
     pub h: u32,
-    /// `w * h` coverage bytes, row-major.
+    /// `w * h` premultiplied RGBA texels, row-major (mask glyphs are white
+    /// with alpha = coverage).
     pub data: Vec<u8>,
 }
 
@@ -94,7 +98,7 @@ impl Atlas {
     pub fn new(size: u32) -> Self {
         let mut a = Self {
             size,
-            data: vec![0; (size * size) as usize],
+            data: vec![0; (size * size * 4) as usize],
             alloc: Shelves::new(size),
             dirty: None,
         };
@@ -117,6 +121,13 @@ impl Atlas {
     /// Copy a `w*h` coverage bitmap into the atlas, growing it if needed.
     /// Existing glyph positions never move, so UVs stay valid.
     pub fn insert(&mut self, w: u32, h: u32, coverage: &[u8]) -> Option<(u32, u32)> {
+        // Masks are stored as white with alpha = coverage.
+        let rgba: Vec<u8> = coverage.iter().flat_map(|&c| [255, 255, 255, c]).collect();
+        self.insert_rgba(w, h, &rgba)
+    }
+
+    /// Insert premultiplied RGBA texels (color glyphs).
+    pub fn insert_rgba(&mut self, w: u32, h: u32, rgba: &[u8]) -> Option<(u32, u32)> {
         // 1px padding on every side avoids bleeding under bilinear sampling.
         let (x, y) = loop {
             if let Some(a) = self.alloc.allocate(w + 2, h + 2) {
@@ -129,9 +140,9 @@ impl Atlas {
         };
         let (x, y) = (x + 1, y + 1);
         for row in 0..h {
-            let dst = ((y + row) * self.size + x) as usize;
-            let src = (row * w) as usize;
-            self.data[dst..dst + w as usize].copy_from_slice(&coverage[src..src + w as usize]);
+            let dst = (((y + row) * self.size + x) * 4) as usize;
+            let src = (row * w * 4) as usize;
+            self.data[dst..dst + (w * 4) as usize].copy_from_slice(&rgba[src..src + (w * 4) as usize]);
         }
         self.mark_dirty(x, y, w, h);
         Some((x, y))
@@ -140,11 +151,11 @@ impl Atlas {
     fn grow(&mut self) {
         let old = self.size;
         let new = old * 2;
-        let mut data = vec![0u8; (new * new) as usize];
+        let mut data = vec![0u8; (new * new * 4) as usize];
         for row in 0..old {
-            let s = (row * old) as usize;
-            let d = (row * new) as usize;
-            data[d..d + old as usize].copy_from_slice(&self.data[s..s + old as usize]);
+            let s = (row * old * 4) as usize;
+            let d = (row * new * 4) as usize;
+            data[d..d + (old * 4) as usize].copy_from_slice(&self.data[s..s + (old * 4) as usize]);
         }
         self.data = data;
         self.size = new;
@@ -167,10 +178,10 @@ impl Atlas {
     pub fn take_delta(&mut self) -> Option<AtlasDelta> {
         let [x0, y0, x1, y1] = self.dirty.take()?;
         let (w, h) = (x1 - x0, y1 - y0);
-        let mut data = Vec::with_capacity((w * h) as usize);
+        let mut data = Vec::with_capacity((w * h * 4) as usize);
         for row in y0..y1 {
-            let s = (row * self.size + x0) as usize;
-            data.extend_from_slice(&self.data[s..s + w as usize]);
+            let s = ((row * self.size + x0) * 4) as usize;
+            data.extend_from_slice(&self.data[s..s + (w * 4) as usize]);
         }
         Some(AtlasDelta { atlas_size: self.size, x: x0, y: y0, w, h, data })
     }
@@ -189,7 +200,7 @@ mod tests {
         }
         assert!(a.size() > 64);
         let s = a.size();
-        assert_eq!(a.data()[(first.1 * s + first.0) as usize], 7);
+        assert_eq!(a.data()[((first.1 * s + first.0) * 4 + 3) as usize], 7, "coverage lives in alpha");
         let d = a.take_delta().unwrap();
         assert_eq!(d.atlas_size, s);
         assert_eq!((d.w, d.h), (s, s));

@@ -120,7 +120,7 @@ impl Renderer {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::R8Unorm,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 });
@@ -132,7 +132,7 @@ impl Renderer {
                 queue.write_texture(
                     wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d { x: d.x, y: d.y, z: 0 }, aspect: wgpu::TextureAspect::All },
                     &d.data,
-                    wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(d.w), rows_per_image: Some(d.h) },
+                    wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(d.w * 4), rows_per_image: Some(d.h) },
                     wgpu::Extent3d { width: d.w, height: d.h, depth_or_array_layers: 1 },
                 );
             }
@@ -147,12 +147,12 @@ impl Renderer {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::R8Unorm,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 },
                 wgpu::util::TextureDataOrder::LayerMajor,
-                &[0],
+                &[0; 4],
             );
             self.atlas = Some((tex, 1));
         }

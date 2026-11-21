@@ -470,20 +470,24 @@ impl TextSystem {
             if w == 0 || h == 0 {
                 return None;
             }
-            let coverage: Vec<u8> = match img.content {
-                SwashContent::Mask => img.data,
-                SwashContent::SubpixelMask => img.data.chunks(4).map(|p| p[1]).collect(),
-                // Color glyphs (emoji) are reduced to luminance-weighted alpha for now.
-                SwashContent::Color => img.data.chunks(4).map(|p| p[3]).collect(),
+            let color = img.content == SwashContent::Color;
+            let at = match img.content {
+                SwashContent::Mask => self.atlas.insert(w, h, &img.data),
+                SwashContent::SubpixelMask => self.atlas.insert(w, h, &img.data.chunks(4).map(|p| p[1]).collect::<Vec<_>>()),
+                // Color glyphs (emoji) keep their colors, premultiplied.
+                SwashContent::Color => {
+                    let pm: Vec<u8> = img
+                        .data
+                        .chunks(4)
+                        .flat_map(|p| {
+                            let a = p[3] as u16;
+                            [(p[0] as u16 * a / 255) as u8, (p[1] as u16 * a / 255) as u8, (p[2] as u16 * a / 255) as u8, p[3]]
+                        })
+                        .collect();
+                    self.atlas.insert_rgba(w, h, &pm)
+                }
             };
-            self.atlas.insert(w, h, &coverage).map(|(x, y)| AtlasGlyph {
-                x,
-                y,
-                w,
-                h,
-                left: img.placement.left,
-                top: img.placement.top,
-            })
+            at.map(|(x, y)| AtlasGlyph { x, y, w, h, left: img.placement.left, top: img.placement.top, color })
         });
         self.glyphs.insert(key, out);
         out

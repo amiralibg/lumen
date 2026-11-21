@@ -371,11 +371,15 @@ impl Painter {
             let (x1, y1) = (x0 + q.glyph.w as f32 / s, y0 + q.glyph.h as f32 / s);
             let (u0, v0) = (q.glyph.x as f32, q.glyph.y as f32);
             let (u1, v1) = (u0 + q.glyph.w as f32, v0 + q.glyph.h as f32);
+            // param 1 marks a color glyph: the shader uses its texels and
+            // only the alpha of `color`.
+            let param = if q.glyph.color { 1.0 } else { 0.0 };
             let v = |x: f32, y: f32, u: f32, vv: f32| Vertex {
                 pos: [x, y],
                 uv: [u, vv],
                 mode: mode::TEXT,
                 color: col,
+                param,
                 ..Default::default()
             };
             self.push_quad([v(x0, y0, u0, v0), v(x1, y0, u1, v0), v(x1, y1, u1, v1), v(x0, y1, u0, v1)]);
