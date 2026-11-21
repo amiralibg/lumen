@@ -341,6 +341,177 @@ pub mod offscreen {
         }
     }
 
+    /// Pipelined readback: render a frame, start copying it back, and pick
+    /// the pixels up on a later frame instead of stalling for the GPU.
+    /// Hosts show the newest finished frame meanwhile, one frame behind.
+    pub struct AsyncReadback {
+        format: wgpu::TextureFormat,
+        target: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+        slots: Vec<Slot>,
+        seq: u64,
+        /// Newest frame handed out; older frames that land later are stale.
+        taken: u64,
+        pixels: Vec<u8>,
+    }
+
+    struct Slot {
+        buf: wgpu::Buffer,
+        size: [u32; 2],
+        row: u32,
+        /// 0 free, 1 copying, 2 mapped, 3 failed.
+        state: std::sync::Arc<std::sync::atomic::AtomicU8>,
+        seq: u64,
+    }
+
+    /// A finished frame from [`AsyncReadback`].
+    pub struct Frame<'a> {
+        /// Tightly packed premultiplied pixels in the readback's format.
+        pub pixels: &'a [u8],
+        pub size: [u32; 2],
+        /// Submission order: higher is newer.
+        pub seq: u64,
+    }
+
+    const FREE: u8 = 0;
+    const COPYING: u8 = 1;
+    const MAPPED: u8 = 2;
+    const FAILED: u8 = 3;
+
+    impl AsyncReadback {
+        /// `slots` frames may be in flight at once (2 or 3 is plenty). The
+        /// [`Renderer`] must use `format`.
+        pub fn new(format: wgpu::TextureFormat, slots: usize) -> Self {
+            AsyncReadback { format, target: None, slots: Vec::with_capacity(slots.max(1)), seq: 0, taken: 0, pixels: vec![] }
+        }
+
+        fn capacity(&self) -> usize {
+            self.slots.capacity().max(1)
+        }
+
+        /// Frames submitted and not yet collected.
+        pub fn in_flight(&self) -> usize {
+            use std::sync::atomic::Ordering;
+            self.slots.iter().filter(|s| matches!(s.state.load(Ordering::Acquire), COPYING | MAPPED)).count()
+        }
+
+        /// Render `data` and start reading it back. Returns the frame's
+        /// sequence number (see [`Frame::seq`]), or `None`, rendering nothing,
+        /// when every slot is still busy; try again next frame.
+        pub fn submit(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, renderer: &mut Renderer, data: &DrawData) -> Option<u64> {
+            use std::sync::atomic::{AtomicU8, Ordering};
+            let [w, h] = [data.size_px[0].max(1), data.size_px[1].max(1)];
+            let row = (w * 4).div_ceil(256) * 256;
+            let free = self.slots.iter().position(|s| matches!(s.state.load(Ordering::Acquire), FREE | FAILED));
+            let slot = match free {
+                Some(i) => i,
+                None if self.slots.len() < self.capacity() => {
+                    self.slots.push(Slot {
+                        buf: device.create_buffer(&wgpu::BufferDescriptor { label: Some("lumen readback"), size: 4, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false }),
+                        size: [0, 0],
+                        row: 0,
+                        state: std::sync::Arc::new(AtomicU8::new(FREE)),
+                        seq: 0,
+                    });
+                    self.slots.len() - 1
+                }
+                None => return None,
+            };
+            if self.target.as_ref().is_none_or(|t| t.2 != [w, h]) {
+                let tex = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("lumen offscreen"),
+                    size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let view = tex.create_view(&Default::default());
+                self.target = Some((tex, view, [w, h]));
+            }
+            let s = &mut self.slots[slot];
+            if s.size != [w, h] {
+                s.buf = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("lumen readback"),
+                    size: (row * h) as u64,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+                s.size = [w, h];
+                s.row = row;
+            }
+            let (tex, view, _) = self.target.as_ref().unwrap();
+            renderer.draw_to(device, queue, view, data);
+            let mut enc = device.create_command_encoder(&Default::default());
+            enc.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo { texture: tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                wgpu::TexelCopyBufferInfo { buffer: &s.buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            );
+            queue.submit([enc.finish()]);
+            self.seq += 1;
+            s.seq = self.seq;
+            s.state.store(COPYING, Ordering::Release);
+            let state = s.state.clone();
+            s.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| state.store(if r.is_ok() { MAPPED } else { FAILED }, Ordering::Release));
+            Some(self.seq)
+        }
+
+        /// The newest finished frame, if one finished since the last call.
+        /// Never blocks. Older finished frames are dropped.
+        pub fn try_take(&mut self, device: &wgpu::Device) -> Option<Frame<'_>> {
+            let _ = device.poll(wgpu::PollType::Poll);
+            self.collect()
+        }
+
+        /// Wait for every frame in flight and return the newest.
+        pub fn wait(&mut self, device: &wgpu::Device) -> Option<Frame<'_>> {
+            if self.in_flight() > 0 {
+                let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            }
+            self.collect()
+        }
+
+        fn collect(&mut self) -> Option<Frame<'_>> {
+            use std::sync::atomic::Ordering;
+            for s in &self.slots {
+                if s.seq <= self.taken && s.state.load(Ordering::Acquire) == MAPPED {
+                    s.buf.unmap();
+                    s.state.store(FREE, Ordering::Release);
+                }
+            }
+            let newest = self.slots.iter().enumerate().filter(|(_, s)| s.state.load(Ordering::Acquire) == MAPPED).max_by_key(|(_, s)| s.seq).map(|(i, _)| i)?;
+            // Pending older frames are stale once a newer one has landed.
+            let newest_seq = self.slots[newest].seq;
+            for (i, s) in self.slots.iter().enumerate() {
+                if i != newest && s.seq < newest_seq && s.state.load(Ordering::Acquire) == MAPPED {
+                    s.buf.unmap();
+                    s.state.store(FREE, Ordering::Release);
+                }
+            }
+            let s = &self.slots[newest];
+            let [w, h] = s.size;
+            {
+                let mapped = s.buf.slice(..).get_mapped_range().expect("mapped range");
+                self.pixels.clear();
+                if s.row == w * 4 {
+                    self.pixels.extend_from_slice(&mapped[..(w * h * 4) as usize]);
+                } else {
+                    self.pixels.reserve((w * h * 4) as usize);
+                    for y in 0..h {
+                        let o = (y * s.row) as usize;
+                        self.pixels.extend_from_slice(&mapped[o..o + (w * 4) as usize]);
+                    }
+                }
+            }
+            s.buf.unmap();
+            s.state.store(FREE, Ordering::Release);
+            self.taken = s.seq;
+            Some(Frame { pixels: &self.pixels, size: [w, h], seq: s.seq })
+        }
+    }
+
     /// Create a headless device.
     pub fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
