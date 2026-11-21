@@ -230,6 +230,16 @@ pub struct TextSystem {
     /// Family overrides for Sans, Display and Mono.
     families: [Option<String>; 3],
     system_loaded: bool,
+    /// Load system fonts the first time text needs a script the bundled
+    /// fonts lack (see [`TextSystem::set_system_fallback`]).
+    auto_fallback: bool,
+}
+
+/// True if `c` is outside what the bundled fonts cover: Latin, Greek and
+/// Cyrillic, punctuation and symbols, the keyboard symbols and the icons.
+fn needs_system_font(c: char) -> bool {
+    let u = c as u32;
+    u >= 0x0530 && !(0x2000..=0x2BFF).contains(&u) && !(0xE000..=0xF8FF).contains(&u) && !(0xFE00..=0xFE0F).contains(&u)
 }
 
 impl Default for TextSystem {
@@ -259,7 +269,16 @@ impl TextSystem {
             frame: 0,
             families: [None, None, None],
             system_loaded: false,
+            auto_fallback: false,
         }
+    }
+
+    /// When on, the first text that needs a script the bundled fonts don't
+    /// cover (CJK, Arabic, Hebrew, Thai, emoji...) loads the system fonts
+    /// as fallbacks, once. Native runners turn this on; it stays off for
+    /// headless rendering so screenshots don't depend on the machine.
+    pub fn set_system_fallback(&mut self, on: bool) {
+        self.auto_fallback = on;
     }
 
     /// Add a font (e.g. a CJK or Arabic fallback). Fonts added here
@@ -343,6 +362,9 @@ impl TextSystem {
     /// Lay text out. `max_width` enables word wrapping. Results are cached
     /// and reused across frames while they keep being requested.
     pub fn layout(&mut self, text: &str, style: &TextStyle, max_width: Option<f32>, align: TextAlign) -> Arc<Galley> {
+        if self.auto_fallback && !self.system_loaded && text.chars().any(needs_system_font) {
+            self.load_system_fonts();
+        }
         let mut h = AHasher::default();
         text.hash(&mut h);
         style.hash_into(&mut h);
@@ -589,6 +611,18 @@ mod tests {
         assert_eq!(g.glyphs.len(), 5);
         for gl in &g.glyphs {
             assert_ne!(gl.glyph.glyph_id, 0, "missing glyph in {:?}", g.text);
+        }
+    }
+
+    #[test]
+    fn system_fallback_covers_cjk_when_enabled() {
+        assert!(!needs_system_font('é') && !needs_system_font('⌘') && !needs_system_font('Ж'));
+        assert!(needs_system_font('日') && needs_system_font('😀'));
+        let mut ts = TextSystem::new();
+        ts.set_system_fallback(true);
+        let g = ts.layout("日本", &body(), None, TextAlign::Start);
+        if cfg!(target_os = "macos") {
+            assert!(g.glyphs.iter().all(|gl| gl.glyph.glyph_id != 0), "macOS ships CJK fonts");
         }
     }
 

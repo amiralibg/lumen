@@ -16,7 +16,8 @@ use crate::input::{CursorIcon, Key, Modifiers};
 use crate::layout::{NodeId, Size, Style};
 use crate::math::{vec2, Corners, Rect, Vec2};
 use crate::theme::{TextRole, Token};
-use crate::ui::{Interact, Sense, Ui};
+use crate::input::Ime;
+use crate::ui::{Interact, Sense, TextFieldState, TextIn, Ui};
 use crate::Color;
 
 /// What the frame of a field shows.
@@ -379,19 +380,42 @@ impl Ui {
         if ix.focused && !o.disabled {
             self.set_wants_text_input();
             let keys = self.keys_for(id);
-            let inputs = self.take_text_input(id);
+            let inputs = self.take_text_ops(id);
             let g = layout(self, value);
             let st = self.mem::<InlineState>(id);
             let mut activity = !keys.is_empty() || !inputs.is_empty();
-            for t in inputs {
+            let filter = |t: &str, st: &InlineState, value: &str| -> String {
                 let mut t: String = t.chars().filter(|c| o.accept.is_none_or(|f| f(*c)) && (o.multiline || *c != '\n')).collect();
                 if let Some(max) = o.max_chars {
-                    let room = max.saturating_sub(value.chars().count() - st.edit.selected(value).chars().count());
+                    let replaced = st.edit.marked.clone().unwrap_or_else(|| st.edit.selection());
+                    let room = max.saturating_sub(value.chars().count() - value[replaced].chars().count());
                     t = t.chars().take(room).collect();
                 }
-                if !t.is_empty() {
-                    st.edit.insert(value, &t);
-                    st.goal_x = None;
+                t
+            };
+            for t in inputs {
+                match t {
+                    TextIn::Text(t) => {
+                        let t = filter(&t, st, value);
+                        if !t.is_empty() {
+                            st.edit.insert(value, &t);
+                            st.goal_x = None;
+                        }
+                    }
+                    // Fields that filter characters or hide them take only
+                    // committed text; the others show the composition.
+                    TextIn::Ime(Ime::Preedit { .. }) if o.mask || o.accept.is_some() => {}
+                    TextIn::Ime(Ime::Preedit { text, cursor, replace }) => {
+                        let text = filter(&text, st, value);
+                        let cursor = cursor.filter(|c| c.0.max(c.1) <= text.len());
+                        st.edit.ime(value, &Ime::Preedit { text, cursor, replace });
+                        st.goal_x = None;
+                    }
+                    TextIn::Ime(Ime::Commit { text, replace }) => {
+                        let text = filter(&text, st, value);
+                        st.edit.ime(value, &Ime::Commit { text, replace });
+                        st.goal_x = None;
+                    }
                 }
             }
             for (k, mods, _) in keys {
@@ -467,9 +491,10 @@ impl Ui {
         }
         if !ix.focused {
             if let Some(st) = self.mem_get::<InlineState>(id) {
-                if st.edit.has_selection() {
+                if st.edit.has_selection() || st.edit.marked.is_some() {
                     let st = self.mem::<InlineState>(id);
                     st.edit.anchor = st.edit.cursor;
+                    st.edit.marked = None;
                 }
             }
         }
@@ -522,6 +547,24 @@ impl Ui {
             (to_d(value, st.edit.cursor), to_d(value, r.start)..to_d(value, r.end), st.last_scroll)
         };
         let scroll = self.mem::<InlineState>(id).scroll;
+        let marked = if o.mask { None } else { self.mem::<InlineState>(id).edit.marked.clone() };
+        if ix.focused && !o.disabled && !o.mask {
+            // Tell the host's input method where the caret or composition is.
+            let span = marked.clone().unwrap_or(cursor..cursor);
+            let (a, line) = caret_at(&g, span.start);
+            let (b, line_b) = caret_at(&g, span.end);
+            let l = g.lines[line];
+            let x0 = ix.rect.min.x - scroll.x;
+            let w = if line_b == line { (b - a).max(1.0) } else { (l.width - a).max(1.0) };
+            let anchor = self.mem::<InlineState>(id).edit.anchor;
+            self.report_text_field(TextFieldState {
+                text: value.clone(),
+                cursor,
+                anchor,
+                marked: marked.clone(),
+                rect: Rect::from_xywh(x0 + a, ix.rect.min.y - scroll.y + l.top, w, l.height.max(line_h)),
+            });
+        }
         let ph = (value.is_empty() && !o.placeholder.is_empty()).then(|| self.galley(&o.placeholder, &style));
         let text_c = o.color.unwrap_or_else(|| if o.disabled { self.color(Token::TextDisabled) } else { self.color(Token::Foreground) });
         let ph_c = if o.disabled { self.color(Token::TextDisabled) } else { self.color(Token::TextMuted) };
@@ -560,7 +603,7 @@ impl Ui {
             Some(Box::new(move |cx, r| {
                 let origin = vec2(r.min.x - scroll.x, cx.painter.snap(r.min.y - scroll.y));
                 cx.painter.push_clip(r.expand2(2.0, 1.0));
-                if focused && sel.start != sel.end {
+                if focused && sel.start != sel.end && marked.is_none() {
                     for (k, l) in g.lines.iter().enumerate() {
                         let a = sel.start.max(l.start);
                         let b = sel.end.min(l.end.max(l.start));
@@ -581,6 +624,26 @@ impl Ui {
                     cx.painter.text(cx.text, p, vec2(r.min.x, origin.y), ph_c);
                 } else {
                     cx.painter.text(cx.text, &g, origin, text_c);
+                }
+                if let Some(m) = &marked {
+                    // Composition: underline it per line, thicker under the
+                    // segment the input method is converting.
+                    let mut underline = |a: usize, b: usize, h: f32| {
+                        for l in g.lines.iter() {
+                            let (s0, s1) = (a.max(l.start), b.min(l.end.max(l.start)));
+                            if s0 >= s1 {
+                                continue;
+                            }
+                            let (x0, _) = caret_at(&g, s0);
+                            let x1 = if s1 >= l.end { l.width } else { caret_at(&g, s1).0 };
+                            let y = origin.y + l.top + l.height.max(line_h) - 3.0 - (h - 1.0) * 0.5;
+                            cx.painter.rect(cx.painter.snap_rect(Rect::from_xywh(origin.x + x0, y, x1 - x0, h)), text_c);
+                        }
+                    };
+                    underline(m.start, m.end, 1.0);
+                    if sel.start != sel.end {
+                        underline(sel.start, sel.end, 2.0);
+                    }
                 }
                 if caret_a > 0.0 {
                     let (x, line) = caret_at(&g, cursor);

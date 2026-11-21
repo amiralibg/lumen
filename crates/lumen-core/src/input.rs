@@ -68,11 +68,30 @@ pub enum Event {
     /// Scroll delta in logical pixels (positive y scrolls content up).
     Scroll(Vec2),
     Key { key: Key, pressed: bool, repeat: bool, modifiers: Modifiers },
-    /// Committed text (typing, IME commit).
+    /// Typed text.
     Text(String),
+    /// Input-method composition: CJK input, dead keys, press-and-hold accents.
+    Ime(Ime),
     /// Clipboard contents for a paste the app performed on Cmd/Ctrl+V.
     Paste(String),
     WindowFocused(bool),
+}
+
+/// An input-method event for the focused text field.
+///
+/// lumen keeps composition text inside the field's value, marked and
+/// underlined, until it's committed, the way browsers do. Byte ranges refer
+/// to the field's value as reported in [`crate::TextFieldState`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum Ime {
+    /// Show `text` as the composition. It replaces the current composition,
+    /// else `replace`, else the selection. `cursor` is the selection inside
+    /// `text` in bytes (`None` puts the caret at its end). Empty text
+    /// cancels the composition.
+    Preedit { text: String, cursor: Option<(usize, usize)>, replace: Option<std::ops::Range<usize>> },
+    /// Final text. It replaces the composition, else `replace`, else the
+    /// selection.
+    Commit { text: String, replace: Option<std::ops::Range<usize>> },
 }
 
 /// Everything the UI needs for one frame.

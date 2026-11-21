@@ -13,6 +13,17 @@ pub struct TextEdit {
     redo: Vec<(String, usize, usize)>,
     /// Coalesce consecutive typed characters into one undo step.
     typing_run: bool,
+    /// Input-method composition inside the text (byte range), shown
+    /// underlined until it's committed.
+    pub marked: Option<std::ops::Range<usize>>,
+}
+
+fn floor_boundary(s: &str, i: usize) -> usize {
+    let mut i = i.min(s.len());
+    while !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 fn prev_grapheme(s: &str, i: usize) -> usize {
@@ -75,15 +86,74 @@ impl TextEdit {
 
     /// Clamp indices after the text changed from outside.
     pub fn clamp(&mut self, s: &str) {
-        let fix = |i: usize| {
-            let mut i = i.min(s.len());
-            while !s.is_char_boundary(i) {
-                i -= 1;
+        self.cursor = floor_boundary(s, self.cursor);
+        self.anchor = floor_boundary(s, self.anchor);
+        if self.marked.as_ref().is_some_and(|m| m.end > s.len() || !s.is_char_boundary(m.start) || !s.is_char_boundary(m.end)) {
+            self.marked = None;
+        }
+    }
+
+    /// The range an input-method event replaces: the composition, else
+    /// `replace` (clamped to the text), else the selection.
+    fn ime_range(&mut self, s: &str, replace: &Option<std::ops::Range<usize>>) -> std::ops::Range<usize> {
+        if let Some(m) = self.marked.take() {
+            m
+        } else if let Some(r) = replace {
+            let a = floor_boundary(s, r.start);
+            a..floor_boundary(s, r.end).max(a)
+        } else {
+            self.selection()
+        }
+    }
+
+    /// Apply an input-method event. The composition lives in the text,
+    /// marked, until it's committed; one undo step covers the whole
+    /// composition. Returns true if the text changed.
+    pub fn ime(&mut self, s: &mut String, ev: &crate::input::Ime) -> bool {
+        use crate::input::Ime;
+        let before = s.len();
+        let composing = self.marked.is_some();
+        match ev {
+            Ime::Preedit { text, cursor, replace } => {
+                if !composing && text.is_empty() {
+                    return false;
+                }
+                if !composing {
+                    self.snapshot(s, false);
+                }
+                let text: String = text.chars().filter(|c| !c.is_control()).collect();
+                let r = self.ime_range(s, replace);
+                let old = s[r.clone()].to_owned();
+                s.replace_range(r.clone(), &text);
+                if text.is_empty() {
+                    self.cursor = r.start;
+                    self.anchor = r.start;
+                } else {
+                    self.marked = Some(r.start..r.start + text.len());
+                    let (a, b) = cursor.unwrap_or((text.len(), text.len()));
+                    self.anchor = r.start + floor_boundary(&text, a);
+                    self.cursor = r.start + floor_boundary(&text, b);
+                }
+                self.typing_run = false;
+                old != text || s.len() != before
             }
-            i
-        };
-        self.cursor = fix(self.cursor);
-        self.anchor = fix(self.anchor);
+            Ime::Commit { text, replace } => {
+                let text: String = text.chars().filter(|c| !c.is_control()).collect();
+                if !composing {
+                    if text.is_empty() && replace.is_none() {
+                        return false;
+                    }
+                    self.snapshot(s, false);
+                }
+                let r = self.ime_range(s, replace);
+                let old = s[r.clone()].to_owned();
+                s.replace_range(r.clone(), &text);
+                self.cursor = r.start + text.len();
+                self.anchor = self.cursor;
+                self.typing_run = false;
+                old != text
+            }
+        }
     }
 
     fn snapshot(&mut self, s: &str, coalesce: bool) {
@@ -99,6 +169,7 @@ impl TextEdit {
     }
 
     fn delete_selection(&mut self, s: &mut String) {
+        self.marked = None;
         let r = self.selection();
         s.replace_range(r.clone(), "");
         self.cursor = r.start;
@@ -129,6 +200,7 @@ impl TextEdit {
     }
 
     pub fn backspace(&mut self, s: &mut String, word: bool, line: bool) {
+        self.marked = None;
         if self.has_selection() {
             self.snapshot(s, false);
             self.delete_selection(s);
@@ -151,6 +223,7 @@ impl TextEdit {
     }
 
     pub fn delete(&mut self, s: &mut String, word: bool) {
+        self.marked = None;
         if self.has_selection() {
             self.snapshot(s, false);
             self.delete_selection(s);
@@ -165,6 +238,7 @@ impl TextEdit {
     }
 
     fn place(&mut self, i: usize, extend: bool) {
+        self.marked = None;
         self.cursor = i;
         if !extend {
             self.anchor = i;
@@ -199,12 +273,14 @@ impl TextEdit {
     }
 
     pub fn select_all(&mut self, s: &str) {
+        self.marked = None;
         self.anchor = 0;
         self.cursor = s.len();
     }
 
     /// Select the word around byte `i` (double click).
     pub fn select_word(&mut self, s: &str, i: usize) {
+        self.marked = None;
         for (j, w) in s.split_word_bound_indices() {
             if i >= j && i <= j + w.len() && (is_word(w) || i < j + w.len()) {
                 self.anchor = j;
@@ -221,6 +297,7 @@ impl TextEdit {
     }
 
     pub fn undo(&mut self, s: &mut String) {
+        self.marked = None;
         if let Some((t, c, a)) = self.undo.pop() {
             self.redo.push((std::mem::replace(s, t), self.cursor, self.anchor));
             self.cursor = c;
@@ -230,6 +307,7 @@ impl TextEdit {
     }
 
     pub fn redo(&mut self, s: &mut String) {
+        self.marked = None;
         if let Some((t, c, a)) = self.redo.pop() {
             self.undo.push((std::mem::replace(s, t), self.cursor, self.anchor));
             self.cursor = c;
@@ -348,5 +426,53 @@ mod tests {
         let mut e = TextEdit { cursor: 2, anchor: 2, ..Default::default() };
         e.clamp("héllo");
         assert_eq!(e.cursor, 1);
+    }
+
+    fn pre(t: &str) -> crate::input::Ime {
+        crate::input::Ime::Preedit { text: t.into(), cursor: None, replace: None }
+    }
+    fn commit(t: &str) -> crate::input::Ime {
+        crate::input::Ime::Commit { text: t.into(), replace: None }
+    }
+
+    #[test]
+    fn ime_composition_is_marked_then_committed() {
+        let (mut e, mut s) = ed("ab", 1);
+        e.ime(&mut s, &pre("k"));
+        assert_eq!((s.as_str(), e.marked.clone(), e.cursor), ("akb", Some(1..2), 2));
+        e.ime(&mut s, &pre("か"));
+        assert_eq!((s.as_str(), e.marked.clone(), e.cursor), ("aかb", Some(1..4), 4));
+        e.ime(&mut s, &commit("可"));
+        assert_eq!((s.as_str(), e.marked.clone(), e.cursor), ("a可b", None, 4));
+        // One undo step for the whole composition.
+        e.undo(&mut s);
+        assert_eq!(s, "ab");
+    }
+
+    #[test]
+    fn ime_preedit_replaces_selection_and_cancels_cleanly() {
+        let mut e = TextEdit { cursor: 3, anchor: 1, ..Default::default() };
+        let mut s = String::from("abcd");
+        e.ime(&mut s, &crate::input::Ime::Preedit { text: "にほ".into(), cursor: Some((0, 3)), replace: None });
+        assert_eq!(s, "aにほd");
+        assert_eq!((e.anchor, e.cursor), (1, 4));
+        e.ime(&mut s, &pre(""));
+        assert_eq!((s.as_str(), e.marked.clone(), e.cursor), ("ad", None, 1));
+    }
+
+    #[test]
+    fn ime_commit_with_replacement_range() {
+        // macOS press-and-hold: "e" was typed, then "é" replaces it.
+        let (mut e, mut s) = ed("cafe", 4);
+        e.ime(&mut s, &crate::input::Ime::Commit { text: "é".into(), replace: Some(3..4) });
+        assert_eq!((s.as_str(), e.cursor), ("café", 5));
+    }
+
+    #[test]
+    fn moving_the_caret_ends_the_composition() {
+        let (mut e, mut s) = ed("", 0);
+        e.ime(&mut s, &pre("ni"));
+        e.left(&s, false, false);
+        assert_eq!((s.as_str(), e.marked.clone()), ("ni", None));
     }
 }

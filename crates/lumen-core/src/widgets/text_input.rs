@@ -9,7 +9,7 @@ use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
 use crate::math::{vec2, Corners, Rect};
 use crate::theme::{ControlSize, TextRole, Token};
-use crate::ui::{Response, Sense, Ui};
+use crate::ui::{Response, Sense, TextFieldState, TextIn, Ui};
 use crate::Color;
 
 /// Persistent editing state of a text input.
@@ -143,11 +143,16 @@ impl<'u> TextInput<'u> {
         if ix.focused && !self.disabled {
             ui.set_wants_text_input();
             let keys = ui.keys_for(id);
-            let inputs = ui.take_text_input(id);
+            let inputs = ui.take_text_ops(id);
             let st = ui.mem::<EditState>(id);
             let mut activity = !keys.is_empty() || !inputs.is_empty();
             for t in inputs {
-                st.edit.insert(self.value, &t);
+                match t {
+                    TextIn::Text(t) => st.edit.insert(self.value, &t),
+                    TextIn::Ime(e) => {
+                        st.edit.ime(self.value, &e);
+                    }
+                }
             }
             for (k, mods, _) in keys {
                 let ext = mods.shift;
@@ -190,9 +195,10 @@ impl<'u> TextInput<'u> {
         if !ix.focused {
             // Collapse the selection when focus leaves.
             if let Some(st) = ui.mem_get::<EditState>(id) {
-                if st.edit.has_selection() {
+                if st.edit.has_selection() || st.edit.marked.is_some() {
                     let st = ui.mem::<EditState>(id);
                     st.edit.anchor = st.edit.cursor;
+                    st.edit.marked = None;
                 }
             }
         }
@@ -275,6 +281,22 @@ impl<'u> TextInput<'u> {
             (st.edit.cursor, st.edit.selection())
         };
         let scroll = ui.mem::<EditState>(id).scroll;
+        let marked = ui.mem::<EditState>(id).edit.marked.clone();
+        if ix.focused && !self.disabled {
+            // Tell the host's input method where the caret or composition is.
+            let x0 = ix.rect.min.x + text_left - scroll;
+            let top = ix.rect.center().y - style.line_height / 2.0;
+            let span = marked.clone().unwrap_or(cursor..cursor);
+            let (a, b) = (galley.x_for_index(span.start), galley.x_for_index(span.end));
+            let anchor = ui.mem::<EditState>(id).edit.anchor;
+            ui.report_text_field(TextFieldState {
+                text: self.value.clone(),
+                cursor,
+                anchor,
+                marked: marked.clone(),
+                rect: Rect::from_xywh(x0 + a, top, (b - a).max(1.0), style.line_height),
+            });
+        }
         let empty = self.value.is_empty();
         let ph_galley = if empty && !self.placeholder.is_empty() { Some(ui.galley(&self.placeholder, &style)) } else { None };
         let focused = ix.focused;
@@ -328,7 +350,7 @@ impl<'u> TextInput<'u> {
                 let top = r.center().y - line_h / 2.0;
                 let origin = vec2(text_rect.min.x - scroll, cx.painter.snap(top));
                 cx.painter.push_clip(text_rect.expand2(2.0, 0.0));
-                if focused && sel.start != sel.end {
+                if focused && sel.start != sel.end && marked.is_none() {
                     let x0 = origin.x + galley2.x_for_index(sel.start);
                     let x1 = origin.x + galley2.x_for_index(sel.end);
                     let sr = Rect::from_xywh(x0.min(x1), origin.y, (x1 - x0).abs(), line_h);
@@ -338,6 +360,18 @@ impl<'u> TextInput<'u> {
                     cx.painter.text(cx.text, ph, vec2(text_rect.min.x, origin.y), ph_c);
                 } else {
                     cx.painter.text(cx.text, &galley2, origin, text_c);
+                }
+                if let Some(m) = &marked {
+                    // Composition: underline it, thicker under the segment
+                    // the input method is converting.
+                    let base = origin.y + line_h - 3.0;
+                    let x0 = origin.x + galley2.x_for_index(m.start);
+                    let x1 = origin.x + galley2.x_for_index(m.end);
+                    cx.painter.rect(cx.painter.snap_rect(Rect::from_xywh(x0, base, x1 - x0, 1.0)), text_c);
+                    if sel.start != sel.end {
+                        let (s0, s1) = (origin.x + galley2.x_for_index(sel.start), origin.x + galley2.x_for_index(sel.end));
+                        cx.painter.rect(cx.painter.snap_rect(Rect::from_xywh(s0, base - 0.5, s1 - s0, 2.0)), text_c);
+                    }
                 }
                 if caret_a > 0.0 {
                     let x = cx.painter.snap(origin.x + galley2.x_for_index(cursor) - 1.0);

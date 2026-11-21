@@ -310,9 +310,39 @@ pub struct FrameOutput {
     pub copied_text: Option<String>,
     /// Text input is focused (show the IME / virtual keyboard).
     pub wants_text_input: bool,
+    /// The focused text field's value, selection, composition and caret,
+    /// for hosts that run a platform input method (IME candidate window
+    /// placement, GPUI's input handler). `None` for password fields.
+    pub text_field: Option<TextFieldState>,
+    /// Bounds of the visible menus, popovers, context menus and tooltips
+    /// (not dialogs or toasts), in logical px. With a
+    /// [content rect](Ui::set_content_rect) these may lie outside it.
+    pub layer_rects: Vec<Rect>,
     /// Springs, fades or the theme blend are still moving (as opposed to a
     /// timer such as a tooltip delay or caret blink).
     pub animating: bool,
+}
+
+/// The focused text field as the platform's input method sees it. Offsets
+/// are bytes into `text`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TextFieldState {
+    /// The value, including any composition text.
+    pub text: String,
+    /// Selection: `cursor` is the end that moves, `anchor` the fixed one.
+    pub cursor: usize,
+    pub anchor: usize,
+    /// The composition (marked text), if any.
+    pub marked: Option<std::ops::Range<usize>>,
+    /// The composition, or the caret when not composing, in logical pixels.
+    pub rect: Rect,
+}
+
+/// Text typed into the focused field this frame, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TextIn {
+    Text(String),
+    Ime(crate::input::Ime),
 }
 
 /// What the OS reports about the user's preferences, filled in by the app
@@ -328,6 +358,12 @@ pub struct SystemPrefs {
 pub struct Ui {
     /// Blink the text caret (on by default; screenshots turn it off).
     pub caret_blink: bool,
+    /// Fill the background with `Token::Background` (on by default). Hosts
+    /// that composite lumen over their own content turn it off.
+    pub paint_background: bool,
+    /// Where the main UI lays out inside the screen (see
+    /// [`set_content_rect`](Self::set_content_rect)).
+    content: Option<Rect>,
     pub text: TextSystem,
     pub theme: Theme,
     pub anims: AnimStore,
@@ -354,7 +390,8 @@ pub struct Ui {
     released: Option<Id>,
     keys: Vec<(Key, Modifiers, bool)>,
     keys_down: Vec<Key>,
-    text_input: Vec<String>,
+    text_input: Vec<TextIn>,
+    text_field: Option<TextFieldState>,
     scroll_delta: Vec2,
     scroll_target: Option<Id>,
     modifiers: Modifiers,
@@ -407,6 +444,8 @@ impl Ui {
     pub fn new() -> Self {
         Ui {
             caret_blink: true,
+            paint_background: true,
+            content: None,
             text: TextSystem::new(),
             theme: Theme::new(Mode::Light, Accent::Blue),
             anims: AnimStore::new(),
@@ -432,6 +471,7 @@ impl Ui {
             keys: vec![],
             keys_down: vec![],
             text_input: vec![],
+            text_field: None,
             scroll_delta: Vec2::ZERO,
             scroll_target: None,
             modifiers: Modifiers::default(),
@@ -499,6 +539,7 @@ impl Ui {
         self.scroll_target = None;
         self.copied = None;
         self.wants_text_input = false;
+        self.text_field = None;
         self.any_press = false;
         self.any_key = false;
         self.press_at = None;
@@ -623,8 +664,8 @@ impl Ui {
                     self.keys_down.retain(|k| *k != key);
                 }
             }
-            Event::Text(t) => self.text_input.push(t),
-            Event::Paste(t) => self.text_input.push(t),
+            Event::Text(t) | Event::Paste(t) => self.text_input.push(TextIn::Text(t)),
+            Event::Ime(e) => self.text_input.push(TextIn::Ime(e)),
             Event::WindowFocused(false) => {
                 self.keys_down.clear();
                 self.pointer_down = false;
@@ -663,8 +704,10 @@ impl Ui {
             self.tree.nodes[node].scroll_offset = st.offset;
         }
 
-        // Layout.
-        let screen = Rect::from_min_size(Vec2::ZERO, self.screen);
+        // Layout. The main tree and full-screen layers use the content
+        // rect; anchored layers and overlays may use the whole screen.
+        let full = Rect::from_min_size(Vec2::ZERO, self.screen);
+        let screen = self.content_rect();
         {
             let leaves = &self.leaves;
             let text = &mut self.text;
@@ -679,7 +722,7 @@ impl Ui {
                 match ly.place {
                     LayerPlace::Screen => self.tree.layout(ly.root, screen.translate(ly.offset), &mut measure),
                     LayerPlace::Point(p) => {
-                        let s = self.tree.measure_root(ly.root, self.screen.x - 16.0, &mut measure);
+                        let s = self.tree.measure_root(ly.root, (self.screen.x - 16.0).max(0.0), &mut measure);
                         let pos = place_layer(Rect::from_min_size(p, Vec2::ZERO), s, Placement::Bottom, 2.0, LayerAlign::Start, self.screen);
                         self.tree.layout(ly.root, Rect::from_min_size(pos + ly.offset, s), &mut measure);
                     }
@@ -721,7 +764,13 @@ impl Ui {
                 rects.insert(id, self.tree.nodes[i].rect);
             }
         }
-        let mut painter = Painter::new(self.screen, self.scale, self.theme.color(Token::Background));
+        let bg = self.theme.color(Token::Background);
+        let clear = if self.content.is_some() || !self.paint_background { Color::TRANSPARENT } else { bg };
+        let mut painter = Painter::new(self.screen, self.scale, clear);
+        if self.content.is_some() && self.paint_background {
+            painter.rect(screen, bg);
+        }
+        let mut layer_rects = vec![];
         let mut extras = std::mem::take(&mut self.extras);
         let mut deferred: Vec<(Rect, PaintFn)> = vec![];
         {
@@ -744,9 +793,13 @@ impl Ui {
             }
             for ly in &self.layers {
                 let start = cx.painter.data.vertices.len();
-                cx.painter.push_clip_replace(screen);
-                cx.scroll_clip = screen;
-                paint_node(&self.tree, &mut extras, &self.leaves, ly.root, screen, &mut cx, &mut hits);
+                let clip = if ly.place == LayerPlace::Screen { screen } else { full };
+                if ly.place != LayerPlace::Screen && ly.alpha > 0.0 {
+                    layer_rects.push(self.tree.nodes[ly.root].rect);
+                }
+                cx.painter.push_clip_replace(clip);
+                cx.scroll_clip = clip;
+                paint_node(&self.tree, &mut extras, &self.leaves, ly.root, clip, &mut cx, &mut hits);
                 let deferred_now = std::mem::take(cx.deferred);
                 for (clip, f) in deferred_now {
                     cx.painter.push_clip_replace(clip);
@@ -770,8 +823,10 @@ impl Ui {
                     Placement::Right => vec2(-ov.slide, 0.0),
                     Placement::Left => vec2(ov.slide, 0.0),
                 };
-                let _ = r;
-                cx.painter.push_clip_replace(screen);
+                if ov.alpha > 0.0 {
+                    layer_rects.push(r.translate(d));
+                }
+                cx.painter.push_clip_replace(full);
                 let alpha = ov.alpha;
                 paint_overlay(&self.tree, &mut extras, &self.leaves, ov.root, d, alpha, &mut cx);
                 cx.painter.pop_clip();
@@ -814,7 +869,7 @@ impl Ui {
         }
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
-        FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input, animating }
+        FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input, text_field: self.text_field.take(), layer_rects, animating }
     }
 
     /// Run one frame with a closure (convenience for tests and apps).
@@ -832,8 +887,27 @@ impl Ui {
     pub fn dt(&self) -> f32 {
         self.dt
     }
+    /// The size of the area the UI lays out in: the window, or the
+    /// [content rect](Self::set_content_rect) when one is set.
     pub fn screen_size(&self) -> Vec2 {
-        self.screen
+        self.content_rect().size()
+    }
+
+    /// Lay the main UI out in `rect` (logical px) instead of the whole
+    /// screen. Menus, popovers, context menus and tooltips may still use
+    /// the whole screen, so a host that embeds lumen in part of its window
+    /// (GPUI, a game) can let them overflow the embedded area. Dialogs and
+    /// toasts stay inside `rect`. Pixels outside `rect` are transparent
+    /// except for those layers.
+    pub fn set_content_rect(&mut self, rect: Option<Rect>) {
+        self.content = rect;
+    }
+
+    /// The area the main UI lays out in. It may extend past the screen
+    /// (an embedded panel scrolled half out of view); drawing is clipped to
+    /// the screen.
+    pub fn content_rect(&self) -> Rect {
+        self.content.unwrap_or(Rect::from_min_size(Vec2::ZERO, self.screen))
     }
     pub fn color(&self, t: Token) -> Color {
         self.theme.color(t)
@@ -998,12 +1072,29 @@ impl Ui {
         self.keys_down.contains(&key)
     }
 
+    /// Committed text for the focused field `id` (compositions dropped).
     pub(crate) fn take_text_input(&mut self, id: Id) -> Vec<String> {
+        self.take_text_ops(id)
+            .into_iter()
+            .filter_map(|t| match t {
+                TextIn::Text(t) | TextIn::Ime(crate::input::Ime::Commit { text: t, .. }) => Some(t),
+                TextIn::Ime(_) => None,
+            })
+            .collect()
+    }
+
+    /// Typed text and input-method events for the focused field `id`.
+    pub(crate) fn take_text_ops(&mut self, id: Id) -> Vec<TextIn> {
         if self.focused == Some(id) {
             std::mem::take(&mut self.text_input)
         } else {
             vec![]
         }
+    }
+
+    /// Report the focused field to the host's input method.
+    pub(crate) fn report_text_field(&mut self, f: TextFieldState) {
+        self.text_field = Some(f);
     }
 
     /// Scroll delta for the scroll area `id` (if the pointer is over it).

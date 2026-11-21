@@ -67,6 +67,33 @@ pub struct DrawData {
     pub atlas: Option<lumen_text::AtlasDelta>,
 }
 
+impl DrawData {
+    /// Keep only `rect` (logical px) of the frame: move it to the origin and
+    /// shrink the framebuffer to its size. The edges snap outward to whole
+    /// physical pixels. Hosts use it to render part of a larger lumen screen,
+    /// such as an embedded panel plus a menu that overflows it.
+    pub fn crop(&mut self, rect: Rect) {
+        let s = self.scale;
+        let x0 = (rect.min.x * s).floor().max(0.0);
+        let y0 = (rect.min.y * s).floor().max(0.0);
+        let x1 = (rect.max.x * s).ceil().min(self.size_px[0] as f32).max(x0 + 1.0);
+        let y1 = (rect.max.y * s).ceil().min(self.size_px[1] as f32).max(y0 + 1.0);
+        let (dx, dy) = (x0 / s, y0 / s);
+        for v in &mut self.vertices {
+            v.pos[0] -= dx;
+            v.pos[1] -= dy;
+        }
+        let (ox, oy, w, h) = (x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32);
+        for c in &mut self.cmds {
+            let [x, y, cw, ch] = c.clip;
+            let (a, b) = (x.max(ox).min(ox + w), y.max(oy).min(oy + h));
+            let (e, f) = ((x + cw).max(ox).min(ox + w), (y + ch).max(oy).min(oy + h));
+            c.clip = [a - ox, b - oy, e - a, f - b];
+        }
+        self.size_px = [w, h];
+    }
+}
+
 /// Records primitives into [`DrawData`].
 pub struct Painter {
     pub(crate) data: DrawData,
@@ -480,6 +507,19 @@ impl Painter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crop_moves_the_region_to_the_origin() {
+        let mut p = Painter::new(vec2(100.0, 80.0), 2.0, Color::WHITE);
+        p.rect(Rect::from_xywh(30.0, 20.0, 10.0, 10.0), Color::BLACK);
+        let mut d = p.finish();
+        let before = d.vertices[0].pos;
+        d.crop(Rect::from_xywh(25.25, 10.0, 50.0, 40.0));
+        // 25.25 logical = 50.5 px, floored to 50 px = 25 logical.
+        assert_eq!(d.size_px, [101, 80]);
+        assert_eq!(d.vertices[0].pos, [before[0] - 25.0, before[1] - 10.0]);
+        assert_eq!(d.cmds[0].clip, [0, 0, 101, 80]);
+    }
 
     #[test]
     fn quads_batch_by_clip() {

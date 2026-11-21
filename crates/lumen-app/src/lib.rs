@@ -106,6 +106,8 @@ impl App {
         let event_loop = EventLoop::<Gpu>::with_user_event().build().expect("event loop");
         let proxy = event_loop.create_proxy();
         let mut ui = Ui::new();
+        // CJK, Arabic, emoji and other scripts fall back to system fonts.
+        ui.text.set_system_fallback(true);
         ui.theme = lumen_core::theme::Theme::with_look(self.mode.unwrap_or(Mode::Light), self.accent, self.look);
         let runner = Runner {
             app: self,
@@ -120,6 +122,7 @@ impl App {
             modifiers: Modifiers { mac: cfg!(target_os = "macos") || is_mac_web(), ..Default::default() },
             scale: 1.0,
             next_frame: None,
+            ime_rect: None,
             clipboard: Clipboard::new(),
             cursor: CursorIcon::Default,
             followed_system_theme: false,
@@ -209,6 +212,7 @@ struct Runner<S> {
     modifiers: Modifiers,
     scale: f32,
     next_frame: Option<Instant>,
+    ime_rect: Option<lumen_core::Rect>,
     clipboard: Clipboard,
     cursor: CursorIcon,
     followed_system_theme: bool,
@@ -309,6 +313,16 @@ impl<S> Runner<S> {
             });
         }
         window.set_ime_allowed(out.wants_text_input);
+        if let Some(f) = &out.text_field {
+            // Put the IME candidate window under the caret or composition.
+            if self.ime_rect != Some(f.rect) {
+                self.ime_rect = Some(f.rect);
+                let r = f.rect;
+                window.set_ime_cursor_area(winit::dpi::LogicalPosition::new(r.min.x, r.min.y), winit::dpi::LogicalSize::new(r.width(), r.height()));
+            }
+        } else {
+            self.ime_rect = None;
+        }
         self.next_frame = out.repaint_after.and_then(|s| std::time::Duration::try_from_secs_f64(s).ok()).map(|d| Instant::now() + d);
         if out.repaint_after == Some(0.0) {
             self.request_redraw();
@@ -437,8 +451,15 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
                 }
                 self.request_redraw();
             }
-            WindowEvent::Ime(winit::event::Ime::Commit(t)) => {
-                self.events.push(Event::Text(t));
+            WindowEvent::Ime(ime) => {
+                use lumen_core::input::Ime;
+                let e = match ime {
+                    winit::event::Ime::Preedit(text, cursor) => Ime::Preedit { text, cursor, replace: None },
+                    winit::event::Ime::Commit(text) => Ime::Commit { text, replace: None },
+                    winit::event::Ime::Disabled => Ime::Preedit { text: String::new(), cursor: None, replace: None },
+                    winit::event::Ime::Enabled => return,
+                };
+                self.events.push(Event::Ime(e));
                 self.request_redraw();
             }
             WindowEvent::Focused(f) => {

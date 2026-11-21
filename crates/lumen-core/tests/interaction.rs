@@ -78,7 +78,6 @@ fn button_geometry_and_click_on_release() {
     assert_eq!(h.s.clicks, 0, "no click on press");
     h.frame(vec![release(c)]);
     assert_eq!(h.s.clicks, 1);
-    assert!(!h.s.focused || true);
 }
 
 #[test]
@@ -437,4 +436,102 @@ fn clicking_a_tooltip_button_keeps_repaint_finite() {
         let out = h.frame(vec![release(c)]);
         assert!(out.repaint_after.is_none_or(|s| s.is_finite()), "repaint_after = {:?}", out.repaint_after);
     }
+}
+
+#[derive(Default)]
+struct Area {
+    s: String,
+}
+
+fn area_view(ui: &mut Ui, s: &mut Area) {
+    ui.column().pad(24).show(|ui| {
+        ui.text_area(&mut s.s).id("notes").show();
+    });
+}
+
+#[test]
+fn ime_composition_in_text_input_and_text_area() {
+    fn pre(t: &str) -> Event {
+        Event::Ime(Ime::Preedit { text: t.into(), cursor: None, replace: None })
+    }
+    let mut h = Harness::new(Txt { s: "ab".into(), ..Default::default() }, text_view);
+    let r = h.s.rect;
+    h.click(vec2(r.max.x - 20.0, r.center().y));
+    let out = h.frame(vec![pre("に")]);
+    assert_eq!(h.s.s, "abに", "the composition shows in the value");
+    let f = out.text_field.expect("focused field is reported");
+    assert_eq!((f.text.as_str(), f.marked.clone(), f.cursor), ("abに", Some(2..5), 5));
+    assert!(f.rect.min.x > r.min.x && f.rect.max.x < r.max.x && f.rect.width() > 4.0, "rect covers the composition: {:?}", f.rect);
+    h.frame(vec![pre("にほん")]);
+    let out = h.frame(vec![Event::Ime(Ime::Commit { text: "日本".into(), replace: None })]);
+    assert_eq!(h.s.s, "ab日本");
+    assert_eq!(out.text_field.unwrap().marked, None);
+
+    let mut h = Harness::new(Area::default(), area_view);
+    h.click(vec2(60.0, 40.0));
+    let out = h.frame(vec![pre("ka")]);
+    assert_eq!(h.s.s, "ka");
+    assert_eq!(out.text_field.unwrap().marked, Some(0..2));
+    h.frame(vec![Event::Ime(Ime::Commit { text: "か".into(), replace: None })]);
+    assert_eq!(h.s.s, "か");
+}
+
+#[derive(Default)]
+struct Pick {
+    v: u8,
+    rect: Rect,
+}
+
+fn pick_view(ui: &mut Ui, s: &mut Pick) {
+    ui.column().pad(12).show(|ui| {
+        s.rect = ui.select(&mut s.v, &[(0, "Frankfurt"), (1, "Virginia"), (2, "Tokyo"), (3, "Sydney")]).show().rect;
+    });
+}
+
+/// An embedded panel (content rect) lets its menus overflow it, and reports
+/// where they are so the host can draw and hit-test them.
+#[test]
+fn content_rect_lets_menus_overflow() {
+    let mut h = Harness::new(Pick::default(), pick_view);
+    h.ui.set_content_rect(Some(Rect::from_xywh(100.0, 200.0, 300.0, 60.0)));
+    h.idle(2);
+    let r = h.s.rect;
+    assert!(r.min.x >= 100.0 && r.min.y >= 200.0, "main UI lays out in the content rect: {r:?}");
+    assert_eq!(h.ui.screen_size(), vec2(300.0, 60.0));
+    h.click(r.center());
+    let mut out = h.frame(vec![]);
+    for _ in 0..30 {
+        out = h.frame(vec![]);
+    }
+    let menu = out.layer_rects.first().copied().expect("the open menu is reported");
+    assert!(menu.max.y > 260.0, "the menu extends below the panel: {menu:?}");
+    assert_eq!(out.draw.clear.a, 0.0, "outside the content rect stays transparent");
+    // Options below the panel still take clicks.
+    h.click(vec2(menu.center().x, menu.max.y - 20.0));
+    h.idle(30);
+    assert_eq!(h.s.v, 3, "the last option, outside the content rect, was picked");
+}
+
+#[test]
+fn picking_an_option_closes_the_menu_in_a_tall_panel() {
+    let mut h = Harness::new(Pick::default(), pick_view);
+    h.ui.set_content_rect(Some(Rect::from_xywh(180.0, 0.0, 600.0, 600.0)));
+    h.idle(2);
+    let r = h.s.rect;
+    h.click(r.center());
+    h.idle(30);
+    let out = h.frame(vec![]);
+    let menu = out.layer_rects[0];
+    h.click(vec2(menu.center().x, menu.max.y - 20.0));
+    let mut last = None;
+    for i in 0..60 {
+        let out = h.frame(vec![]);
+        if out.layer_rects.is_empty() {
+            last = Some(i);
+            break;
+        }
+        assert!(out.repaint_after.is_some(), "frame {i}: menu still visible ({:?}) but no repaint requested", out.layer_rects);
+    }
+    assert_eq!(h.s.v, 3);
+    assert!(last.is_some(), "menu never closed");
 }

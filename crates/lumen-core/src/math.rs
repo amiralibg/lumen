@@ -81,6 +81,10 @@ impl Rect {
         p.x >= self.min.x && p.x < self.max.x && p.y >= self.min.y && p.y < self.max.y
     }
     /// Grow by `d` on every side (negative shrinks).
+    /// True if `o` lies entirely inside this rect.
+    pub fn contains_rect(&self, o: &Rect) -> bool {
+        o.min.x >= self.min.x && o.min.y >= self.min.y && o.max.x <= self.max.x && o.max.y <= self.max.y
+    }
     pub fn expand(&self, d: f32) -> Rect {
         Rect { min: self.min - vec2(d, d), max: self.max + vec2(d, d) }
     }
