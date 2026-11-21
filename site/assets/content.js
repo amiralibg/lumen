@@ -2327,14 +2327,18 @@ ${code(`cx.new(|cx| LumenView::new(state, view, window, cx)
     .transparent())           // let GPUI content show between widgets`)}
 <h2>How it works, and what it costs</h2>
 <p>GPUI has no hook for another renderer to draw into its frame, so lumen renders offscreen with wgpu (one device shared by every view), reads the pixels back in GPUI's BGRA layout and paints them as a GPUI image. A view at rest renders nothing. It only produces frames after input, a state change, a resize, a theme change, or while something animates.</p>
-<p>While animating, a 880×676-point panel on a Retina Mac (1760×1352 pixels) took 3 to 9 ms per frame on Apple silicon in our measurements, mostly waiting for the GPU readback. That's fine for panels, inspectors, charts, forms and dialogs. For a whole window of lumen, use <code>lumen::App</code>, which presents directly. Set <code>LUMEN_GPUI_TRACE=1</code> to print the time of each frame.</p>
+<p>The readback is pipelined: GPUI shows the newest finished frame while the GPU renders the next one, so the main thread never waits for the GPU. On a 1326×1352-pixel panel animating on Apple silicon, that's 1.7 ms of main-thread time per frame (2.5 ms at p95), against 3.1 to 3.6 ms when each frame waits for its readback, at the cost of one frame of latency. For a whole window of lumen, use <code>lumen::App</code>, which presents directly. Set <code>LUMEN_GPUI_TRACE=1</code> to print each frame's times, and <code>LUMEN_GPUI_SYNC=1</code> to compare with blocking readback.</p>
+<h2>Menus and popovers</h2>
+<p>Menus, select lists, popovers, context menus and tooltips may extend past the view's bounds, over neighbouring GPUI elements, like a native popup. While one sticks out, the frame is painted in a GPUI <code>deferred</code> layer on top of the window, unclipped by scrolling parents, and only the menu itself takes the mouse. A click anywhere else closes it and still reaches the GPUI element under the pointer. Dialogs, sheets and toasts stay inside the view. Call <code>.contain_overlays()</code> to keep everything inside instead.</p>
+<h2>Text input</h2>
+<p>A focused lumen text field registers a GPUI input handler, so input methods work: CJK composition shows underlined in the field and commits on confirm, macOS press-and-hold accents and dead keys work, and the candidate window sits under the caret. Scripts the bundled Geist lacks load the system fonts as fallbacks the first time they appear.</p>
+<h2>gpui-ce</h2>
+<p>The community fork <code>gpui-ce</code> 0.3 is supported with <code>default-features = false, features = ["ce"]</code>. Start the app with <code>lumen_gpui::application()</code>, which works with either GPUI. The <code>ce</code> build compiles and passes its tests, but isn't verified in a window yet: on macOS 27, gpui-ce 0.3.0 deadlocks in its own <code>open_window</code>.</p>
 <h2>Limits today</h2>
 <ul>
-<li>IME composition isn't forwarded. Typed characters arrive as committed text, which covers Latin layouts and dead keys, but not CJK input methods.</li>
-<li>lumen overlays (menus, popovers, toasts) stay inside the view's bounds. Give a view the area its popovers need.</li>
 <li>Accessibility trees aren't bridged to GPUI.</li>
 </ul>
-<p>Run the example: <code>cd crates/lumen-gpui && cargo run --example dashboard</code>. It shows a GPUI sidebar driving a lumen dashboard, and a lumen Deploy button updating the GPUI header.</p>`,
+<p>Run the example: <code>cd crates/lumen-gpui && cargo run --example dashboard</code>, or <code>cargo run --example selftest</code> for a scripted check in a real window. It shows a GPUI sidebar driving a lumen dashboard, and a lumen Deploy button updating the GPUI header.</p>`,
   },
   {
     slug: "architecture", title: "Architecture", lead: "Five small crates. The core never touches a window or a GPU.",

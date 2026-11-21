@@ -12,11 +12,27 @@ publish = false
 # lives outside the main workspace and keeps its own Cargo.lock.
 [workspace]
 
+[features]
+default = ["zed"]
+# Zed's GPUI from crates.io.
+zed = ["dep:gpui"]
+# The community fork, gpui-ce (needs Rust 1.95). Build with
+# `--no-default-features --features ce`.
+ce = ["dep:gpui-ce", "dep:gpui_ce_platform"]
+
 [dependencies]
 lumen-core = { path = "../lumen-core" }
 lumen-wgpu = { path = "../lumen-wgpu" }
-gpui = "0.2.2"
+gpui = { version = "0.2.2", optional = true }
+gpui-ce = { version = "0.3.0", optional = true }
+gpui_ce_platform = { version = "0.3.0", optional = true }
 image = { version = "0.25", default-features = false }
 wgpu = { version = "30", default-features = false, features = ["wgsl", "metal", "vulkan", "dx12", "std"] }
 pollster = "1"
 web-time = "1.1"
+
+# The real-window self-test (examples/selftest.rs) drives the macOS text
+# input client directly.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc = "0.2"
+raw-window-handle = "0.6"

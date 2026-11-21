@@ -149,7 +149,7 @@ Charts pick round-number axes, thin out labels to fit, spring to new data, and s
 
 ## Inside a GPUI app
 
-[`lumen-gpui`](crates/lumen-gpui) puts a lumen UI inside a [GPUI](https://gpui.rs) (Zed) app as an ordinary view. Build the app in GPUI and use lumen for panels, charts, forms and dialogs next to your GPUI elements. Mouse, scroll, keyboard, clipboard, cursors and the window's dark mode are wired up.
+[`lumen-gpui`](crates/lumen-gpui) puts a lumen UI inside a [GPUI](https://gpui.rs) (Zed) app as an ordinary view. Build the app in GPUI and use lumen for panels, charts, forms and dialogs next to your GPUI elements. Mouse, scroll, keyboard, input methods (IME), clipboard, cursors and the window's dark mode are wired up, and lumen menus and popovers can overflow the view like native popups.
 
 ```rust
 let panel = lumen_gpui::LumenView::build(Settings::default(), |ui, s| {
@@ -178,7 +178,7 @@ GPUI can't host another renderer directly, so lumen renders offscreen and hands 
 - **No screen reader support yet.** Everything is keyboard reachable with visible focus; AccessKit is planned.
 - **Platform looks are lumen widgets.** They follow each OS's conventions closely but aren't the OS's own controls.
 - **No code editor or docking panels yet.**
-- **GPUI hosting goes through a pixel readback**, and doesn't forward IME composition yet. See [the guide](https://amiralibg.github.io/lumen/#/guide/gpui).
+- **GPUI hosting goes through a pixel readback** (pipelined, about 1.7 ms of main-thread time per frame for a large panel). See [the guide](https://amiralibg.github.io/lumen/#/guide/gpui).
 - **OS accent and reduce-motion detection** is tested on macOS and the web. Windows and GNOME use registry and `gsettings` queries that haven't run on real machines yet.
 
 ## Architecture
@@ -218,7 +218,7 @@ cargo test --workspace
 
 ## What's next
 
-A code editor, docking panels, virtualized lists, AccessKit, and IME for GPUI hosting. Then **Vault**, a password manager built with lumen.
+A code editor, docking panels, virtualized lists, and AccessKit (also for GPUI hosting). Then **Vault**, a password manager built with lumen.
 
 ## License
 

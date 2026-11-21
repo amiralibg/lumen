@@ -4,8 +4,9 @@
 //!
 //! cargo run --example dashboard   (from crates/lumen-gpui)
 
+
 use gpui::{
-    div, prelude::*, px, rgb, size, App, Application, Bounds, Context, Entity, SharedString, Window, WindowBounds,
+    div, prelude::*, px, rgb, size, App, Bounds, Context, Entity, SharedString, Window, WindowBounds,
     WindowOptions,
 };
 use lumen_gpui::lumen_core::widgets::Series;
@@ -117,7 +118,7 @@ impl Render for Shell {
 }
 
 fn main() {
-    Application::new().run(|cx: &mut App| {
+    lumen_gpui::application().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1080.), px(720.)), cx);
         cx.open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |window, cx| {
             let state = Dash { region: 0, range: 1, autoscale: true, budget: 0.6, look: 0, deploys: 1284, service: "edge-gateway".into() };

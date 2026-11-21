@@ -56,4 +56,4 @@ CUI lists 174 component entries (several bundle more than one component) and 11 
 - **Overlays and feedback:** guided tour, veil, onboarding checklist, swipe actions, docking panels.
 - **Charts:** calendar heatmap, bubble chart, chart annotations, dot-matrix display.
 - **Voice AI:** recorder, voice note and live session.
-- **Platform:** virtualized lists, IME and accessibility for `lumen-gpui`.
+- **Platform:** virtualized lists, accessibility for `lumen-gpui` (IME, overflowing menus and pipelined readback landed in November 2026).
