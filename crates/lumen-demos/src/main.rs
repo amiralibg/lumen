@@ -2228,19 +2228,40 @@ ui.button("Ship release").primary().icon("rocket");
             });
         }
         "emoji-picker" => {
-            ui.row().gap(24).align(Align::Start).show(|ui| {
+            // Side by side when there's room; on a narrow card the message
+            // goes on top and the picker below.
+            let narrow = ui.screen_size().x < 600.0;
+            let picker = |ui: &mut Ui, msg: &mut String| {
                 ui.card().pad(12.0).show(|ui| {
                     if let Some(e) = ui.emoji_picker("demo") {
-                        s.emoji.push(' ');
-                        s.emoji.push_str(e);
+                        msg.push(' ');
+                        msg.push_str(e);
                     }
                 });
-                ui.column().gap(6).width(200.0).show(|ui| {
+            };
+            let field = |ui: &mut Ui, msg: &mut String, w: Option<f32>| {
+                let col = ui.column().gap(6);
+                let col = match w {
+                    Some(w) => col.width(w),
+                    None => col.fill_width(),
+                };
+                col.show(|ui| {
                     ui.label("Message").strong();
-                    ui.text_input(&mut s.emoji).id("emoji-msg").fill_width();
+                    ui.text_input(msg).id("emoji-msg").fill_width();
                     ui.label("Pick to append. ↑ ↓ ← → and Enter work on the grid.").muted().small();
                 });
-            });
+            };
+            if narrow {
+                ui.column().gap(14).fill_width().show(|ui| {
+                    field(ui, &mut s.emoji, None);
+                    picker(ui, &mut s.emoji);
+                });
+            } else {
+                ui.row().gap(24).align(Align::Start).show(|ui| {
+                    picker(ui, &mut s.emoji);
+                    field(ui, &mut s.emoji, Some(200.0));
+                });
+            }
         }
         "wheel-picker" => {
             ui.row().gap(40).align(Align::Center).show(|ui| {
@@ -2299,8 +2320,7 @@ ui.button("Ship release").primary().icon("rocket");
             let mut ids = vec![];
             ui.column().fill_width().max_width(560.0).gap(14).show(|ui| {
                 ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
-                    ids.push(ui.search_field(&mut s.search).placeholder("Search projects").show().id);
-                    ui.spacer();
+                    ids.push(ui.search_field(&mut s.search).placeholder("Search projects").fill_width().show().id);
                     ids.push(ui.button("New project").primary().icon("plus").show().id);
                 });
                 ui.card().title("Northwind").description("3 environments · deployed 4m ago").show(|ui| {
