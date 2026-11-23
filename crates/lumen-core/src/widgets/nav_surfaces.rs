@@ -722,12 +722,15 @@ impl Ui {
                 st.weight = 600;
             }
             let fg = if is_act { self.color(Token::Foreground) } else { self.color(Token::TextSecondary) };
-            self.text_leaf(tab.label.clone(), st, fg, false, false, Style::default());
+            // Tabs keep their width; the bar clips the overflow instead of
+            // squeezing labels into each other.
+            let label_w = self.galley(&tab.label, &st).width.ceil();
+            self.text_leaf(tab.label.clone(), st, fg, false, false, Style { min: vec2(label_w, 0.0), ..Default::default() });
 
             if tab.dirty && !t_ix.hovered && !c_ix.hovered {
                 let dot_c = self.color(Token::WarningStrong);
                 self.leaf(
-                    Style::default(),
+                    Style { min: vec2(14.0, 14.0), ..Default::default() },
                     vec2(14.0, 14.0),
                     Some(close_id),
                     Sense::CLICK,
@@ -739,7 +742,7 @@ impl Ui {
                 let x_bg = self.color(Token::Hover).multiply_alpha(c_hov);
                 let x_fg = self.color(if c_ix.hovered { Token::Foreground } else { Token::TextMuted });
                 self.leaf(
-                    Style::default(),
+                    Style { min: vec2(16.0, 16.0), ..Default::default() },
                     vec2(16.0, 16.0),
                     Some(close_id),
                     Sense::CLICK,

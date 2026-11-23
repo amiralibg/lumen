@@ -889,6 +889,7 @@ impl Ui {
         }
         if let Some(log) = painter.text_log.take() {
             self.issues = text_issues(&log);
+            self.issues.append(&mut painter.paint_issues);
         }
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
@@ -1265,8 +1266,10 @@ impl Ui {
     /// Add an icon leaf (Lucide glyph in a square of `size`).
     pub fn icon_leaf(&mut self, name: &str, size: f32, color: Color) -> NodeId {
         let name = name.to_owned();
+        // Glyphs don't scale with their rect, so a crowded row must not
+        // squeeze one (it would spill into the next item).
         self.leaf(
-            Style::default(),
+            Style { min: vec2(size, size), ..Default::default() },
             vec2(size, size),
             None,
             Sense::NONE,
@@ -1802,7 +1805,30 @@ fn paint_node(
         return;
     }
     if let Some(p) = e.paint.take() {
+        let logged = cx.painter.text_log.as_ref().map(|l| l.len());
         p(cx, r);
+        // A fixed-size leaf the layout squeezed below its size: charts
+        // redraw smaller, but text drawn past the rect means the widget
+        // needed that width as a `min`.
+        if let (Some(from), Content::Fixed(want)) = (logged, node.content) {
+            if r.width() < want.x - 0.5 || r.height() < want.y - 0.5 {
+                let log = cx.painter.text_log.as_ref().map(|l| &l[from..]).unwrap_or(&[]);
+                let spill = log.iter().filter(|t| t.alpha >= 0.5 && !t.text.trim().is_empty()).find(|t| {
+                    // Only what shows counts: a clipped canvas (editor,
+                    // marquee) may scroll text past its rect on purpose.
+                    let seen = t.ink.intersect(&t.clip);
+                    !seen.is_empty() && !r.expand(2.5).contains_rect(&seen)
+                });
+                if let Some(t) = spill {
+                    let text: String = t.text.chars().take(32).collect();
+                    let note = format!(
+                        "squeezed: \"{}\" spills out of a leaf laid out at {:.0}x{:.0} (wants {:.0}x{:.0}) at ({:.0}, {:.0})",
+                        text.replace('\n', " "), r.width(), r.height(), want.x, want.y, r.min.x, r.min.y
+                    );
+                    cx.painter.paint_issues.push(note);
+                }
+            }
+        }
     }
     if let Content::Measured(k) = node.content {
         paint_text_leaf(cx, &leaves[k as usize], r, 1.0);
