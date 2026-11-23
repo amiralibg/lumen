@@ -360,13 +360,40 @@ impl Ui {
                     cx.painter.fill_between(&upper, &lower, c_src.with_alpha(alpha), c_dst.with_alpha(alpha));
                 }
 
-                // Draw node bars & labels on top.
+                // Draw node bars & labels on top. A label points into the gap
+                // beside its column; when it faces a label from the other side
+                // at the same height, each gets half the gap and ends in "…".
+                let on_left_of = |i: usize| stage[i] == max_stage;
+                let lbl_w: Vec<f32> = (0..n).map(|i| cx.galley(&nodes_vec[i], &st_lbl).width.max(cx.galley(&compact(node_val[i]), &st_val).width)).collect();
+                let lbl_max: Vec<f32> = (0..n)
+                    .map(|i| {
+                        let nr = node_rects[i];
+                        let mut max = f32::INFINITY;
+                        for j in 0..n {
+                            if on_left_of(i) == on_left_of(j) {
+                                continue;
+                            }
+                            let nj = node_rects[j];
+                            // The facing label's column is beside this one,
+                            // across the gap the two labels share.
+                            let (l, rr) = if on_left_of(i) { (nj, nr) } else { (nr, nj) };
+                            let gap = rr.min.x - l.max.x;
+                            if gap <= 0.0 || (nr.center().y - nj.center().y).abs() > 34.0 {
+                                continue;
+                            }
+                            if lbl_w[i] + lbl_w[j] + 32.0 > gap {
+                                max = max.min((gap * 0.5 - 12.0).max(24.0));
+                            }
+                        }
+                        max
+                    })
+                    .collect();
                 for i in 0..n {
                     let nr = node_rects[i];
                     let col = palette[i % palette.len()];
                     cx.painter.rrect(nr, Corners::all(4.0), col, 0.0, Color::TRANSPARENT);
 
-                    let g_n = cx.galley(&nodes_vec[i], &st_lbl);
+                    let g_n = cx.galley_fit(&nodes_vec[i], &st_lbl, lbl_max[i]);
                     let val_s = compact(node_val[i]);
                     let g_v = cx.galley(&val_s, &st_val);
                     let on_left = stage[i] == max_stage;
@@ -1163,10 +1190,13 @@ impl Ui {
                     let right_x = r.max.x - 14.0 - gm_r.width;
                     cx.painter.text(cx.text, &gm_r, vec2(right_x, cy - gm_r.height * 0.5), muted_c);
 
-                    let avail_msg = (right_x - 10.0 - cur_x).max(20.0);
-                    // Long messages end in an ellipsis instead of a cut glyph.
-                    let g_msg = cx.galley_fit(&cm.message, &st_msg, avail_msg);
-                    cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
+                    // Long messages end in an ellipsis; with no room left after
+                    // the ref badges, the message is left out.
+                    let avail_msg = right_x - 10.0 - cur_x;
+                    if avail_msg >= 24.0 {
+                        let g_msg = cx.galley_fit(&cm.message, &st_msg, avail_msg);
+                        cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
+                    }
                 }
                 cx.painter.ring(r, Corners::all(r_card), 1.0, bd_c);
             })),

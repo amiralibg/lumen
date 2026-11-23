@@ -1760,6 +1760,10 @@ fn paint_text_leaf(cx: &mut PaintCx<'_>, l: &TextLeaf, r: Rect, alpha: f32) {
     let mut g = cx.text.layout(&l.text, &l.style, wrap, l.align);
     if l.truncate && !l.wrap && g.width > r.width() + 0.5 {
         g = truncate(cx.text, &l.text, &l.style, r.width());
+        if g.width > r.width() + 1.0 {
+            // Not even "x…" fits: draw nothing rather than spill.
+            return;
+        }
     }
     let mut pos = r.min;
     if !l.wrap {
