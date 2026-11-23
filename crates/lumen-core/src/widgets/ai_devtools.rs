@@ -881,7 +881,8 @@ impl Ui {
                 // 5 ruler ticks (0%, 25%, 50%, 75%, 100%). Labels thin out to
                 // halves, then the ends, when a quarter is narrower than one.
                 let widest = cx.galley(&format!("{:.0} ms", total_ms.round()), &st_hdr).width + 10.0;
-                let every = if tl_w / 4.0 >= widest { 1 } else if tl_w / 2.0 >= widest { 2 } else { 4 };
+                // The end label is right-aligned, so its neighbour needs 1.5 widths.
+                let every = if tl_w / 4.0 >= widest * 1.5 { 1 } else if tl_w / 2.0 >= widest * 1.5 { 2 } else { 4 };
                 for ti in 0..=4 {
                     let frac = ti as f32 / 4.0;
                     let x = tl_x0 + tl_w * frac;

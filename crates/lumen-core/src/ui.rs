@@ -286,6 +286,25 @@ pub(crate) struct ScrollState {
     target: Option<f32>,
 }
 
+/// Persistent state of a [`Ui::scroll_row`].
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ScrollXState {
+    offset: f32,
+    content: f32,
+    viewport: f32,
+    target: Option<f32>,
+}
+
+/// What a [`Ui::scroll_row`] showed: its id (for
+/// [`Ui::scroll_row_reveal`]), offset and how far it can scroll.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScrollX {
+    pub id: Id,
+    pub offset: f32,
+    /// 0 when everything fits.
+    pub max: f32,
+}
+
 impl Default for ScrollState {
     fn default() -> Self {
         ScrollState { offset: 0.0, content: 0.0, viewport: 0.0, last_scroll_time: -10.0, target: None }
@@ -435,6 +454,10 @@ pub struct Ui {
     tip_last_closed: f64,
     hover_since: Option<(Id, f64)>,
     scrolls: Vec<(Id, NodeId)>,
+    /// Horizontal scroll rows this frame, and last frame's ids (sideways
+    /// wheel input goes to them; vertical input passes through).
+    scrolls_x: Vec<(Id, NodeId)>,
+    prev_scrolls_x: Vec<Id>,
     repaint_at: Option<f64>,
     root: NodeId,
     frame_started: bool,
@@ -515,6 +538,8 @@ impl Ui {
             tip_last_closed: -10.0,
             hover_since: None,
             scrolls: vec![],
+            scrolls_x: vec![],
+            prev_scrolls_x: vec![],
             repaint_at: None,
             root: 0,
             frame_started: false,
@@ -592,6 +617,7 @@ impl Ui {
         self.layer_close = false;
         self.tooltips.clear();
         self.scrolls.clear();
+        self.scrolls_x.clear();
         self.repaint_at = None;
         let root_style = Style { width: Size::FILL, height: Size::FILL, ..Default::default() };
         self.root = self.push_node(root_style, Content::None, NodeExtra::default());
@@ -658,7 +684,12 @@ impl Ui {
                 self.scroll_delta += d;
                 self.any_press = true;
                 if let Some(p) = self.pointer {
-                    self.scroll_target = self.prev_hits.iter().rev().find(|h| h.sense.scroll && h.rect.contains(p)).map(|h| h.id);
+                    // A horizontal scroll row only takes sideways input
+                    // (trackpad, or Shift + wheel).
+                    let sideways = d.x.abs() > d.y.abs() || self.modifiers.shift;
+                    let hx = &self.prev_scrolls_x;
+                    self.scroll_target =
+                        self.prev_hits.iter().rev().find(|h| h.sense.scroll && h.rect.contains(p) && (sideways || !hx.contains(&h.id))).map(|h| h.id);
                 }
             }
             Event::Key { key, pressed, modifiers, repeat } => {
@@ -718,6 +749,9 @@ impl Ui {
             let st = self.mem::<ScrollState>(id);
             self.tree.nodes[node].scroll_offset = st.offset;
         }
+        for (id, node) in self.scrolls_x.clone() {
+            self.tree.nodes[node].scroll_offset_x = self.mem::<ScrollXState>(id).offset;
+        }
 
         // Layout. The main tree and full-screen layers use the content
         // rect; anchored layers and overlays may use the whole screen.
@@ -770,6 +804,15 @@ impl Ui {
             st.viewport = viewport;
             st.offset = st.offset.clamp(0.0, (content - viewport).max(0.0));
         }
+        for (id, node) in self.scrolls_x.clone() {
+            let n = &self.tree.nodes[node];
+            let (content, viewport) = (n.content_w, n.rect.width());
+            let st = self.mem::<ScrollXState>(id);
+            st.content = content;
+            st.viewport = viewport;
+            st.offset = st.offset.clamp(0.0, (content - viewport).max(0.0));
+        }
+        self.prev_scrolls_x = self.scrolls_x.iter().map(|(id, _)| *id).collect();
 
         // Collect rects, hits and paint.
         let mut rects = FastMap::default();
@@ -1363,6 +1406,62 @@ impl Ui {
             (Style { self_align: Some(Align::Stretch), ..Default::default() }, vec2(0.0, 1.0))
         };
         self.leaf(st, size, None, Sense::NONE, CursorIcon::Default, Some(Box::new(move |cx, r| cx.painter.rect(r, c))));
+    }
+
+    /// A row that scrolls sideways when its children don't fit: they keep
+    /// their natural widths and the row clips them. Trackpads and Shift +
+    /// wheel scroll it; plain wheel input passes through to the page.
+    /// `style` is the row's style (`dir` and `scroll_x` are set for you).
+    pub fn scroll_row<R>(&mut self, key: impl std::hash::Hash, style: Style, f: impl FnOnce(&mut Ui) -> R) -> (R, ScrollX) {
+        let id = self.make_id(("scroll_x", key));
+        let wheel = self.take_scroll(id);
+        let dx = if wheel.x != 0.0 { wheel.x } else { wheel.y };
+        let reduced = self.reduced_motion();
+        let gentle = self.motion().gentle;
+        let st = *self.mem::<ScrollXState>(id);
+        let max = (st.content - st.viewport).max(0.0);
+        let mut next = st;
+        if dx != 0.0 {
+            next.target = None;
+            next.offset = (st.offset + dx).clamp(0.0, max);
+        } else if let Some(target) = st.target {
+            let target = target.clamp(0.0, max);
+            let key = id.with("reveal");
+            if self.anims.spring_state(key, 0).is_none() {
+                self.anims.set_spring(key, 0, st.offset);
+            }
+            let v = if reduced { target } else { self.anims.spring(key, 0, target, gentle) };
+            next.offset = v.clamp(0.0, max);
+            if (v - target).abs() < 0.5 {
+                next.offset = target;
+                next.target = None;
+            }
+        }
+        *self.mem::<ScrollXState>(id) = next;
+        let style = Style { dir: Dir::Row, scroll_x: true, ..style };
+        let n = self.begin(style, Some(id), Sense { scroll: max > 0.0, ..Sense::NONE }, CursorIcon::Default, true, None);
+        self.scrolls_x.push((id, n));
+        self.id_scope.push(id);
+        let r = f(self);
+        self.id_scope.pop();
+        self.end();
+        (r, ScrollX { id, offset: next.offset, max })
+    }
+
+    /// Scroll a [`scroll_row`](Self::scroll_row) so `rect` (last frame's
+    /// screen rect of one of its children) is in view, on a gentle spring.
+    pub fn scroll_row_reveal(&mut self, row: Id, rect: Rect) {
+        let Some(view) = self.rect_of(row) else { return };
+        let st = self.mem::<ScrollXState>(row);
+        let base = st.target.unwrap_or(st.offset);
+        let target = if rect.min.x < view.min.x {
+            base - (view.min.x - rect.min.x) - 24.0
+        } else if rect.max.x > view.max.x {
+            base + (rect.max.x - view.max.x) + 24.0
+        } else {
+            return;
+        };
+        st.target = Some(target.max(0.0));
     }
 
     /// A vertical scroll area that fills its parent.

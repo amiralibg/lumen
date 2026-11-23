@@ -57,3 +57,47 @@ fn chips_with_room_are_clean() {
     });
     assert!(!found.iter().any(|s| s.starts_with("squeezed:")), "{found:#?}");
 }
+
+/// Editor tabs that don't fit scroll sideways: a horizontal swipe over the
+/// bar moves them, a vertical wheel doesn't, and choosing a hidden tab
+/// scrolls it into view.
+#[test]
+fn editor_tabs_scroll_sideways() {
+    let tabs: Vec<EditorTab> = ["shader.wgsl", "paint.rs", "theme.rs", "anim.rs", "layout.rs", "text.rs"].iter().map(|l| EditorTab::new(*l, *l)).collect();
+    let mut ui = Ui::new();
+    let mut active = 0usize;
+    let mut t = 1.0;
+    let mut frame = |ui: &mut Ui, active: &mut usize, events: Vec<Event>| {
+        t += 1.0 / 60.0;
+        let input = RawInput { screen_size: vec2(300.0, 200.0), scale: 1.0, time: t, events, modifiers: Modifiers::default() };
+        ui.run(input, |ui| {
+            ui.editor_tabs("tabs", &tabs, active);
+        });
+    };
+    for _ in 0..3 {
+        frame(&mut ui, &mut active, vec![]);
+    }
+    let first = |ui: &mut Ui| {
+        let id = Id::ROOT.with(("editor_tabs", "tabs")).with(("tab", "shader.wgsl"));
+        ui.rect_of(id).unwrap().min.x
+    };
+    let x0 = first(&mut ui);
+    let over = vec2(100.0, 20.0);
+    frame(&mut ui, &mut active, vec![Event::PointerMoved(over), Event::Scroll(vec2(0.0, 60.0))]);
+    frame(&mut ui, &mut active, vec![]);
+    assert_eq!(first(&mut ui), x0, "a vertical wheel passes through");
+    frame(&mut ui, &mut active, vec![Event::PointerMoved(over), Event::Scroll(vec2(60.0, 0.0))]);
+    frame(&mut ui, &mut active, vec![]);
+    let x1 = first(&mut ui);
+    assert!(x1 < x0 - 30.0, "a sideways swipe scrolls ({x0} -> {x1})");
+
+    // Choosing the last tab scrolls it fully into view.
+    active = 5;
+    for _ in 0..90 {
+        frame(&mut ui, &mut active, vec![]);
+    }
+    let bar_id = Id::ROOT.with(("editor_tabs", "tabs"));
+    let bar = ui.rect_of(bar_id).unwrap();
+    let last = ui.rect_of(bar_id.with(("tab", "text.rs"))).unwrap();
+    assert!(last.max.x <= bar.max.x && last.min.x >= bar.min.x, "{last:?} in {bar:?}");
+}
