@@ -1,6 +1,7 @@
 //! Tally: personal finance. Accounts, a cash-flow chart, budgets that fill
 //! as you spend, a transaction list and an add-transaction dialog.
 
+use super::Fit;
 use lumen::{Align, Date, ListRow, Series, Toast, Tone, Ui};
 
 const CATEGORIES: [(&str, &str, f64); 5] = [("Groceries", "shopping-basket", 600.0), ("Dining", "utensils", 250.0), ("Transport", "train-front", 180.0), ("Home", "house", 1400.0), ("Fun", "ticket", 200.0)];
@@ -73,8 +74,9 @@ pub fn view(ui: &mut Ui, s: &mut State) {
     let spent: f64 = s.txns.iter().filter(|t| t.amount < 0.0).map(|t| -t.amount).sum();
     let income: f64 = s.txns.iter().filter(|t| t.amount > 0.0).map(|t| t.amount).sum();
 
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        ui.sidebar().width(212.0).show(|ui| {
+        ui.sidebar().width(212.0).collapsed(fit.rail()).show(|ui| {
             ui.nav_header("T", "Tally");
             ui.nav_section("Accounts");
             for (i, (icon, name)) in [("wallet", "Everyday"), ("piggy-bank", "Savings"), ("credit-card", "Credit card")].iter().enumerate() {
@@ -88,28 +90,49 @@ pub fn view(ui: &mut Ui, s: &mut State) {
         });
 
         ui.column().fill().show(|ui| {
-            ui.scroll("finance").pad(20).gap(16.0).show(|ui| {
+            let pad = if fit == Fit::Narrow { 16.0 } else { 20.0 };
+            ui.scroll("finance").pad(pad).gap(16.0).show(|ui| {
+                let ranges = [(0, "Week"), (1, "Month"), (2, "Year")];
                 ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
                     ui.heading("Everyday").level(2);
                     ui.spacer();
-                    ui.segmented(&mut s.range, &[(0, "Week"), (1, "Month"), (2, "Year")]);
-                    if ui.button("Add transaction").primary().icon("plus").clicked() {
-                        s.add = true;
+                    if fit == Fit::Narrow {
+                        if ui.icon_button("plus").primary().tooltip("Add transaction").clicked() {
+                            s.add = true;
+                        }
+                    } else {
+                        ui.segmented(&mut s.range, &ranges);
+                        if ui.button("Add transaction").primary().icon("plus").clicked() {
+                            s.add = true;
+                        }
                     }
                 });
-                ui.row().fill_width().gap(14).show(|ui| {
+                if fit == Fit::Narrow {
+                    ui.segmented(&mut s.range, &ranges);
+                }
+                // Stat cards side by side, stacked on a phone.
+                let stats = |ui: &mut Ui| {
                     ui.card().pad(16.0).show(|ui| ui.stat("Balance", &money(balance), Some(3.2), Some(&[11.2, 11.6, 11.4, 12.1, 12.0, 12.6, 12.4, 12.9])));
                     ui.card().pad(16.0).show(|ui| ui.stat("Spent this month", &money(spent), Some(-8.4), Some(&[2.4, 2.1, 2.6, 2.2, 1.9, 2.0, 1.8, 1.7])));
                     ui.card().pad(16.0).show(|ui| ui.stat("Income", &money(income), Some(0.0), Some(&[4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2])));
-                });
-                ui.row().fill_width().gap(14).align(Align::Start).show(|ui| {
+                };
+                if fit == Fit::Narrow {
+                    ui.column().fill_width().gap(12).show(stats);
+                } else {
+                    ui.row().fill_width().gap(14).show(stats);
+                }
+                // Chart and budgets side by side when wide, stacked otherwise.
+                let stacked = fit != Fit::Wide;
+                let pair = if stacked { ui.column().fill_width().gap(14) } else { ui.row().fill_width().gap(14).align(Align::Start) };
+                pair.show(|ui| {
                     ui.column().fill_width().show(|ui| {
                         ui.card().title("Cash flow").show(|ui| {
                             let labels = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"];
                             ui.bar_chart("cash", &labels, vec![Series::new("In", vec![4.2, 4.2, 4.6, 4.2, 4.2, 4.2]), Series::new("Out", vec![3.1, 3.6, 2.9, 3.3, 3.8, (spent / 1000.0) as f32])]).height(200.0);
                         });
                     });
-                    ui.column().width(320.0).show(|ui| {
+                    let side = if stacked { ui.column().fill_width() } else { ui.column().width(320.0) };
+                    side.show(|ui| {
                         ui.card().title("Budgets").description("This month").show(|ui| {
                             for (ci, (name, icon, limit)) in CATEGORIES.iter().enumerate() {
                                 let used: f64 = s.txns.iter().filter(|t| t.category == ci && t.amount < 0.0).map(|t| -t.amount).sum();

@@ -1,6 +1,7 @@
 //! Relay: an issue tracker. Projects, a filterable list or a board, an
 //! issue detail sheet and a new-issue dialog.
 
+use super::Fit;
 use lumen::{Align, KanbanCard, KanbanCol, ListRow, Placement, TimelineItem, Toast, Tone, Ui, ViewMode};
 
 const STATUS: [&str; 4] = ["Backlog", "Todo", "In progress", "Done"];
@@ -60,8 +61,9 @@ impl Default for State {
 }
 
 pub fn view(ui: &mut Ui, s: &mut State) {
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        ui.sidebar().width(212.0).show(|ui| {
+        ui.sidebar().width(212.0).collapsed(fit.rail()).show(|ui| {
             ui.nav_header("R", "Relay");
             ui.nav_section("Projects");
             for (i, (icon, name)) in [("layers", "lumen"), ("globe", "Website"), ("shield", "Vault")].iter().enumerate() {
@@ -79,23 +81,34 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             ui.nav_item("flame", "High priority");
             ui.nav_item("calendar-clock", "This cycle");
         });
-        ui.column().fill().pad(20).gap(14).show(|ui| main(ui, s));
+        let pad = if fit == Fit::Narrow { 16.0 } else { 20.0 };
+        ui.column().fill().pad(pad).gap(14).show(|ui| main(ui, s, fit));
     });
-    detail(ui, s);
+    detail(ui, s, fit);
     new_issue(ui, s);
 }
 
-fn main(ui: &mut Ui, s: &mut State) {
+fn main(ui: &mut Ui, s: &mut State, fit: Fit) {
+    let views = [ViewMode::new("list", "List"), ViewMode::new("kanban", "Board")];
     ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
         ui.heading("lumen").level(2);
         let done = s.issues.iter().filter(|x| x.status == 3).count();
         ui.badge(format!("{done} of {} done", s.issues.len()), Tone::Success);
         ui.spacer();
-        ui.view_switcher("rel_view", &[ViewMode::new("list", "List"), ViewMode::new("kanban", "Board")], &mut s.view);
-        if ui.button("New issue").primary().icon("plus").clicked() {
-            s.new_open = true;
+        if fit == Fit::Narrow {
+            if ui.icon_button("plus").primary().tooltip("New issue").clicked() {
+                s.new_open = true;
+            }
+        } else {
+            ui.view_switcher("rel_view", &views, &mut s.view);
+            if ui.button("New issue").primary().icon("plus").clicked() {
+                s.new_open = true;
+            }
         }
     });
+    if fit == Fit::Narrow {
+        ui.view_switcher("rel_view", &views, &mut s.view);
+    }
     let total = s.issues.len().max(1) as f32;
     let done = s.issues.iter().filter(|x| x.status == 3).count() as f32;
     ui.progress(Some(done / total));
@@ -108,7 +121,15 @@ fn main(ui: &mut Ui, s: &mut State) {
             .map(|x| KanbanCard::new(x.key.clone(), x.status, x.title.clone()).tag(PRIORITY[x.priority].0, PRIORITY[x.priority].1).assignee(PEOPLE[x.assignee].0).meta(x.key.clone()))
             .collect();
         ui.scroll("board").show(|ui| {
-            if let Some((card, col)) = ui.kanban("rel_board", &cols, &mut cards) {
+            let moved = if fit == Fit::Narrow {
+                // Four columns don't fit a phone: they keep a usable width
+                // and the board scrolls sideways.
+                let row = lumen::layout::Style { width: lumen::Size::FILL, ..Default::default() };
+                ui.scroll_row("board_x", row, |ui| ui.column().width(4.0 * 210.0).show(|ui| ui.kanban("rel_board", &cols, &mut cards)).inner).0
+            } else {
+                ui.kanban("rel_board", &cols, &mut cards)
+            };
+            if let Some((card, col)) = moved {
                 s.issues[card].status = col;
                 ui.toast(Toast::new(format!("{} moved to {}", s.issues[card].key, STATUS[col])));
             }
@@ -116,7 +137,7 @@ fn main(ui: &mut Ui, s: &mut State) {
         return;
     }
 
-    ui.row().fill_width().gap(6).align(Align::Center).show(|ui| {
+    ui.row().fill_width().gap(6).wrap().align(Align::Center).show(|ui| {
         for (i, st) in STATUS.iter().enumerate() {
             let n = s.issues.iter().filter(|x| x.status == i).count();
             ui.chip(&format!("{st} {n}"), &mut s.show[i]);
@@ -138,20 +159,25 @@ fn main(ui: &mut Ui, s: &mut State) {
     let mut sel = s.selected.and_then(|i| visible.iter().position(|&v| v == i));
     ui.scroll("issues").show(|ui| {
         let out = ui.list_view("issues", &rows, &mut sel);
-        if out.activated.is_some() {
+        // On a phone a tap opens the issue.
+        if out.activated.is_some() || (fit == Fit::Narrow && out.clicked.is_some()) {
             s.detail = true;
         }
     });
     s.selected = sel.map(|i| visible[i]);
-    ui.label("Double-click an issue, or press Enter, to open it.").muted().small();
+    if fit != Fit::Narrow {
+        ui.label("Double-click an issue, or press Enter, to open it.").muted().small();
+    }
 }
 
-fn detail(ui: &mut Ui, s: &mut State) {
+fn detail(ui: &mut Ui, s: &mut State, fit: Fit) {
     let Some(i) = s.selected else { return };
     let mut open = s.detail;
     let key = s.issues[i].key.clone();
     let title = s.issues[i].title.clone();
-    ui.sheet("issue", &mut open).side(Placement::Right).size(420.0).title(key.clone()).description(title).show(|ui| {
+    // A phone gets a bottom sheet over most of the screen.
+    let (side, size) = if fit == Fit::Narrow { (Placement::Bottom, (ui.screen_size().y * 0.85).round()) } else { (Placement::Right, 420.0) };
+    ui.sheet("issue", &mut open).side(side).size(size).title(key.clone()).description(title).show(|ui| {
         let x = &mut s.issues[i];
         ui.label(x.body);
         ui.select(&mut x.status, &[(0usize, "Backlog"), (1, "Todo"), (2, "In progress"), (3, "Done")]).label("Status");

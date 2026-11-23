@@ -2,7 +2,7 @@
 
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, NodeId, Size, Style};
-use crate::math::{Corners, Sides};
+use crate::math::{vec2, Corners, Sides};
 use crate::theme::{Shadow, TextRole, Token};
 use crate::ui::{Sense, Shown, Ui};
 use crate::Color;
@@ -181,6 +181,7 @@ pub struct Settings<'u> {
 
 impl Settings<'_> {
     /// A row: title and description on the left, `control` on the right.
+    /// When both don't fit (a phone), the control moves under the text.
     pub fn row(&mut self, title: &str, description: &str, control: impl FnOnce(&mut Ui)) -> &mut Self {
         self.row_with(|ui| {
             let c = ui.color(Token::Foreground);
@@ -205,7 +206,8 @@ impl Settings<'_> {
             Style {
                 dir: Dir::Row,
                 width: Size::FILL,
-                gap: 16.0,
+                gap: 12.0,
+                wrap: true,
                 align: Align::Center,
                 pad: Sides { top: if first { 0.0 } else { 12.0 }, bottom: 12.0, ..Default::default() },
                 ..Default::default()
@@ -216,7 +218,8 @@ impl Settings<'_> {
             false,
             None,
         );
-        ui.begin(Style { width: Size::FILL, gap: 2.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        // The text keeps at least this much room before the control wraps.
+        ui.begin(Style { width: Size::FILL, min: vec2(180.0, 0.0), gap: 2.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         left(ui);
         ui.end();
         control(ui);

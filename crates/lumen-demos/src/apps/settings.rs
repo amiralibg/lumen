@@ -84,9 +84,11 @@ pub fn view(ui: &mut Ui, s: &mut State) {
     };
     s.theme.get_or_insert(0);
     s.look.get_or_insert(look_now);
+    let fit = super::Fit::of(ui);
     ui.row().fill().show(|ui| {
-        sidebar(ui, s);
-        ui.scroll("settings_pane").pad(28.0).gap(18.0).show(|ui| {
+        sidebar(ui, s, fit);
+        let pad = if fit == super::Fit::Narrow { 16.0 } else { 28.0 };
+        ui.scroll("settings_pane").pad(pad).gap(18.0).show(|ui| {
             // The pane fades and rises in when it changes.
             let t = (((ui.time() - s.pane_born) / 0.28).clamp(0.0, 1.0)) as f32;
             let e = if ui.reduced_motion() { 1.0 } else { lumen::Ease::Out.apply(t) };
@@ -98,12 +100,19 @@ pub fn view(ui: &mut Ui, s: &mut State) {
     });
 }
 
-fn sidebar(ui: &mut Ui, s: &mut State) {
-    ui.sidebar().width(220.0).show(|ui| {
+fn sidebar(ui: &mut Ui, s: &mut State, fit: super::Fit) {
+    // Only a phone needs the icon rail; the full sidebar holds the search.
+    let rail = fit == super::Fit::Narrow;
+    if rail {
+        s.search.clear();
+    }
+    ui.sidebar().width(220.0).collapsed(rail).show(|ui| {
         ui.nav_header("P", "Preferences");
-        ui.column().pad((8.0, 4.0)).fill_width().show(|ui| {
-            ui.search_field(&mut s.search).placeholder("Search settings").fill_width().show();
-        });
+        if !rail {
+            ui.column().pad((8.0, 4.0)).fill_width().show(|ui| {
+                ui.search_field(&mut s.search).placeholder("Search settings").fill_width().show();
+            });
+        }
         let q = s.search.trim().to_lowercase();
         let mut any = false;
         for (p, icon, title, words) in PANES {
