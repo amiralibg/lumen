@@ -759,14 +759,14 @@ fn view(ui: &mut Ui, s: &mut State) {
 fn component(ui: &mut Ui, s: &mut State, demo: &str) {
     match demo {
         "button" => {
-            ui.row().gap(10).align(Align::Center).show(|ui| {
+            ui.row().gap(10).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.button("Deploy").primary().icon("rocket");
                 ui.button("Preview").icon("eye");
                 ui.button("Cancel").ghost();
                 ui.button("Delete").danger().icon("trash-2");
                 ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");
             });
-            ui.row().gap(10).align(Align::Center).show(|ui| {
+            ui.row().gap(10).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.button("Small").small();
                 ui.button("Medium");
                 ui.button("Large").large().primary();
@@ -1571,7 +1571,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "date-picker" => {
-            ui.row().gap(16).align(Align::Start).show(|ui| {
+            ui.row().gap(16).wrap().align(Align::Start).show(|ui| {
                 let r = ui.date_picker("Due date", &mut s.date);
                 if std::mem::take(&mut s.force_open) {
                     ui.set_popover_open(r.id, true);
