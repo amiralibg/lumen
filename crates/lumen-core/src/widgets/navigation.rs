@@ -387,7 +387,7 @@ impl<'u> Pagination<'u> {
             let txt = format!("Page {} of {total}", *self.page + 1);
             let g = ui.galley(&txt, &st);
             ui.leaf(
-                Style::default(),
+                Style { min: vec2((g.width + 16.0).max(96.0), 0.0), ..Default::default() },
                 vec2((g.width + 16.0).max(96.0), h_px),
                 None,
                 Sense::NONE,

@@ -1162,7 +1162,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
         }
         "chips" => {
             ui.column().gap(12).align(Align::Center).show(|ui| {
-                ui.row().gap(8).show(|ui| {
+                ui.row().gap(8).wrap().justify(Justify::Center).show(|ui| {
                     for (i, l) in ["arm64", "gpu", "docker", "nightly", "macos-14"].iter().enumerate() {
                         ui.chip(l, &mut s.labels[i]);
                     }

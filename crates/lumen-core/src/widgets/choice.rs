@@ -47,8 +47,10 @@ impl Ui {
         let check_w = 14.0 + 4.0;
         let h_px = 28.0;
         let w = 11.0 * 2.0 + g.width + check_w * t.clamp(0.0, 1.0);
+        // The label can't scale, so the width is a floor: a narrow row must
+        // wrap or overflow, never squeeze the pill under its text.
         let node = self.leaf(
-            Style::default(),
+            Style { min: vec2(w, h_px), ..Default::default() },
             vec2(w, h_px),
             Some(id),
             Sense::CLICK,
@@ -205,7 +207,7 @@ impl Ui {
             let g = self.galley(label, &st);
             let radius = m.radius;
             self.leaf(
-                Style { width: Size::FILL, ..Default::default() },
+                Style { width: Size::FILL, min: vec2(g.width + 16.0, 0.0), ..Default::default() },
                 vec2(g.width + 16.0, m.height),
                 Some(oid),
                 Sense::CLICK,

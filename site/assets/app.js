@@ -617,10 +617,28 @@ function route() {
     const on = l.closest(".links") ? seg === (a || "") : href === here;
     on ? l.setAttribute("aria-current", "page") : l.removeAttribute("aria-current");
   });
+  sideIndicator();
   $(".side a[aria-current]")?.scrollIntoView({ block: "nearest" });
   $("#links").classList.remove("open");
   scrollTo(0, 0);
   view.focus({ preventScroll: true });
+}
+
+// The sidebar re-renders on every route, so the pill starts where the last
+// page left it (same nav only) and springs to the new item.
+let lastInd = null;
+function sideIndicator() {
+  const side = $("#side"), cur = side && $("a[aria-current]", side);
+  if (!side || !cur) { lastInd = null; return; }
+  const ind = document.createElement("span");
+  ind.className = "ind"; ind.setAttribute("aria-hidden", "true");
+  side.prepend(ind); side.classList.add("has-ind");
+  const nav = $("h4", side)?.textContent, to = { nav, y: cur.offsetTop, h: cur.offsetHeight };
+  const place = (p) => { ind.style.transform = `translateY(${p.y}px)`; ind.style.height = p.h + "px"; ind.style.opacity = 1; };
+  if (lastInd && lastInd.nav === nav && lastInd.y !== to.y) {
+    ind.style.transition = "none"; place(lastInd); ind.offsetWidth; ind.style.transition = ""; place(to);
+  } else place(to);
+  lastInd = to;
 }
 
 // ----------------------------------------------------------------- palette

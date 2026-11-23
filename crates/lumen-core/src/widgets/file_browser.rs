@@ -276,7 +276,7 @@ impl Ui {
             let st = self.text_style(TextRole::Label);
             let g = self.galley(label, &st);
             self.leaf(
-                Style { width, ..Default::default() },
+                Style { width, min: vec2(g.width + 20.0, 0.0), ..Default::default() },
                 vec2(g.width + 20.0, 30.0),
                 Some(hid),
                 Sense::CLICK,

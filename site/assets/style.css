@@ -129,7 +129,7 @@ h1, h2, h3 { text-wrap: balance; }
 .scenes button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .scenes button[aria-selected="true"] { color: var(--text); }
 .seg-thumb { position: absolute; z-index: -1; top: 4px; bottom: 4px; left: 0; border-radius: 10px; background: var(--glass-2); box-shadow: inset 0 0 0 1px var(--line); transition: transform var(--d) var(--spring), width var(--d) var(--spring); }
-.stage { margin: 0 auto; }
+.stage { margin: 0 auto; width: 100%; min-width: 0; }
 .bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .bar .grow { flex: 1; }
 .tabs2 { display: inline-flex; padding: 3px; border-radius: 10px; position: relative; isolation: isolate; }
@@ -219,13 +219,17 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 
 /* ------------------------------------------------------------- docs */
 .docs { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 48px; max-width: var(--wrap); margin: 0 auto; padding: 40px 16px 120px; }
-.side { position: sticky; top: 84px; align-self: start; max-height: calc(100vh - 100px); overflow-y: auto; padding: 14px 10px; border-radius: 16px; font-size: 14px; scrollbar-width: thin; }
+.side { position: sticky; top: 84px; align-self: start; max-height: calc(100vh - 100px); overflow-y: auto; padding: 14px 10px; border-radius: 16px; font-size: 14px; scrollbar-width: thin; isolation: isolate; }
 .side h4 { margin: 14px 10px 6px; font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); }
 .side h4:first-child { margin-top: 2px; }
 .side a { display: block; padding: 5px 10px; border-radius: 8px; color: var(--text-2); transition: color var(--d-fast) var(--ease), background-color var(--d-fast) var(--ease); }
 @media (hover: hover) { .side a:hover { color: var(--text); background: var(--hover); } }
-.side a[aria-current] { color: var(--text); background: color-mix(in oklab, var(--accent) 16%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
-@media (max-width: 900px) { .docs { grid-template-columns: 1fr; gap: 0; } .side { display: none; position: static; max-height: none; margin-bottom: 24px; } .side.open { display: block; } }
+.side a[aria-current] { color: var(--text); background: var(--glass-2); box-shadow: inset 0 0 0 1px var(--line), inset 0 1px 0 var(--hi); }
+/* With JS, one shared pill slides between items instead of each link painting its own. */
+.side .ind { position: absolute; z-index: -1; left: 10px; right: 10px; top: 0; height: 0; border-radius: 8px; background: var(--glass-2); box-shadow: inset 0 0 0 1px var(--line), inset 0 1px 0 var(--hi), 0 1px 2px rgb(0 0 0 / 0.12); opacity: 0; pointer-events: none; transition: transform var(--d) var(--spring), height var(--d) var(--spring), opacity var(--d-fast) var(--ease); }
+.side.has-ind a[aria-current] { background: none; box-shadow: none; }
+@media (hover: hover) { .side.has-ind a[aria-current]:hover { background: none; } }
+@media (max-width: 900px) { .docs { grid-template-columns: 1fr; gap: 0; } .side { display: none; position: relative; max-height: none; margin-bottom: 24px; } .side.open { display: block; } }
 .doc { min-width: 0; max-width: 860px; }
 .doc.wide { max-width: none; }
 .crumb { font: 12px var(--mono); color: var(--text-3); margin: 0; letter-spacing: 0.04em; }
