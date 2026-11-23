@@ -214,9 +214,26 @@ function demoSrc(name, { dark = isDark(), look = S.look } = {}) {
 const poster = (name, dark) => `img/c-${name}-${dark ? "dark" : "light"}.png`;
 // One live demo. It loads when it nears the viewport and unloads when it
 // leaves, so a page never runs more than a few WebAssembly instances.
+// Desktop compositions (scenes, the bento) don't reflow like apps do: on a
+// narrow screen they render at this width and scale down as a miniature.
+const minWidth = (name) => (/^(bento|hero)$/.test(name) ? 960 : /^(looks|vault|scene-)/.test(name) ? 760 : 0);
+const fitRO = new ResizeObserver((es) => es.forEach((e) => fitLive(e.target)));
+function fitLive(el) {
+  const minw = +el.dataset.minw, h = +el.dataset.h, f = $("iframe", el);
+  // Only on narrow screens: a slight scale on desktop would just blur text.
+  const s = el.clientWidth < 720 ? Math.min(1, el.clientWidth / minw) : 1;
+  if (s < 1 && !document.fullscreenElement) {
+    el.style.height = Math.round(h * s) + "px";
+    Object.assign(f.style, { width: minw + "px", height: h + "px", transform: `scale(${s})`, transformOrigin: "0 0" });
+  } else {
+    el.style.height = document.fullscreenElement ? "" : h + "px";
+    Object.assign(f.style, { width: "", height: "", transform: "", transformOrigin: "" });
+  }
+}
 function live(name, { height, dark, look } = {}) {
   const h = height || HEIGHTS[name] || 320;
-  return `<div class="live" data-demo="${name}" ${dark !== undefined ? `data-dark="${dark ? 1 : 0}"` : ""} ${look ? `data-look="${look}"` : ""} style="height:${h}px">
+  const minw = minWidth(name);
+  return `<div class="live" data-demo="${name}" data-h="${h}" ${minw ? `data-minw="${minw}"` : ""} ${dark !== undefined ? `data-dark="${dark ? 1 : 0}"` : ""} ${look ? `data-look="${look}"` : ""} style="height:${h}px">
     <img class="poster" alt="" src="${poster(name, dark ?? isDark())}" onerror="this.style.display='none'">
     <span class="loading">Loading live demo</span>
     <iframe title="${esc(name)}: live lumen demo" tabindex="0"></iframe></div>`;
@@ -238,10 +255,20 @@ const io = new IntersectionObserver((es) => es.forEach((e) => {
   else if (!e.isIntersecting && el._on) { el._on = false; el.classList.remove("ready"); f.removeAttribute("src"); }
 }), { rootMargin: "300px 0px" });
 addEventListener("message", (e) => {
+  if (e.data === "lumen-lost") {
+    // Out of GPU contexts: back to the poster, then try again if still visible.
+    $$(".live iframe").forEach((f) => {
+      if (f.contentWindow !== e.source) return;
+      const l = f.closest(".live");
+      l.classList.remove("ready"); l._on = false; f.removeAttribute("src");
+      setTimeout(() => { io.unobserve(l); io.observe(l); }, 800);
+    });
+    return;
+  }
   if (e.data !== "lumen-ready") return;
   $$(".live iframe").forEach((f) => { if (f.contentWindow === e.source) f.closest(".live").classList.add("ready"); });
 });
-function activate(el) { $$(".live", el).forEach((l) => io.observe(l)); }
+function activate(el) { $$(".live", el).forEach((l) => { io.observe(l); if (l.dataset.minw) fitRO.observe(l); }); }
 
 // A stage: a framed live demo with a toolbar (preview/code, look, side by
 // side, reset, full screen, open in a window).
