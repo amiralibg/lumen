@@ -588,7 +588,8 @@ impl<'u> ImageFrame<'u> {
                             Some(ref c) => format!("{title_cl} · {c}"),
                             None => title_cl.clone(),
                         };
-                        let g = cx.galley(&lbl, &st_cap);
+                        // Shortened to stop short of the zoom icon.
+                        let g = cx.galley_fit(&lbl, &st_cap, bar.width() - 10.0 - 34.0);
                         cx.painter.text(cx.text, &g, vec2(bar.min.x + 10.0, bar.center().y - g.height * 0.5), fg_c);
                         cx.icon(if zoomed { "zoom-out" } else { "zoom-in" }, vec2(bar.max.x - 16.0, bar.center().y), 14.0, muted_c);
                     }

@@ -878,11 +878,17 @@ impl Ui {
                 let g_sp = cx.galley("Span", &st_hdr);
                 cx.painter.text(cx.text, &g_sp, vec2(r.min.x + 12.0, r.min.y + (ruler_h - g_sp.height) * 0.5), muted_c);
 
-                // 5 ruler ticks (0%, 25%, 50%, 75%, 100%).
+                // 5 ruler ticks (0%, 25%, 50%, 75%, 100%). Labels thin out to
+                // halves, then the ends, when a quarter is narrower than one.
+                let widest = cx.galley(&format!("{:.0} ms", total_ms.round()), &st_hdr).width + 10.0;
+                let every = if tl_w / 4.0 >= widest { 1 } else if tl_w / 2.0 >= widest { 2 } else { 4 };
                 for ti in 0..=4 {
                     let frac = ti as f32 / 4.0;
                     let x = tl_x0 + tl_w * frac;
                     cx.painter.rect(Rect::from_xywh(cx.painter.snap(x), r.min.y + ruler_h, 1.0, r.height() - ruler_h - 2.0), grid_c);
+                    if ti % every != 0 {
+                        continue;
+                    }
                     let lbl = format!("{:.0} ms", (total_ms * frac).round());
                     let g = cx.galley(&lbl, &st_hdr);
                     let lx = if ti == 4 { x - g.width } else if ti == 0 { x + 3.0 } else { x - g.width * 0.5 };
