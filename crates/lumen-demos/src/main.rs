@@ -1819,9 +1819,8 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 RingSpec::new("Memory", 0.62, "99.2 / 160 GB"),
                 RingSpec::new("SLO budget", 0.94, "99.96% uptime"),
             ];
-            ui.row().gap(36).align(Align::Center).show(|ui| {
+            ui.row().gap(36).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.activity_rings("cluster_rings", &rings, 132.0);
-                ui.divider();
                 ui.progress_ring("cache_hit", 0.92).size(104.0).thickness(9.0).label("Cache hit").show();
             });
         }

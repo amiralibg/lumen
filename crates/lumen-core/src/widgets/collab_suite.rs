@@ -747,6 +747,24 @@ impl Ui {
         let sh_c = self.color(Token::ShadowInk);
         let mut triggered = None;
 
+        // Hints that don't fit drop off the end (last frame's widths), so a
+        // narrow bar keeps its context label and the first shortcuts.
+        let bar_w = self.rect_of(id).map(|r| r.width());
+        let mut shown = hints.len();
+        if let Some(bar_w) = bar_w {
+            let widths = &self.mem::<ShortcutBarMem>(id).widths;
+            let avail = bar_w - 24.0 - 96.0;
+            let mut used = 0.0;
+            shown = 0;
+            for i in 0..hints.len() {
+                used += widths.get(i).copied().unwrap_or(0.0) + 10.0;
+                if used > avail {
+                    break;
+                }
+                shown = i + 1;
+            }
+        }
+
         self.begin(
             Style { dir: Dir::Row, width: Size::FILL, pad: Sides::xy(12.0, 7.0), gap: 10.0, align: Align::Center, ..Default::default() },
             Some(id),
@@ -761,8 +779,15 @@ impl Ui {
 
         self.text_leaf(context_label.to_owned(), self.text_style(TextRole::Caption), self.color(Token::TextMuted), false, true, Style { width: Size::FILL, ..Default::default() });
 
-        for (hi, h) in hints.iter().enumerate() {
+        for (hi, h) in hints.iter().enumerate().take(shown) {
             let hid = id.with(("sh", hi));
+            if let Some(w) = self.rect_of(hid).map(|r| r.width()) {
+                let m = self.mem::<ShortcutBarMem>(id);
+                if m.widths.len() <= hi {
+                    m.widths.resize(hi + 1, 0.0);
+                }
+                m.widths[hi] = w;
+            }
             let ix = self.interact(hid, Sense::CLICK, false);
             if ix.clicked {
                 triggered = Some(hi);
@@ -1235,4 +1260,10 @@ impl Ui {
         self.end();
         changed
     }
+}
+
+#[derive(Default)]
+struct ShortcutBarMem {
+    /// Each hint's width when last shown.
+    widths: Vec<f32>,
 }

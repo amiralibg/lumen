@@ -1254,12 +1254,20 @@ impl Ui {
 
     /// Add a text leaf.
     pub fn text_leaf(&mut self, text: impl Into<String>, style: TextStyle, color: Color, wrap: bool, truncate: bool, layout: Style) -> NodeId {
-        let k = self.leaves.len() as u32;
-        self.leaves.push(TextLeaf { text: text.into(), style, color, wrap, truncate, align: TextAlign::Start });
+        let text = text.into();
         let mut layout = layout;
+        if !wrap && !truncate && !matches!(layout.width, Size::Fixed(_)) {
+            // One line that neither wraps nor shortens: its width is its
+            // min-content (CSS `nowrap`). Squeezing it only draws it over
+            // the next item.
+            let w = self.text.layout(&text, &style, None, TextAlign::Start).width.ceil();
+            layout.min.x = layout.min.x.max(w);
+        }
         if truncate {
             layout.min.x = layout.min.x.max(0.0);
         }
+        let k = self.leaves.len() as u32;
+        self.leaves.push(TextLeaf { text, style, color, wrap, truncate, align: TextAlign::Start });
         self.push_node(layout, Content::Measured(k), NodeExtra::default())
     }
 

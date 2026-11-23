@@ -510,7 +510,7 @@ impl<'u> Keycap<'u> {
         let skirt_h = if self.large { 2.5 } else { 1.75 };
 
         ui.leaf(
-            Style::default(),
+            Style { min: vec2(w_px, h_px), ..Default::default() },
             vec2(w_px, h_px),
             Some(id),
             sense,
