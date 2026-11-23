@@ -3512,10 +3512,12 @@ struct Params {
     reduced: bool,
     /// Print clipped and overlapping text (with --screenshot).
     check: bool,
+    /// `--click X,Y` (repeatable): clicks before the screenshot.
+    clicks: Vec<lumen::Vec2>,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![] };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3562,6 +3564,14 @@ fn params() -> Params {
                 "--embed" => p.embed = true,
                 "--open" => p.open = true,
                 "--check" => p.check = true,
+                "--click" => {
+                    i += 1;
+                    if let Some((x, y)) = args.get(i).and_then(|v| v.split_once(',')) {
+                        if let (Ok(x), Ok(y)) = (x.parse(), y.parse()) {
+                            p.clicks.push(lumen::vec2(x, y));
+                        }
+                    }
+                }
                 "--scale" => {
                     p.scale = next.parse().unwrap_or(2.0);
                     i += 1;
@@ -3600,7 +3610,11 @@ fn main() {
     }
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(out) = &p.screenshot {
-        let steps = if p.open { open_steps(&p.demo) } else { vec![] };
+        let mut steps = if p.open { open_steps(&p.demo) } else { vec![] };
+        for &c in &p.clicks {
+            steps.push(lumen::ShotStep::Click(c));
+            steps.push(lumen::ShotStep::Wait(0.6));
+        }
         let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
         match lumen::screenshot(out, &shot, &mut state, view) {
             Ok(()) => println!("wrote {out}"),

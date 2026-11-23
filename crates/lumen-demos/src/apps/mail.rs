@@ -1,6 +1,7 @@
 //! Postbox: a three-pane mail client. Folders, a searchable message list,
 //! a reading pane with a quick reply, and a compose dialog.
 
+use super::{back, Fit};
 use lumen::{Align, ListRow, Toast, Tone, Ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -38,6 +39,8 @@ pub struct State {
     to: String,
     subject: String,
     body: String,
+    /// Narrow layout: the message is open instead of the list.
+    reading: bool,
 }
 
 fn seed() -> Vec<Mail> {
@@ -75,6 +78,7 @@ impl Default for State {
             unread_only: 0,
             reply: String::new(),
             compose: false,
+            reading: false,
             to: String::new(),
             subject: String::new(),
             body: String::new(),
@@ -106,9 +110,21 @@ pub fn view(ui: &mut Ui, s: &mut State) {
         s.selected = visible.first().copied();
     }
 
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        sidebar(ui, s);
-        ui.column().width(340.0).fill_height().pad(16).gap(12).bg(lumen::Token::Surface).show(|ui| {
+        sidebar(ui, s, fit);
+        // Narrow: the list or the open message, one at a time.
+        if fit == Fit::Narrow && s.reading && s.selected.is_some() {
+            reading_pane(ui, s, fit);
+            return;
+        }
+        let list = ui.column().fill_height().pad(16).gap(12).bg(lumen::Token::Surface);
+        let list = match fit {
+            Fit::Wide => list.width(340.0),
+            Fit::Medium => list.width(290.0),
+            Fit::Narrow => list.fill_width(),
+        };
+        list.show(|ui| {
             ui.row().fill_width().align(Align::Center).gap(8).show(|ui| {
                 ui.heading(folder_name(s.folder)).level(3);
                 ui.spacer();
@@ -132,6 +148,9 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                 let mut sel = s.selected.and_then(|i| visible.iter().position(|&v| v == i));
                 ui.scroll("mail_list").show(|ui| {
                     let out = ui.list_view("mail", &rows, &mut sel);
+                    if out.clicked.is_some() || out.activated.is_some() {
+                        s.reading = true;
+                    }
                     if let Some(i) = out.starred {
                         let m = &mut s.mails[visible[i]];
                         m.starred = !m.starred;
@@ -140,7 +159,9 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                 s.selected = sel.map(|i| visible[i]);
             }
         });
-        reading_pane(ui, s);
+        if fit != Fit::Narrow {
+            reading_pane(ui, s, fit);
+        }
     });
 
     compose(ui, s);
@@ -156,13 +177,18 @@ fn folder_name(f: Folder) -> &'static str {
     }
 }
 
-fn sidebar(ui: &mut Ui, s: &mut State) {
+fn sidebar(ui: &mut Ui, s: &mut State, fit: Fit) {
     let count = |f: Folder, unread: bool| s.mails.iter().filter(|m| in_folder(m, f) && (!unread || m.unread)).count() as u32;
     let counts = [count(Folder::Inbox, true), count(Folder::Starred, false), count(Folder::Sent, false), count(Folder::Archive, false), count(Folder::Trash, false)];
-    ui.sidebar().width(212.0).show(|ui| {
+    ui.sidebar().width(212.0).collapsed(fit.rail()).show(|ui| {
         ui.nav_header("P", "Postbox");
         ui.column().pad((8.0, 6.0)).fill_width().show(|ui| {
-            if ui.button("Compose").primary().icon("pen-line").full_width().clicked() {
+            let compose = if fit.rail() {
+                ui.icon_button("pen-line").primary().tooltip("Compose").clicked()
+            } else {
+                ui.button("Compose").primary().icon("pen-line").full_width().clicked()
+            };
+            if compose {
                 s.compose = true;
             }
         });
@@ -175,6 +201,7 @@ fn sidebar(ui: &mut Ui, s: &mut State) {
             if item.clicked() {
                 s.folder = f;
                 s.selected = None;
+                s.reading = false;
             }
         }
         ui.nav_section("Labels");
@@ -184,12 +211,16 @@ fn sidebar(ui: &mut Ui, s: &mut State) {
     });
 }
 
-fn reading_pane(ui: &mut Ui, s: &mut State) {
-    ui.column().fill().pad(20).gap(16).show(|ui| {
+fn reading_pane(ui: &mut Ui, s: &mut State, fit: Fit) {
+    let pad = if fit == Fit::Narrow { 16.0 } else { 20.0 };
+    ui.column().fill().pad(pad).gap(16).show(|ui| {
         let Some(i) = s.selected else {
             ui.empty_state("mail-open", "No message selected").description("Pick a message from the list to read it here.").show();
             return;
         };
+        if fit == Fit::Narrow && back(ui, folder_name(s.folder)) {
+            s.reading = false;
+        }
         if s.mails[i].unread {
             s.mails[i].unread = false;
         }
@@ -250,10 +281,12 @@ fn reading_pane(ui: &mut Ui, s: &mut State) {
         });
         match action {
             Some("archive") => {
+                s.reading = false;
                 s.mails[i].folder = Folder::Archive;
                 ui.toast(Toast::new("Conversation archived").description(m.subject.clone()));
             }
             Some("trash") => {
+                s.reading = false;
                 s.mails[i].folder = Folder::Trash;
                 ui.toast(Toast::new("Moved to Trash").description(m.subject.clone()).danger());
             }

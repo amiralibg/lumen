@@ -75,6 +75,9 @@ pub struct ListOut {
     pub changed: bool,
     /// A row was opened: double click, or Enter on the selection.
     pub activated: Option<usize>,
+    /// A row was clicked, even the one already selected (a phone layout
+    /// opens on a single tap).
+    pub clicked: Option<usize>,
     /// A row's star was toggled.
     pub starred: Option<usize>,
 }
@@ -122,6 +125,7 @@ impl Ui {
                 if *selected != Some(i) {
                     out.changed = true;
                 }
+                out.clicked = Some(i);
                 *selected = Some(i);
                 if ix.click_count >= 2 {
                     out.activated = Some(i);
