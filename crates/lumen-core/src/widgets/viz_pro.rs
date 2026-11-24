@@ -360,13 +360,40 @@ impl Ui {
                     cx.painter.fill_between(&upper, &lower, c_src.with_alpha(alpha), c_dst.with_alpha(alpha));
                 }
 
-                // Draw node bars & labels on top.
+                // Draw node bars & labels on top. A label points into the gap
+                // beside its column; when it faces a label from the other side
+                // at the same height, each gets half the gap and ends in "…".
+                let on_left_of = |i: usize| stage[i] == max_stage;
+                let lbl_w: Vec<f32> = (0..n).map(|i| cx.galley(&nodes_vec[i], &st_lbl).width.max(cx.galley(&compact(node_val[i]), &st_val).width)).collect();
+                let lbl_max: Vec<f32> = (0..n)
+                    .map(|i| {
+                        let nr = node_rects[i];
+                        let mut max = f32::INFINITY;
+                        for j in 0..n {
+                            if on_left_of(i) == on_left_of(j) {
+                                continue;
+                            }
+                            let nj = node_rects[j];
+                            // The facing label's column is beside this one,
+                            // across the gap the two labels share.
+                            let (l, rr) = if on_left_of(i) { (nj, nr) } else { (nr, nj) };
+                            let gap = rr.min.x - l.max.x;
+                            if gap <= 0.0 || (nr.center().y - nj.center().y).abs() > 34.0 {
+                                continue;
+                            }
+                            if lbl_w[i] + lbl_w[j] + 32.0 > gap {
+                                max = max.min((gap * 0.5 - 12.0).max(24.0));
+                            }
+                        }
+                        max
+                    })
+                    .collect();
                 for i in 0..n {
                     let nr = node_rects[i];
                     let col = palette[i % palette.len()];
                     cx.painter.rrect(nr, Corners::all(4.0), col, 0.0, Color::TRANSPARENT);
 
-                    let g_n = cx.galley(&nodes_vec[i], &st_lbl);
+                    let g_n = cx.galley_fit(&nodes_vec[i], &st_lbl, lbl_max[i]);
                     let val_s = compact(node_val[i]);
                     let g_v = cx.galley(&val_s, &st_val);
                     let on_left = stage[i] == max_stage;
@@ -440,23 +467,30 @@ impl Ui {
                 };
 
                 // Top summary header + top-right Less [][][][][] More legend!
+                // The legend gives way to the header when both don't fit.
                 let hdr_txt = format!("{total} contributions in the last {} weeks", weeks_vec.len());
-                let g_hdr = cx.galley(&hdr_txt, &st_strong);
+                let g_more = cx.galley("More", &st_cap);
+                let g_less = cx.galley("Less", &st_cap);
+                let legend_w = g_less.width + 3.0 + 5.0 * 13.0 + 3.0 + g_more.width;
+                let full_w = r.width() - pad * 2.0;
+                let show_legend = cx.galley(&hdr_txt, &st_strong).width + 16.0 + legend_w <= full_w;
+                let hdr_w = if show_legend { full_w - legend_w - 16.0 } else { full_w };
+                let g_hdr = cx.galley_fit(&hdr_txt, &st_strong, hdr_w);
                 cx.painter.text(cx.text, &g_hdr, vec2(r.min.x + pad, r.min.y + 14.0), fg_c);
 
-                let leg_y = r.min.y + 17.0;
-                let g_more = cx.galley("More", &st_cap);
-                let mut rx = r.max.x - pad - g_more.width;
-                cx.painter.text(cx.text, &g_more, vec2(rx, leg_y - 2.0), muted_c);
-                rx -= 6.0;
-                for step_i in (0..5).rev() {
-                    rx -= 10.0;
-                    let c = ramp(step_i as f32 / 4.0);
-                    cx.painter.rrect(Rect::from_xywh(rx, leg_y, 10.0, 10.0), Corners::all(2.5), c, 0.0, Color::TRANSPARENT);
-                    rx -= 3.0;
+                if show_legend {
+                    let leg_y = r.min.y + 17.0;
+                    let mut rx = r.max.x - pad - g_more.width;
+                    cx.painter.text(cx.text, &g_more, vec2(rx, leg_y - 2.0), muted_c);
+                    rx -= 6.0;
+                    for step_i in (0..5).rev() {
+                        rx -= 10.0;
+                        let c = ramp(step_i as f32 / 4.0);
+                        cx.painter.rrect(Rect::from_xywh(rx, leg_y, 10.0, 10.0), Corners::all(2.5), c, 0.0, Color::TRANSPARENT);
+                        rx -= 3.0;
+                    }
+                    cx.painter.text(cx.text, &g_less, vec2(rx - 3.0 - g_less.width, leg_y - 2.0), muted_c);
                 }
-                let g_less = cx.galley("Less", &st_cap);
-                cx.painter.text(cx.text, &g_less, vec2(rx - 3.0 - g_less.width, leg_y - 2.0), muted_c);
 
                 let left_lbl_w = 30.0;
                 let grid_x0 = r.min.x + pad + left_lbl_w;
@@ -564,6 +598,11 @@ impl Ui {
                 let gap = 3.0;
                 let bw = ((plot.width() - gap * (n.saturating_sub(1)) as f32) / n as f32).max(3.0);
                 let mut hov_idx: Option<(usize, Vec2)> = None;
+                // Sparse x-axis labels: a stride wide enough for the widest
+                // label, and the last bin only when it clears the one before.
+                let widest = b_vec.iter().map(|b| cx.galley(b, &st_lbl).width).fold(0.0f32, f32::max) + 8.0;
+                let stride = ((widest / (bw + gap)).ceil() as usize).max(1);
+                let mut last_right = f32::NEG_INFINITY;
 
                 for i in 0..n {
                     let bx = plot.min.x + i as f32 * (bw + gap);
@@ -575,16 +614,19 @@ impl Ui {
                         hov_idx = Some((i, vec2(bx + bw * 0.5, br.min.y)));
                     }
 
-                    // Sparse x-axis labels so they never collide.
-                    let stride = (n / 5).max(1);
                     if i % stride == 0 || i + 1 == n {
                         let g = cx.galley(&b_vec[i], &st_lbl);
                         let lx = (bx + (bw - g.width) * 0.5).clamp(r.min.x, (r.max.x - g.width).max(r.min.x));
-                        cx.painter.text(cx.text, &g, vec2(lx, plot.max.y + 6.0), muted_c);
+                        if lx >= last_right + 6.0 {
+                            cx.painter.text(cx.text, &g, vec2(lx, plot.max.y + 6.0), muted_c);
+                            last_right = lx + g.width;
+                        }
                     }
                 }
 
-                // Vertical percentile marker lines + pill flags at top.
+                // Vertical percentile marker lines + pill flags at top. A flag
+                // that would touch the previous one drops a row.
+                let mut prev_flag: Option<(Rect, u32)> = None;
                 for (mi, mk) in m_vec.iter().enumerate() {
                     let mx = plot.min.x + mk.position * plot.width();
                     let (sub_bg, strong_c) = marker_cols[mi];
@@ -597,7 +639,12 @@ impl Ui {
                     let gm = cx.galley(&mk.label, &st_lbl);
                     let pw = gm.width + 10.0;
                     let px = (mx - pw * 0.5).clamp(r.min.x + 2.0, (r.max.x - pw - 2.0).max(r.min.x));
-                    let pr = Rect::from_xywh(px, r.min.y + 2.0, pw, 18.0);
+                    let row = match prev_flag {
+                        Some((p, row)) if px < p.max.x + 4.0 => row ^ 1,
+                        _ => 0,
+                    };
+                    let pr = Rect::from_xywh(px, r.min.y + 2.0 + row as f32 * 21.0, pw, 18.0);
+                    prev_flag = Some((pr, row));
                     cx.painter.rrect(pr, Corners::all(9.0), sub_bg, 1.0, strong_c.with_alpha(0.4));
                     cx.painter.text(cx.text, &gm, vec2(pr.min.x + 5.0, pr.min.y + (18.0 - gm.height) * 0.5), strong_c);
                 }
@@ -1143,10 +1190,13 @@ impl Ui {
                     let right_x = r.max.x - 14.0 - gm_r.width;
                     cx.painter.text(cx.text, &gm_r, vec2(right_x, cy - gm_r.height * 0.5), muted_c);
 
-                    let avail_msg = (right_x - 10.0 - cur_x).max(20.0);
-                    // Long messages end in an ellipsis instead of a cut glyph.
-                    let g_msg = cx.galley_fit(&cm.message, &st_msg, avail_msg);
-                    cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
+                    // Long messages end in an ellipsis; with no room left after
+                    // the ref badges, the message is left out.
+                    let avail_msg = right_x - 10.0 - cur_x;
+                    if avail_msg >= 24.0 {
+                        let g_msg = cx.galley_fit(&cm.message, &st_msg, avail_msg);
+                        cx.painter.text(cx.text, &g_msg, vec2(cur_x, cy - g_msg.height * 0.5), fg_c);
+                    }
                 }
                 cx.painter.ring(r, Corners::all(r_card), 1.0, bd_c);
             })),

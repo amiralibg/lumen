@@ -759,14 +759,14 @@ fn view(ui: &mut Ui, s: &mut State) {
 fn component(ui: &mut Ui, s: &mut State, demo: &str) {
     match demo {
         "button" => {
-            ui.row().gap(10).align(Align::Center).show(|ui| {
+            ui.row().gap(10).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.button("Deploy").primary().icon("rocket");
                 ui.button("Preview").icon("eye");
                 ui.button("Cancel").ghost();
                 ui.button("Delete").danger().icon("trash-2");
                 ui.icon_button("copy").tooltip_shortcut("Copy", "⌘C");
             });
-            ui.row().gap(10).align(Align::Center).show(|ui| {
+            ui.row().gap(10).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.button("Small").small();
                 ui.button("Medium");
                 ui.button("Large").large().primary();
@@ -1162,7 +1162,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
         }
         "chips" => {
             ui.column().gap(12).align(Align::Center).show(|ui| {
-                ui.row().gap(8).show(|ui| {
+                ui.row().gap(8).wrap().justify(Justify::Center).show(|ui| {
                     for (i, l) in ["arm64", "gpu", "docker", "nightly", "macos-14"].iter().enumerate() {
                         ui.chip(l, &mut s.labels[i]);
                     }
@@ -1571,7 +1571,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "date-picker" => {
-            ui.row().gap(16).align(Align::Start).show(|ui| {
+            ui.row().gap(16).wrap().align(Align::Start).show(|ui| {
                 let r = ui.date_picker("Due date", &mut s.date);
                 if std::mem::take(&mut s.force_open) {
                     ui.set_popover_open(r.id, true);
@@ -1819,9 +1819,8 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 RingSpec::new("Memory", 0.62, "99.2 / 160 GB"),
                 RingSpec::new("SLO budget", 0.94, "99.96% uptime"),
             ];
-            ui.row().gap(36).align(Align::Center).show(|ui| {
+            ui.row().gap(36).wrap().justify(Justify::Center).align(Align::Center).show(|ui| {
                 ui.activity_rings("cluster_rings", &rings, 132.0);
-                ui.divider();
                 ui.progress_ring("cache_hit", 0.92).size(104.0).thickness(9.0).label("Cache hit").show();
             });
         }
@@ -2229,19 +2228,40 @@ ui.button("Ship release").primary().icon("rocket");
             });
         }
         "emoji-picker" => {
-            ui.row().gap(24).align(Align::Start).show(|ui| {
+            // Side by side when there's room; on a narrow card the message
+            // goes on top and the picker below.
+            let narrow = ui.screen_size().x < 600.0;
+            let picker = |ui: &mut Ui, msg: &mut String| {
                 ui.card().pad(12.0).show(|ui| {
                     if let Some(e) = ui.emoji_picker("demo") {
-                        s.emoji.push(' ');
-                        s.emoji.push_str(e);
+                        msg.push(' ');
+                        msg.push_str(e);
                     }
                 });
-                ui.column().gap(6).width(200.0).show(|ui| {
+            };
+            let field = |ui: &mut Ui, msg: &mut String, w: Option<f32>| {
+                let col = ui.column().gap(6);
+                let col = match w {
+                    Some(w) => col.width(w),
+                    None => col.fill_width(),
+                };
+                col.show(|ui| {
                     ui.label("Message").strong();
-                    ui.text_input(&mut s.emoji).id("emoji-msg").fill_width();
+                    ui.text_input(msg).id("emoji-msg").fill_width();
                     ui.label("Pick to append. ↑ ↓ ← → and Enter work on the grid.").muted().small();
                 });
-            });
+            };
+            if narrow {
+                ui.column().gap(14).fill_width().show(|ui| {
+                    field(ui, &mut s.emoji, None);
+                    picker(ui, &mut s.emoji);
+                });
+            } else {
+                ui.row().gap(24).align(Align::Start).show(|ui| {
+                    picker(ui, &mut s.emoji);
+                    field(ui, &mut s.emoji, Some(200.0));
+                });
+            }
         }
         "wheel-picker" => {
             ui.row().gap(40).align(Align::Center).show(|ui| {
@@ -2300,8 +2320,7 @@ ui.button("Ship release").primary().icon("rocket");
             let mut ids = vec![];
             ui.column().fill_width().max_width(560.0).gap(14).show(|ui| {
                 ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
-                    ids.push(ui.search_field(&mut s.search).placeholder("Search projects").show().id);
-                    ui.spacer();
+                    ids.push(ui.search_field(&mut s.search).placeholder("Search projects").fill_width().show().id);
                     ids.push(ui.button("New project").primary().icon("plus").show().id);
                 });
                 ui.card().title("Northwind").description("3 environments · deployed 4m ago").show(|ui| {
@@ -3513,10 +3532,12 @@ struct Params {
     reduced: bool,
     /// Print clipped and overlapping text (with --screenshot).
     check: bool,
+    /// `--click X,Y` (repeatable): clicks before the screenshot.
+    clicks: Vec<lumen::Vec2>,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![] };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3563,6 +3584,14 @@ fn params() -> Params {
                 "--embed" => p.embed = true,
                 "--open" => p.open = true,
                 "--check" => p.check = true,
+                "--click" => {
+                    i += 1;
+                    if let Some((x, y)) = args.get(i).and_then(|v| v.split_once(',')) {
+                        if let (Ok(x), Ok(y)) = (x.parse(), y.parse()) {
+                            p.clicks.push(lumen::vec2(x, y));
+                        }
+                    }
+                }
                 "--scale" => {
                     p.scale = next.parse().unwrap_or(2.0);
                     i += 1;
@@ -3601,7 +3630,11 @@ fn main() {
     }
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(out) = &p.screenshot {
-        let steps = if p.open { open_steps(&p.demo) } else { vec![] };
+        let mut steps = if p.open { open_steps(&p.demo) } else { vec![] };
+        for &c in &p.clicks {
+            steps.push(lumen::ShotStep::Click(c));
+            steps.push(lumen::ShotStep::Wait(0.6));
+        }
         let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
         match lumen::screenshot(out, &shot, &mut state, view) {
             Ok(()) => println!("wrote {out}"),

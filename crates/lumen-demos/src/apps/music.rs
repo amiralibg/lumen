@@ -1,6 +1,7 @@
 //! Cadence: a music player. Library and playlists, a now-playing panel
 //! with a scrubbable waveform, transport, volume, an equalizer and a queue.
 
+use super::{back, Fit};
 use lumen::{Align, ListRow, Toast, Tone, Ui};
 
 struct Track {
@@ -25,6 +26,8 @@ pub struct State {
     eq: [f32; 8],
     eq_preset: usize,
     search: String,
+    /// Narrow layout: the full player is open instead of the library.
+    player_open: bool,
 }
 
 impl Default for State {
@@ -53,6 +56,7 @@ impl Default for State {
             eq: [1.5, 2.5, 1.0, -0.5, -1.0, 0.5, 2.0, 3.0],
             eq_preset: 2,
             search: String::new(),
+            player_open: false,
         }
     }
 }
@@ -77,14 +81,16 @@ fn samples(seed: u32) -> Vec<f32> {
 }
 
 pub fn view(ui: &mut Ui, s: &mut State) {
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        ui.sidebar().width(212.0).show(|ui| {
+        ui.sidebar().width(212.0).collapsed(fit.rail()).show(|ui| {
             ui.nav_header("C", "Cadence");
             ui.nav_section("Library");
             for (i, (icon, l)) in [("music", "Songs"), ("disc-3", "Albums"), ("mic-vocal", "Artists"), ("heart", "Liked")].iter().enumerate() {
                 if ui.nav_item(icon, *l).selected(s.view == i as u8).clicked() {
                     s.view = i as u8;
                     s.selected = None;
+                    s.player_open = false;
                 }
             }
             ui.nav_section("Playlists");
@@ -93,30 +99,79 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             }
         });
 
+        if fit == Fit::Narrow {
+            // One pane: the library with a mini player, or the full player.
+            if s.player_open {
+                ui.scroll("now_playing").pad(16).gap(16.0).show(|ui| {
+                    if back(ui, "Library") {
+                        s.player_open = false;
+                    }
+                    now_playing(ui, s);
+                });
+            } else {
+                ui.column().fill().pad(16).gap(12).show(|ui| {
+                    library(ui, s, fit);
+                    mini_player(ui, s);
+                });
+            }
+            return;
+        }
+
         ui.column().fill().pad(20).gap(16).show(|ui| {
-            library(ui, s);
+            library(ui, s, fit);
         });
 
-        ui.column().width(360.0).fill_height().bg(lumen::Token::Surface).show(|ui| {
+        let w = if fit == Fit::Wide { 360.0 } else { 300.0 };
+        ui.column().width(w).fill_height().bg(lumen::Token::Surface).show(|ui| {
             ui.scroll("now_playing").pad(20).gap(16.0).show(|ui| now_playing(ui, s));
         });
     });
 }
 
-fn library(ui: &mut Ui, s: &mut State) {
+/// Narrow layout: the current song, play/pause, and a way into the player.
+fn mini_player(ui: &mut Ui, s: &mut State) {
+    let t = &s.tracks[s.current];
+    let (title, artist) = (t.title, t.artist);
+    ui.card().pad(10.0).show(|ui| {
+        ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+            if ui.icon_button("chevron-up").ghost().tooltip("Open player").clicked() {
+                s.player_open = true;
+            }
+            ui.column().fill_width().gap(2).show(|ui| {
+                ui.label(title).strong().truncate();
+                ui.label(artist).muted().small().truncate();
+            });
+            let play = if s.playing { "pause" } else { "play" };
+            if ui.icon_button(play).primary().tooltip(if s.playing { "Pause" } else { "Play" }).clicked() {
+                s.playing = !s.playing;
+            }
+        });
+    });
+}
+
+fn library(ui: &mut Ui, s: &mut State, fit: Fit) {
     let title = ["Songs", "Albums", "Artists", "Liked"][s.view as usize];
+    let mut shuffle = false;
     ui.row().fill_width().align(Align::Center).gap(10).show(|ui| {
         ui.heading(title).level(2);
         ui.badge(format!("{} tracks", s.tracks.len()), Tone::Neutral);
         ui.spacer();
-        ui.search_field(&mut s.search).placeholder("Search songs").width(240.0);
-        if ui.button("Shuffle all").icon("shuffle").clicked() {
-            s.shuffle = true;
-            s.current = (s.current + 4) % s.tracks.len();
-            s.progress = 0.0;
-            s.playing = true;
+        if fit == Fit::Wide {
+            ui.search_field(&mut s.search).placeholder("Search songs").width(240.0);
+            shuffle = ui.button("Shuffle all").icon("shuffle").clicked();
+        } else {
+            shuffle = ui.icon_button("shuffle").tooltip("Shuffle all").clicked();
         }
     });
+    if fit != Fit::Wide {
+        ui.search_field(&mut s.search).placeholder("Search songs").fill_width();
+    }
+    if shuffle {
+        s.shuffle = true;
+        s.current = (s.current + 4) % s.tracks.len();
+        s.progress = 0.0;
+        s.playing = true;
+    }
     let q = s.search.to_lowercase();
     let visible: Vec<usize> = (0..s.tracks.len())
         .filter(|&i| s.view != 3 || s.tracks[i].liked)
@@ -142,7 +197,9 @@ fn library(ui: &mut Ui, s: &mut State) {
     }
     ui.scroll("tracks").show(|ui| {
         let out = ui.list_view("tracks", &rows, &mut sel);
-        if let Some(i) = out.activated {
+        // On a phone a tap plays; elsewhere a click selects.
+        let play = if fit == Fit::Narrow { out.clicked.or(out.activated) } else { out.activated };
+        if let Some(i) = play {
             s.current = visible[i];
             s.progress = 0.0;
             s.playing = true;
@@ -155,7 +212,9 @@ fn library(ui: &mut Ui, s: &mut State) {
         }
     });
     s.selected = sel.map(|i| visible[i]);
-    ui.label("Double-click or press Enter to play.").muted().small();
+    if fit != Fit::Narrow {
+        ui.label("Double-click or press Enter to play.").muted().small();
+    }
 }
 
 fn now_playing(ui: &mut Ui, s: &mut State) {

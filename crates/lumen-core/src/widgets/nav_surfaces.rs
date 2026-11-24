@@ -46,9 +46,14 @@ pub struct EditorTabsOut {
 
 #[derive(Default, Clone, Copy)]
 struct TabSlide {
+    /// Pill position in scrolled-content coordinates.
     x: f32,
     w: f32,
     ready: bool,
+    /// The scroll offset the last frame laid out with.
+    last_off: f32,
+    /// The active tab last scrolled into view.
+    shown: Option<usize>,
 }
 
 // =========================================================== TableOfContents
@@ -588,7 +593,8 @@ impl<'u> ImageFrame<'u> {
                             Some(ref c) => format!("{title_cl} · {c}"),
                             None => title_cl.clone(),
                         };
-                        let g = cx.galley(&lbl, &st_cap);
+                        // Shortened to stop short of the zoom icon.
+                        let g = cx.galley_fit(&lbl, &st_cap, bar.width() - 10.0 - 34.0);
                         cx.painter.text(cx.text, &g, vec2(bar.min.x + 10.0, bar.center().y - g.height * 0.5), fg_c);
                         cx.icon(if zoomed { "zoom-out" } else { "zoom-in" }, vec2(bar.max.x - 16.0, bar.center().y), 14.0, muted_c);
                     }
@@ -647,8 +653,18 @@ impl Ui {
         let accent_c = self.color(Token::Accent);
         let active_card_bg = self.color(Token::Surface);
         let has_tabs = !tabs.is_empty() && slide.ready;
+        // The tabs scroll sideways when they don't fit. The pill lives in
+        // content coordinates; paint subtracts this frame's offset so it
+        // moves with the tabs instead of springing after them.
+        let off = std::rc::Rc::new(std::cell::Cell::new(0.0f32));
+        let off_paint = off.clone();
+        let fade = std::rc::Rc::new(std::cell::Cell::new((false, false)));
+        let fade_paint = fade.clone();
+        // The bar fill as it shows over a card, so the fade blends in.
+        let fade_c = self.color(Token::Surface).mix(self.color(Token::SurfaceMuted), 0.55);
+        let last_off = slide.last_off;
 
-        self.begin(
+        let bar = self.begin(
             Style {
                 dir: Dir::Row,
                 width: Size::FILL,
@@ -664,7 +680,8 @@ impl Ui {
             Some(Box::new(move |cx, r| {
                 cx.painter.rrect(r, Corners::all(r_bar), bar_bg, 1.0, bar_bd);
                 if has_tabs && ind_w > 4.0 {
-                    let pill = Rect::from_xywh(r.min.x + ind_x, r.min.y + 4.0, ind_w, (r.height() - 8.0).max(16.0));
+                    cx.painter.push_clip(r.expand(-1.0));
+                    let pill = Rect::from_xywh(r.min.x + ind_x - off_paint.get(), r.min.y + 4.0, ind_w, (r.height() - 8.0).max(16.0));
                     cx.painter.rrect(pill, Corners::all((r_bar - 3.0).max(5.0)), active_card_bg, 1.0, bar_bd);
                     cx.painter.rrect(
                         Rect::from_xywh(pill.min.x + 10.0, pill.max.y - 2.0, (pill.width() - 20.0).max(4.0), 2.0),
@@ -673,106 +690,135 @@ impl Ui {
                         0.0,
                         Color::TRANSPARENT,
                     );
+                    cx.painter.pop_clip();
                 }
             })),
         );
 
         let mut target_rel: Option<(f32, f32)> = None;
-        for (ti, tab) in tabs.iter().enumerate() {
-            let tid = id.with(("tab", &tab.id));
-            let close_id = tid.with("close");
-            let c_ix = self.interact(close_id, Sense::CLICK, false);
-            let t_ix = self.interact(tid, Sense::CLICK, false);
+        let (_, sx) = self.scroll_row("tabs", Style { width: Size::FILL, gap: 4.0, align: Align::Center, ..Default::default() }, |ui| {
+                    for (ti, tab) in tabs.iter().enumerate() {
+                let tid = id.with(("tab", &tab.id));
+                let close_id = tid.with("close");
+                let c_ix = ui.interact(close_id, Sense::CLICK, false);
+                let t_ix = ui.interact(tid, Sense::CLICK, false);
 
-            if t_ix.focused {
-                if self.key_pressed_for(tid, Key::ArrowRight) && !tabs.is_empty() {
-                    *active = (*active + 1) % tabs.len();
-                    out.changed = true;
-                } else if self.key_pressed_for(tid, Key::ArrowLeft) && !tabs.is_empty() {
-                    *active = (*active + tabs.len() - 1) % tabs.len();
+                if t_ix.focused {
+                    if ui.key_pressed_for(tid, Key::ArrowRight) && !tabs.is_empty() {
+                        *active = (*active + 1) % tabs.len();
+                        out.changed = true;
+                    } else if ui.key_pressed_for(tid, Key::ArrowLeft) && !tabs.is_empty() {
+                        *active = (*active + tabs.len() - 1) % tabs.len();
+                        out.changed = true;
+                    }
+                }
+
+                let is_act = ti == *active;
+                if is_act && t_ix.rect.width() > 1.0 && bar_rect_prev.width() > 1.0 {
+                    target_rel = Some((t_ix.rect.min.x - bar_rect_prev.min.x, t_ix.rect.width()));
+                }
+                let hov = ui.fade(tid, 0, t_ix.hovered && !is_act, mo.hover_in, mo.hover_out, Ease::Out);
+                let hov_bg = ui.color(Token::Hover).multiply_alpha(hov);
+
+                ui.begin(
+                    Style { dir: Dir::Row, pad: Sides::xy(10.0, 6.0), gap: 7.0, align: Align::Center, ..Default::default() },
+                    Some(tid),
+                    Sense::CLICK,
+                    CursorIcon::Pointer,
+                    false,
+                    Some(Box::new(move |cx, r| {
+                        if hov > 0.005 {
+                            cx.painter.rrect(r, Corners::all(6.0), hov_bg, 0.0, Color::TRANSPARENT);
+                        }
+                    })),
+                );
+                if let Some(ref ic) = tab.icon {
+                    let ic_c = if is_act { ui.color(Token::AccentStrong) } else { ui.color(Token::TextMuted) };
+                    ui.icon_leaf(ic, 13.5, ic_c);
+                }
+                let mut st = ui.text_style(TextRole::Label);
+                if is_act {
+                    st.weight = 600;
+                }
+                let fg = if is_act { ui.color(Token::Foreground) } else { ui.color(Token::TextSecondary) };
+                // Tabs keep their width; the bar clips the overflow instead of
+                // squeezing labels into each other.
+                let label_w = ui.galley(&tab.label, &st).width.ceil();
+                ui.text_leaf(tab.label.clone(), st, fg, false, false, Style { min: vec2(label_w, 0.0), ..Default::default() });
+
+                if tab.dirty && !t_ix.hovered && !c_ix.hovered {
+                    let dot_c = ui.color(Token::WarningStrong);
+                    ui.leaf(
+                        Style { min: vec2(14.0, 14.0), ..Default::default() },
+                        vec2(14.0, 14.0),
+                        Some(close_id),
+                        Sense::CLICK,
+                        CursorIcon::Pointer,
+                        Some(Box::new(move |cx, r| cx.painter.circle(r.center(), 3.5, dot_c, 0.0, Color::TRANSPARENT))),
+                    );
+                } else {
+                    let c_hov = ui.fade(close_id, 0, c_ix.hovered, mo.hover_in, mo.hover_out, Ease::Out);
+                    let x_bg = ui.color(Token::Hover).multiply_alpha(c_hov);
+                    let x_fg = ui.color(if c_ix.hovered { Token::Foreground } else { Token::TextMuted });
+                    ui.leaf(
+                        Style { min: vec2(16.0, 16.0), ..Default::default() },
+                        vec2(16.0, 16.0),
+                        Some(close_id),
+                        Sense::CLICK,
+                        CursorIcon::Pointer,
+                        Some(Box::new(move |cx, r| {
+                            if c_hov > 0.01 {
+                                cx.painter.rrect(r, Corners::all(4.0), x_bg, 0.0, Color::TRANSPARENT);
+                            }
+                            cx.icon("x", r.center(), 11.0, x_fg);
+                        })),
+                    );
+                }
+                ui.end();
+
+                if c_ix.clicked {
+                    out.closed = Some(ti);
+                } else if t_ix.clicked && *active != ti {
+                    *active = ti;
                     out.changed = true;
                 }
             }
+        });
+        off.set(sx.offset);
+        fade.set((sx.offset > 0.5, sx.offset < sx.max - 0.5));
 
-            let is_act = ti == *active;
-            if is_act && t_ix.rect.width() > 1.0 && bar_rect_prev.width() > 1.0 {
-                target_rel = Some((t_ix.rect.min.x - bar_rect_prev.min.x, t_ix.rect.width()));
-            }
-            let hov = self.fade(tid, 0, t_ix.hovered && !is_act, mo.hover_in, mo.hover_out, Ease::Out);
-            let hov_bg = self.color(Token::Hover).multiply_alpha(hov);
-
-            self.begin(
-                Style { dir: Dir::Row, pad: Sides::xy(10.0, 6.0), gap: 7.0, align: Align::Center, ..Default::default() },
-                Some(tid),
-                Sense::CLICK,
-                CursorIcon::Pointer,
-                false,
-                Some(Box::new(move |cx, r| {
-                    if hov > 0.005 {
-                        cx.painter.rrect(r, Corners::all(6.0), hov_bg, 0.0, Color::TRANSPARENT);
-                    }
-                })),
-            );
-            if let Some(ref ic) = tab.icon {
-                let ic_c = if is_act { self.color(Token::AccentStrong) } else { self.color(Token::TextMuted) };
-                self.icon_leaf(ic, 13.5, ic_c);
-            }
-            let mut st = self.text_style(TextRole::Label);
-            if is_act {
-                st.weight = 600;
-            }
-            let fg = if is_act { self.color(Token::Foreground) } else { self.color(Token::TextSecondary) };
-            self.text_leaf(tab.label.clone(), st, fg, false, false, Style::default());
-
-            if tab.dirty && !t_ix.hovered && !c_ix.hovered {
-                let dot_c = self.color(Token::WarningStrong);
-                self.leaf(
-                    Style::default(),
-                    vec2(14.0, 14.0),
-                    Some(close_id),
-                    Sense::CLICK,
-                    CursorIcon::Pointer,
-                    Some(Box::new(move |cx, r| cx.painter.circle(r.center(), 3.5, dot_c, 0.0, Color::TRANSPARENT))),
-                );
-            } else {
-                let c_hov = self.fade(close_id, 0, c_ix.hovered, mo.hover_in, mo.hover_out, Ease::Out);
-                let x_bg = self.color(Token::Hover).multiply_alpha(c_hov);
-                let x_fg = self.color(if c_ix.hovered { Token::Foreground } else { Token::TextMuted });
-                self.leaf(
-                    Style::default(),
-                    vec2(16.0, 16.0),
-                    Some(close_id),
-                    Sense::CLICK,
-                    CursorIcon::Pointer,
-                    Some(Box::new(move |cx, r| {
-                        if c_hov > 0.01 {
-                            cx.painter.rrect(r, Corners::all(4.0), x_bg, 0.0, Color::TRANSPARENT);
-                        }
-                        cx.icon("x", r.center(), 11.0, x_fg);
-                    })),
-                );
-            }
-            self.end();
-
-            if c_ix.clicked {
-                out.closed = Some(ti);
-            } else if t_ix.clicked && *active != ti {
-                *active = ti;
-                out.changed = true;
-            }
-        }
-
-        // Trailing spacer + `+` add tab button.
-        self.begin(Style { width: Size::FILL, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        self.end();
+        // Soft edges where more tabs hide, then the `+` add tab button.
+        let row_id = sx.id;
+        self.set_paint_after(
+            bar,
+            Box::new(move |cx, _| {
+                let Some(&rr) = cx.rects.get(&row_id) else { return };
+                let (left, right) = fade_paint.get();
+                let w = 22.0;
+                if left {
+                    cx.painter.rrect_horiz(Rect::from_xywh(rr.min.x, rr.min.y, w, rr.height()), Corners::all(0.0), fade_c, fade_c.with_alpha(0.0));
+                }
+                if right {
+                    cx.painter.rrect_horiz(Rect::from_xywh(rr.max.x - w, rr.min.y, w, rr.height()), Corners::all(0.0), fade_c.with_alpha(0.0), fade_c);
+                }
+            }),
+        );
         out.add_clicked = self.scope("add_tab", |ui| ui.icon_button("plus").small().tooltip("New tab").clicked());
         self.end();
 
         if let Some((rx, rw)) = target_rel {
             let mem = self.mem::<TabSlide>(id);
-            mem.x = rx;
+            mem.x = rx + last_off;
             mem.w = rw;
             mem.ready = true;
+        }
+        self.mem::<TabSlide>(id).last_off = sx.offset;
+        // A newly chosen tab scrolls into view.
+        if self.mem::<TabSlide>(id).shown != Some(*active) {
+            if let Some(r) = tabs.get(*active).and_then(|t| self.rect_of(id.with(("tab", &t.id)))) {
+                self.scroll_row_reveal(sx.id, r);
+            }
+            self.mem::<TabSlide>(id).shown = Some(*active);
         }
         out
     }

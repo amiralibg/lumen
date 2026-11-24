@@ -76,15 +76,17 @@ impl<'a> Dialog<'_, 'a> {
         let pad = ui.look().card.pad + 4.0;
         let out = ui.layer(LayerPlace::Screen, vec2(0.0, 0.0), t, Some(scrim_id), |ui| {
             if let Some(r) = ui.layer_root_building() {
+                let narrow = ui.screen_size().x < 480.0;
                 let st = ui.node_style(r);
                 st.align = Align::Center;
                 st.justify = Justify::Center;
-                st.pad = Sides::all(24.0);
+                st.pad = Sides::all(if narrow { 16.0 } else { 24.0 });
                 ui.set_paint(r, Box::new(move |cx, r| cx.painter.rect(r, scrim)));
             }
             let mark = ui.focus_mark();
             ui.begin(
-                Style { width: Size::Fixed(width), max: vec2(f32::INFINITY, f32::INFINITY), pad: Sides::all(pad), gap: 16.0, margin_top: rise * 2.0, ..Default::default() },
+                // Its width, or the screen's on a phone.
+                Style { width: Size::FILL, max: vec2(width, f32::INFINITY), pad: Sides::all(pad), gap: 16.0, margin_top: rise * 2.0, ..Default::default() },
                 Some(id.with("panel")),
                 Sense::HOVER,
                 CursorIcon::Default,

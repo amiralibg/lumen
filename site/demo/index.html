@@ -31,6 +31,9 @@
   <script type="module">
     import init from "./lumen-demos.js";
     const tell = (m) => { try { parent.postMessage(m, "*"); } catch (e) {} };
+    // Browsers cap live WebGL contexts per page and drop the oldest; say so,
+    // and the host page shows the poster and reloads this demo when it can.
+    document.getElementById("lumen").addEventListener("webglcontextlost", () => tell("lumen-lost"));
     init().then(() => {
       // Two frames: the GPU device is ready and the first frame is on screen.
       requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => tell("lumen-ready"))));

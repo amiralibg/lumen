@@ -107,6 +107,9 @@ pub struct Painter {
     layer_stack: Vec<(f32, Vec2)>,
     /// With layout checking on: every text drawn, for [`TextDraw`] checks.
     pub(crate) text_log: Option<Vec<TextDraw>>,
+    /// With layout checking on: problems found while painting (text that
+    /// spills out of a squeezed fixed-size leaf).
+    pub(crate) paint_issues: Vec<String>,
     /// Which layer is being painted (0 = main tree), for the text log.
     pub(crate) layer_index: u32,
 }
@@ -139,6 +142,7 @@ impl Painter {
             layer: (1.0, Vec2::ZERO),
             layer_stack: vec![],
             text_log: None,
+            paint_issues: vec![],
             layer_index: 0,
         }
     }

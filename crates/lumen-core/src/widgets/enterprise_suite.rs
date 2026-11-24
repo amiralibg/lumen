@@ -429,7 +429,8 @@ impl Ui {
             );
 
             self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 4.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-            self.begin(Style { dir: Dir::Row, gap: 8.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            // Name, provider and tags wrap onto a second line in a narrow card.
+            self.begin(Style { dir: Dir::Row, width: Size::FILL, wrap: true, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
             self.text_leaf(m.name.clone(), self.text_style(TextRole::BodyStrong), self.color(Token::Foreground), false, false, Style::default());
             self.text_leaf(m.provider.clone(), self.text_style(TextRole::Caption), self.color(Token::TextMuted), false, false, Style::default());
             for tag in &m.tags {

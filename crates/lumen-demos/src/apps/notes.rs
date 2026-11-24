@@ -1,6 +1,7 @@
 //! Margin: a Markdown notes app. Folders, a searchable note list, an editor
 //! with write, preview and split modes, tags and a word count.
 
+use super::{back, Fit};
 use lumen::{Align, ListRow, Toast, Tone, Ui};
 
 struct Note {
@@ -18,6 +19,8 @@ pub struct State {
     selected: Option<usize>,
     search: String,
     mode: u8,
+    /// Narrow layout: the editor is open instead of the list.
+    reading: bool,
 }
 
 const FOLDERS: [(&str, &str); 3] = [("notebook", "Journal"), ("lightbulb", "Ideas"), ("briefcase", "Work")];
@@ -37,13 +40,15 @@ impl Default for State {
             selected: Some(0),
             search: String::new(),
             mode: 2,
+            reading: false,
         }
     }
 }
 
 pub fn view(ui: &mut Ui, s: &mut State) {
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        ui.sidebar().width(200.0).show(|ui| {
+        ui.sidebar().width(200.0).collapsed(fit.rail()).show(|ui| {
             ui.nav_header("M", "Margin");
             ui.nav_section("Folders");
             for (i, (icon, name)) in FOLDERS.iter().enumerate() {
@@ -51,6 +56,7 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                 if ui.nav_item(icon, *name).badge(n).selected(s.folder == i).clicked() {
                     s.folder = i;
                     s.selected = None;
+                    s.reading = false;
                 }
             }
             ui.nav_section("Tags");
@@ -66,7 +72,18 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             s.selected = visible.first().copied();
         }
 
-        ui.column().width(300.0).fill_height().pad(16).gap(12).bg(lumen::Token::Surface).show(|ui| {
+        // Narrow: the list or the open note, one at a time.
+        if fit == Fit::Narrow && s.reading && s.selected.is_some() {
+            ui.column().fill().pad(16).gap(12).show(|ui| editor(ui, s, fit));
+            return;
+        }
+        let list = ui.column().fill_height().pad(16).gap(12).bg(lumen::Token::Surface);
+        let list = match fit {
+            Fit::Wide => list.width(300.0),
+            Fit::Medium => list.width(260.0),
+            Fit::Narrow => list.fill_width(),
+        };
+        list.show(|ui| {
             ui.row().fill_width().align(Align::Center).show(|ui| {
                 ui.heading(FOLDERS[s.folder].1).level(3);
                 ui.spacer();
@@ -94,6 +111,9 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             }
             ui.scroll("notes").show(|ui| {
                 let out = ui.list_view("notes", &rows, &mut sel);
+                if out.clicked.is_some() || out.activated.is_some() {
+                    s.reading = true;
+                }
                 if let Some(i) = out.starred {
                     let n = &mut s.notes[visible[i]];
                     n.pinned = !n.pinned;
@@ -102,27 +122,47 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             s.selected = sel.map(|i| visible[i]);
         });
 
-        ui.column().fill().pad(20).gap(12).show(|ui| editor(ui, s));
+        if fit != Fit::Narrow {
+            ui.column().fill().pad(20).gap(12).show(|ui| editor(ui, s, fit));
+        }
     });
 }
 
-fn editor(ui: &mut Ui, s: &mut State) {
+fn editor(ui: &mut Ui, s: &mut State, fit: Fit) {
     let Some(i) = s.selected else {
         ui.empty_state("file-text", "No note open").description("Pick a note or start a new one.").show();
         return;
     };
     let mut delete = false;
-    ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
-        ui.editable_text(format!("note_title_{i}"), &mut s.notes[i].title).heading();
-        if s.notes[i].pinned {
-            ui.badge("Pinned", Tone::Warning);
+    if fit == Fit::Wide {
+        ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+            ui.editable_text(format!("note_title_{i}"), &mut s.notes[i].title).heading();
+            if s.notes[i].pinned {
+                ui.badge("Pinned", Tone::Warning);
+            }
+            ui.spacer();
+            ui.segmented(&mut s.mode, &[(0, "Write"), (1, "Preview"), (2, "Split")]);
+            if ui.icon_button("trash-2").ghost().tooltip("Delete note").clicked() {
+                delete = true;
+            }
+        });
+    } else {
+        // No room for side by side: Split reads as Preview.
+        if s.mode == 2 {
+            s.mode = 1;
         }
-        ui.spacer();
-        ui.segmented(&mut s.mode, &[(0, "Write"), (1, "Preview"), (2, "Split")]);
-        if ui.icon_button("trash-2").ghost().tooltip("Delete note").clicked() {
-            delete = true;
+        if fit == Fit::Narrow && back(ui, "Notes") {
+            s.reading = false;
         }
-    });
+        ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+            // The title fills the row (editable text is fill-width).
+            ui.editable_text(format!("note_title_{i}"), &mut s.notes[i].title).heading();
+            if ui.icon_button("trash-2").ghost().tooltip("Delete note").clicked() {
+                delete = true;
+            }
+        });
+        ui.segmented(&mut s.mode, &[(0, "Write"), (1, "Preview")]);
+    }
     ui.tag_input(&mut s.notes[i].tags).placeholder("Add a tag").fill_width();
     let note = &mut s.notes[i];
     match s.mode {
@@ -151,11 +191,13 @@ fn editor(ui: &mut Ui, s: &mut State) {
         bar.status("Saved", Tone::Success);
         bar.item("clock", note.edited);
         bar.spacer();
-        bar.item("type", &format!("{words} words · {chars} characters"));
+        let count = if fit == Fit::Narrow { format!("{words} words") } else { format!("{words} words · {chars} characters") };
+        bar.item("type", &count);
     });
     if delete {
         let t = s.notes.remove(i).title;
         s.selected = None;
+        s.reading = false;
         ui.toast(Toast::new("Note deleted").description(t).danger());
     }
 }

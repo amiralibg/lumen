@@ -19,8 +19,9 @@ impl Default for State {
 }
 
 pub fn view(ui: &mut Ui, s: &mut State) {
-    ui.column().fill().pad(32).align(Align::Center).show(|ui| {
-        ui.column().width(520.0).gap(16).show(|ui| {
+    let pad = if super::Fit::of(ui) == super::Fit::Narrow { 16.0 } else { 32.0 };
+    ui.column().fill().pad(pad).align(Align::Center).show(|ui| {
+        ui.column().fill_width().max_width(520.0).gap(16).show(|ui| {
             let left = s.items.iter().filter(|i| !i.1).count();
             ui.row().fill_width().align(Align::Center).gap(10).show(|ui| {
                 ui.heading("Today").level(1);

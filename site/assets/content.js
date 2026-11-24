@@ -2435,7 +2435,11 @@ lumen-gpui   optional: hosts lumen views inside a GPUI app (separate workspace)<
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-21", items: [
+  { v: "Unreleased", date: "2026-11-24", items: [
+    "Every app fits a phone: under 1000 px the sidebar collapses to icons, and under 640 px each app shows one pane at a time with a back button (a tap opens a note, message or issue; music gets a mini player).",
+    "Horizontal scrolling: Ui::scroll_row keeps its children at natural width and scrolls sideways with a trackpad or Shift + wheel, while a plain wheel still scrolls the page. Editor tabs, pricing cards and the phone board use it.",
+    "Narrow cards: one-line labels keep their width instead of drawing over each other, icons and keycaps never shrink, chart labels thin out by measured width, and world clocks, quarter picker, countdown, shortcut bar, settings rows and model picker reflow. --check also reports text spilling out of squeezed widgets.",
+    "Site: showcase scenes fill the column, the docs sidebar marks the current page with a sliding glass pill, pages keep their margins and tables stack on phones, and a demo that loses its GPU context falls back to its poster and reloads.",
     "Six new components: code editor, file browser with path bar, emoji picker, wheel and time picker, calendar heatmap and guided tour (177 in all), plus Preferences, a settings app.",
     "Color emoji: the glyph atlas is RGBA, so emoji keep their colors; scripts the bundled fonts lack load system fonts on first use.",
     "Input methods: CJK composition, dead keys and press-and-hold accents show underlined in text fields, natively and inside GPUI.",

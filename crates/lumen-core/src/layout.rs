@@ -75,6 +75,9 @@ pub struct Style {
     pub margin_top: f32,
     /// Vertical scrolling: children may overflow; offset applied on place.
     pub scroll: bool,
+    /// Rows only: horizontal scrolling. Children keep their natural widths
+    /// (nothing shrinks) and are shifted by the node's `scroll_offset_x`.
+    pub scroll_x: bool,
     /// Rows only: children that don't fit move to a new line. Lines are
     /// `gap` apart; `Fill` children share the free space of their line and
     /// break by their `min` width.
@@ -96,6 +99,7 @@ impl Default for Style {
             self_align: None,
             margin_top: 0.0,
             scroll: false,
+            scroll_x: false,
             wrap: false,
         }
     }
@@ -134,6 +138,10 @@ pub struct Node {
     pub content_size: Vec2,
     /// Scroll offset applied when placing children.
     pub scroll_offset: f32,
+    /// Horizontal scroll offset ([`Style::scroll_x`] rows).
+    pub scroll_offset_x: f32,
+    /// Width of a [`Style::scroll_x`] row's content, padding included.
+    pub content_w: f32,
     pref_w: f32,
     /// Narrowest this node can get without squeezing a descendant below
     /// its fixed width or `min` (text and fixed-size content count as 0:
@@ -164,6 +172,8 @@ impl Tree {
             rect: Rect::ZERO,
             content_size: Vec2::ZERO,
             scroll_offset: 0.0,
+            scroll_offset_x: 0.0,
+            content_w: 0.0,
             pref_w: 0.0,
             min_w: 0.0,
             content_h: 0.0,
@@ -242,7 +252,7 @@ impl Tree {
         let min_w = match st.width {
             Size::Fixed(w) => w,
             // A scroll container scrolls its content instead.
-            _ if st.scroll => 0.0,
+            _ if st.scroll || st.scroll_x => 0.0,
             _ => inner_min + st.pad.horizontal(),
         };
         self.nodes[n].min_w = clamp(min_w.max(st.min.x), st.min.x, st.max.x).min(pref.max(st.min.x));
@@ -331,7 +341,7 @@ impl Tree {
                         }
                         open = next;
                     }
-                } else if free < 0.0 {
+                } else if free < 0.0 && !st.scroll_x {
                     // Shrink hug children proportionally (text then wraps).
                     let shrinkable: f32 = children
                         .iter()
@@ -498,8 +508,12 @@ impl Tree {
             Dir::Row => {
                 let ws: Vec<f32> = children.iter().map(|&c| self.nodes[c].content_size.x).collect();
                 let total: f32 = ws.iter().sum::<f32>() + st.gap * count.saturating_sub(1) as f32;
-                let (mut x, extra_gap) = justify(st.justify, iw - total, count, false);
+                let (mut x, extra_gap) = justify(st.justify, iw - total, count, st.scroll_x);
                 x += inner.min.x;
+                if st.scroll_x {
+                    x -= self.nodes[n].scroll_offset_x;
+                    self.nodes[n].content_w = total + st.pad.horizontal();
+                }
                 for (i, &c) in children.iter().enumerate() {
                     let cs = self.nodes[c].style;
                     let align = cs.self_align.unwrap_or(st.align);
@@ -645,6 +659,23 @@ mod tests {
         assert_eq!(t.rect(b).width(), 120.0);
         assert!(t.rect(b).min.x >= t.rect(a).max.x, "siblings don't overlap");
         assert!(t.rect(txt).width() < 300.0, "text still shrinks");
+    }
+
+    /// A horizontally scrolling row keeps its children at full width,
+    /// shifts them by the offset and reports its content width.
+    #[test]
+    fn scroll_x_row_keeps_widths_and_offsets() {
+        let mut t = Tree::new();
+        let row = t.add(Style { dir: Dir::Row, width: Size::Fixed(100.0), gap: 10.0, scroll_x: true, ..Default::default() }, Content::None);
+        let a = t.add_child(row, Style::default(), Content::Measured(0));
+        let b = t.add_child(row, Style::default(), Content::Measured(0));
+        t.nodes[row].scroll_offset_x = 30.0;
+        t.layout(row, Rect::from_xywh(0.0, 0.0, 100.0, 50.0), &mut text_measure(8));
+        assert_eq!(t.rect(a).width(), 80.0, "text isn't squeezed");
+        assert_eq!(t.rect(a).min.x, -30.0);
+        assert_eq!(t.rect(b).min.x, 60.0);
+        assert_eq!(t.nodes[row].content_w, 170.0);
+        assert_eq!(t.rect(row).width(), 100.0);
     }
 
     /// Fill children start from their min-content too.

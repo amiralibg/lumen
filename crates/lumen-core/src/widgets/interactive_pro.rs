@@ -1030,7 +1030,8 @@ impl Ui {
         self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 8.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         self.text_leaf(title.to_owned(), self.text_style(TextRole::Label), self.color(Token::TextSecondary), false, true, Style { width: Size::FILL, ..Default::default() });
 
-        self.begin(Style { dir: Dir::Row, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        // Digits, then the controls; they wrap under the digits when narrow.
+        self.begin(Style { dir: Dir::Row, width: Size::FILL, wrap: true, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         let mut st_dig = self.text_style(TextRole::Heading1);
         st_dig.tabular = true;
         for (part, lbl) in [(format!("{mins:02}"), "MIN"), (format!("{secs:02}"), "SEC")] {

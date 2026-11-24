@@ -900,7 +900,7 @@ impl Ui {
         let bd_c = self.color(Token::BorderSubtle);
 
         self.begin(
-            Style { dir: Dir::Row, width: Size::FILL, align: Align::Stretch, ..Default::default() },
+            Style { dir: Dir::Column, width: Size::FILL, ..Default::default() },
             Some(id),
             Sense::NONE,
             CursorIcon::Default,
@@ -908,8 +908,30 @@ impl Ui {
             Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(r_card), bg_c, 1.0, bd_c))),
         );
 
+        // As many clocks per row as fit (last frame's width), balanced so
+        // four become 2x2 rather than 3 + 1.
+        const CELL: f32 = 132.0;
+        let n = clocks.len().max(1);
+        let fit = self.rect_of(id).map_or(n, |r| ((r.width() / CELL).floor() as usize).clamp(1, n));
+        let cols = n.div_ceil(n.div_ceil(fit));
+
         for (i, ck) in clocks.iter().enumerate() {
-            let not_first = i > 0;
+            if i % cols == 0 {
+                let not_first_row = i > 0;
+                self.begin(
+                    Style { dir: Dir::Row, width: Size::FILL, align: Align::Stretch, ..Default::default() },
+                    None,
+                    Sense::NONE,
+                    CursorIcon::Default,
+                    false,
+                    if not_first_row {
+                        Some(Box::new(move |cx, r| cx.painter.rect(Rect::from_xywh(r.min.x + 10.0, r.min.y, (r.width() - 20.0).max(0.0), 1.0), bd_c)))
+                    } else {
+                        None
+                    },
+                );
+            }
+            let not_first = i % cols > 0;
             self.begin(
                 Style { dir: Dir::Column, width: Size::FILL, pad: Sides::all(14.0), gap: 6.0, ..Default::default() },
                 None,
@@ -935,6 +957,9 @@ impl Ui {
             self.text_leaf(ck.time_str.clone(), st_t, self.color(Token::Foreground), false, false, Style::default());
             self.text_leaf(ck.city.clone(), self.text_style(TextRole::Caption), self.color(Token::TextSecondary), false, true, Style { width: Size::FILL, ..Default::default() });
             self.end();
+            if i % cols == cols - 1 || i + 1 == clocks.len() {
+                self.end();
+            }
         }
         self.end();
 

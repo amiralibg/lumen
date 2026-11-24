@@ -2,6 +2,7 @@
 //! replies stream in word by word, a composer with model choice and
 //! attachments, and suggested prompts for an empty chat.
 
+use super::{back, Fit};
 use lumen::{Align, ChatMessage, ListRow, Toast, Tone, Ui};
 
 const MODELS: [&str; 3] = ["Quick", "Balanced", "Deep think"];
@@ -20,6 +21,8 @@ pub struct State {
     files: Vec<String>,
     /// Reply being streamed: (chat, full text, start time).
     stream: Option<(usize, String, f64)>,
+    /// Narrow layout: the chat list is open instead of the chat.
+    history_open: bool,
 }
 
 impl Default for State {
@@ -42,6 +45,7 @@ impl Default for State {
             model: 1,
             files: vec![],
             stream: None,
+            history_open: false,
         }
     }
 }
@@ -65,8 +69,21 @@ pub fn view(ui: &mut Ui, s: &mut State) {
         }
     }
 
+    let fit = Fit::of(ui);
     ui.row().fill().show(|ui| {
-        ui.column().width(260.0).fill_height().pad(14).gap(10).bg(lumen::Token::Surface).show(|ui| {
+        // Narrow: the chat, or the chat list, one at a time.
+        let show_list = fit != Fit::Narrow || s.history_open;
+        let list = ui.column().fill_height().pad(14).gap(10).bg(lumen::Token::Surface);
+        let list = match fit {
+            Fit::Wide => list.width(260.0),
+            Fit::Medium => list.width(220.0),
+            Fit::Narrow => list.fill_width(),
+        };
+        if show_list {
+        list.show(|ui| {
+            if fit == Fit::Narrow && back(ui, "Chat") {
+                s.history_open = false;
+            }
             ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
                 ui.avatar("L", 3, 28.0, None);
                 ui.label("Lumi").strong();
@@ -74,6 +91,7 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                 if ui.icon_button("square-pen").tooltip("New chat").clicked() {
                     s.chats.insert(0, Chat { title: "New chat".into(), when: "Now", messages: vec![] });
                     s.selected = Some(0);
+                    s.history_open = false;
                     if let Some((ci, _, _)) = &mut s.stream {
                         *ci += 1;
                     }
@@ -81,7 +99,9 @@ pub fn view(ui: &mut Ui, s: &mut State) {
             });
             let rows: Vec<ListRow> = s.chats.iter().map(|c| ListRow::new(c.title.clone()).icon("message-square").meta(c.when)).collect();
             ui.scroll("chats").show(|ui| {
-                ui.list_view("chats", &rows, &mut s.selected);
+                if ui.list_view("chats", &rows, &mut s.selected).clicked.is_some() {
+                    s.history_open = false;
+                }
             });
             ui.card().pad(12.0).show(|ui| {
                 ui.label("Free plan").strong();
@@ -89,12 +109,26 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                 ui.progress(Some(0.24));
             });
         });
+        }
+        if fit == Fit::Narrow && s.history_open {
+            return;
+        }
 
-        ui.column().fill().pad((24.0, 18.0)).gap(14).show(|ui| {
+        let pad = if fit == Fit::Narrow { (16.0, 14.0) } else { (24.0, 18.0) };
+        ui.column().fill().pad(pad).gap(14).show(|ui| {
             let ci = s.selected.unwrap_or(0).min(s.chats.len().saturating_sub(1));
             ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
-                ui.heading(s.chats[ci].title.clone()).level(3);
-                ui.badge(MODELS[s.model], Tone::Accent);
+                if fit == Fit::Narrow && ui.icon_button("panel-left").ghost().tooltip("Chats").clicked() {
+                    s.history_open = true;
+                }
+                if fit == Fit::Narrow {
+                    ui.label(s.chats[ci].title.clone()).strong().truncate();
+                } else {
+                    ui.heading(s.chats[ci].title.clone()).level(3);
+                }
+                if fit != Fit::Narrow {
+                    ui.badge(MODELS[s.model], Tone::Accent);
+                }
                 ui.spacer();
                 if ui.icon_button("share").ghost().tooltip("Share").clicked() {
                     ui.toast(Toast::new("Link copied").description("Anyone with the link can read this chat."));
@@ -105,7 +139,7 @@ pub fn view(ui: &mut Ui, s: &mut State) {
                     ui.column().fill_width().gap(12).pad((0.0, 40.0)).align(Align::Center).show(|ui| {
                         ui.heading("What are we working on?").level(2);
                         ui.label("Ask anything, or start from one of these.").muted();
-                        ui.row().gap(8).show(|ui| {
+                        ui.row().gap(8).wrap().justify(lumen::Justify::Center).show(|ui| {
                             for p in ["Plan a launch checklist", "Explain closed-form springs", "Draft a polite follow-up"] {
                                 if ui.button(p).icon("sparkles").clicked() {
                                     s.prompt = p.to_string();

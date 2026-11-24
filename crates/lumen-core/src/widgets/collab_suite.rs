@@ -747,6 +747,24 @@ impl Ui {
         let sh_c = self.color(Token::ShadowInk);
         let mut triggered = None;
 
+        // Hints that don't fit drop off the end (last frame's widths), so a
+        // narrow bar keeps its context label and the first shortcuts.
+        let bar_w = self.rect_of(id).map(|r| r.width());
+        let mut shown = hints.len();
+        if let Some(bar_w) = bar_w {
+            let widths = &self.mem::<ShortcutBarMem>(id).widths;
+            let avail = bar_w - 24.0 - 96.0;
+            let mut used = 0.0;
+            shown = 0;
+            for i in 0..hints.len() {
+                used += widths.get(i).copied().unwrap_or(0.0) + 10.0;
+                if used > avail {
+                    break;
+                }
+                shown = i + 1;
+            }
+        }
+
         self.begin(
             Style { dir: Dir::Row, width: Size::FILL, pad: Sides::xy(12.0, 7.0), gap: 10.0, align: Align::Center, ..Default::default() },
             Some(id),
@@ -761,8 +779,15 @@ impl Ui {
 
         self.text_leaf(context_label.to_owned(), self.text_style(TextRole::Caption), self.color(Token::TextMuted), false, true, Style { width: Size::FILL, ..Default::default() });
 
-        for (hi, h) in hints.iter().enumerate() {
+        for (hi, h) in hints.iter().enumerate().take(shown) {
             let hid = id.with(("sh", hi));
+            if let Some(w) = self.rect_of(hid).map(|r| r.width()) {
+                let m = self.mem::<ShortcutBarMem>(id);
+                if m.widths.len() <= hi {
+                    m.widths.resize(hi + 1, 0.0);
+                }
+                m.widths[hi] = w;
+            }
             let ix = self.interact(hid, Sense::CLICK, false);
             if ix.clicked {
                 triggered = Some(hi);
@@ -1163,10 +1188,19 @@ impl Ui {
         }
         self.end();
 
-        // 4 quarter cards across.
+        // 4 quarter cards across, or 2x2 when that doesn't fit: each card is
+        // at least as wide as its month range.
         let quarters = [("Q1", "Jan – Mar"), ("Q2", "Apr – Jun"), ("Q3", "Jul – Sep"), ("Q4", "Oct – Dec")];
-        self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 8.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+        let (st_q, st_m) = (self.text_style(TextRole::BodyStrong), self.text_style(TextRole::Caption));
+        let cell_min = quarters.iter().map(|(q, m)| self.galley(m, &st_m).width.max(self.galley(q, &st_q).width)).fold(0.0f32, f32::max).ceil() + 16.0;
+        // Last frame's inner width picks the grid (the first frame assumes 4).
+        let inner_w = self.rect_of(id).map(|r| r.width() - 32.0);
+        let cols = if inner_w.is_some_and(|w| w < cell_min * 4.0 + 24.0) { 2 } else { 4 };
+        self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 8.0, min: vec2(cell_min * 2.0 + 8.0, 0.0), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         for (qi, &(q_code, months)) in quarters.iter().enumerate() {
+            if qi % cols == 0 {
+                self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 8.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            }
             let q_num = (qi + 1) as u8;
             let qid = id.with(("q", q_num));
             let ix = self.interact(qid, Sense::CLICK, false);
@@ -1200,7 +1234,9 @@ impl Ui {
             let r_q = (self.look().control.radius[1] + 2.0).max(8.0);
 
             self.leaf(
-                Style { width: Size::FILL, ..Default::default() },
+                // In 4-across mode the cells may shrink (the next frame drops to
+                // 2x2); a floor there would pin the card wide.
+                Style { width: Size::FILL, min: vec2(if cols == 2 { cell_min } else { 0.0 }, 0.0), ..Default::default() },
                 vec2(78.0, 62.0),
                 Some(qid),
                 Sense::CLICK,
@@ -1214,6 +1250,9 @@ impl Ui {
                     cx.painter.text(cx.text, &gm, vec2(dr.center().x - gm.width * 0.5, dr.center().y + 3.0), fg_m);
                 })),
             );
+            if qi % cols == cols - 1 {
+                self.end();
+            }
         }
         self.end();
 
@@ -1221,4 +1260,10 @@ impl Ui {
         self.end();
         changed
     }
+}
+
+#[derive(Default)]
+struct ShortcutBarMem {
+    /// Each hint's width when last shown.
+    widths: Vec<f32>,
 }

@@ -832,70 +832,71 @@ impl Ui {
         self.badge("Save 20%", Tone::Success);
         self.end();
 
-        // Side-by-side plan cards.
-        self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 10.0, align: Align::Stretch, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        for (pi, plan) in plans.iter().enumerate() {
-            let is_sel = pi == *selected_plan;
-            let r_card = self.look().card.radius;
-            let bg_c = if plan.popular {
-                self.color(Token::Surface).mix(self.color(Token::AccentSubtle), 0.22)
-            } else {
-                self.color(Token::Surface)
-            };
-            let bd_c = if is_sel || plan.popular { self.color(Token::Accent) } else { self.color(Token::BorderSubtle) };
-            let bw = if is_sel { 1.6 } else { 1.0 };
+        // Side-by-side plan cards. They share the width, or keep 200 px
+        // each and swipe sideways when that doesn't fit (a phone).
+        self.scroll_row("plans", Style { width: Size::FILL, gap: 10.0, align: Align::Stretch, ..Default::default() }, |ui| {
+            for (pi, plan) in plans.iter().enumerate() {
+                let is_sel = pi == *selected_plan;
+                let r_card = ui.look().card.radius;
+                let bg_c = if plan.popular {
+                    ui.color(Token::Surface).mix(ui.color(Token::AccentSubtle), 0.22)
+                } else {
+                    ui.color(Token::Surface)
+                };
+                let bd_c = if is_sel || plan.popular { ui.color(Token::Accent) } else { ui.color(Token::BorderSubtle) };
+                let bw = if is_sel { 1.6 } else { 1.0 };
 
-            self.begin(
-                Style { dir: Dir::Column, width: Size::FILL, pad: Sides::all(14.0), gap: 8.0, ..Default::default() },
-                None,
-                Sense::NONE,
-                CursorIcon::Default,
-                false,
-                Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(r_card), bg_c, bw, bd_c))),
-            );
+                ui.begin(
+                    Style { dir: Dir::Column, width: Size::FILL, min: vec2(200.0, 0.0), pad: Sides::all(14.0), gap: 8.0, ..Default::default() },
+                    None,
+                    Sense::NONE,
+                    CursorIcon::Default,
+                    false,
+                    Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(r_card), bg_c, bw, bd_c))),
+                );
 
-            self.begin(Style { dir: Dir::Row, width: Size::FILL, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-            self.text_leaf(plan.name.clone(), self.text_style(TextRole::BodyStrong), self.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
-            if plan.popular {
-                self.badge("Popular", Tone::Accent);
+                ui.begin(Style { dir: Dir::Row, width: Size::FILL, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                ui.text_leaf(plan.name.clone(), ui.text_style(TextRole::BodyStrong), ui.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
+                if plan.popular {
+                    ui.badge("Popular", Tone::Accent);
+                }
+                ui.end();
+
+                // Rolling price figure!
+                let price = if *annual { plan.annual_usd } else { plan.monthly_usd } as i64;
+                ui.begin(Style { dir: Dir::Row, gap: 4.0, align: Align::End, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                ui.scope(id.with(("pr_num", pi)), |ui| {
+                    ui.rolling_number("usd", price).prefix("$").role(TextRole::Heading1).show();
+                });
+                ui.text_leaf("/ mo", ui.text_style(TextRole::Caption), ui.color(Token::TextMuted), false, false, Style::default());
+                ui.end();
+
+                ui.text_leaf(plan.blurb.clone(), ui.text_style(TextRole::Caption), ui.color(Token::TextSecondary), true, false, Style { width: Size::FILL, ..Default::default() });
+
+                for feat in &plan.features {
+                    let ck_c = ui.color(Token::Success);
+                    ui.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                    ui.leaf(Style::default(), vec2(13.0, 13.0), None, Sense::NONE, CursorIcon::Default, Some(Box::new(move |cx, r| cx.icon("check", r.center(), 12.0, ck_c))));
+                    ui.text_leaf(feat.clone(), ui.text_style(TextRole::Caption), ui.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
+                    ui.end();
+                }
+
+                ui.begin(Style { width: Size::FILL, height: Size::FILL, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                ui.end();
+
+                let btn_lbl = if is_sel { "Current plan" } else { "Select plan" };
+                let clicked = ui.scope(("pc_cta", pi), |ui| {
+                    let b = ui.button(btn_lbl).small().full_width();
+                    let b = if plan.popular && !is_sel { b.primary() } else { b };
+                    b.clicked()
+                });
+                if clicked && *selected_plan != pi {
+                    *selected_plan = pi;
+                    changed = true;
+                }
+                ui.end();
             }
-            self.end();
-
-            // Rolling price figure!
-            let price = if *annual { plan.annual_usd } else { plan.monthly_usd } as i64;
-            self.begin(Style { dir: Dir::Row, gap: 4.0, align: Align::End, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-            self.scope(id.with(("pr_num", pi)), |ui| {
-                ui.rolling_number("usd", price).prefix("$").role(TextRole::Heading1).show();
-            });
-            self.text_leaf("/ mo", self.text_style(TextRole::Caption), self.color(Token::TextMuted), false, false, Style::default());
-            self.end();
-
-            self.text_leaf(plan.blurb.clone(), self.text_style(TextRole::Caption), self.color(Token::TextSecondary), true, false, Style { width: Size::FILL, ..Default::default() });
-
-            for feat in &plan.features {
-                let ck_c = self.color(Token::Success);
-                self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-                self.leaf(Style::default(), vec2(13.0, 13.0), None, Sense::NONE, CursorIcon::Default, Some(Box::new(move |cx, r| cx.icon("check", r.center(), 12.0, ck_c))));
-                self.text_leaf(feat.clone(), self.text_style(TextRole::Caption), self.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
-                self.end();
-            }
-
-            self.begin(Style { width: Size::FILL, height: Size::FILL, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-            self.end();
-
-            let btn_lbl = if is_sel { "Current plan" } else { "Select plan" };
-            let clicked = self.scope(("pc_cta", pi), |ui| {
-                let b = ui.button(btn_lbl).small().full_width();
-                let b = if plan.popular && !is_sel { b.primary() } else { b };
-                b.clicked()
-            });
-            if clicked && *selected_plan != pi {
-                *selected_plan = pi;
-                changed = true;
-            }
-            self.end();
-        }
-        self.end();
+        });
         self.end();
 
         changed
