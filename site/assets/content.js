@@ -870,8 +870,10 @@ ui.avatar_group(&["JB", "PN", "TR", "LF", "SW"], 4, 32.0);`,
       ["TableCol::new(label)", ".fill(weight), .width(px), .sortable(), .right()"],
       ["TableCell", "::text, ::strong, ::muted, ::mono, ::badge(label, Tone)"],
       [".sort_by(&mut Option<(usize, SortDir)>) .selection(&mut Vec<bool>)", "Optional column sorting and per-row selection."],
+      [".lazy_rows(count, id_of, cells_of)", "Rows made on demand: cells are asked for only for rows in view, so 100k rows cost what a screenful does."],
+      [".height(px)", "Scroll the body under a sticky header. Only visible rows are built either way."],
     ],
-    keys: [["↑ ↓", "Move row focus"], ["Space / Enter", "Toggle focused header sort or row selection"]],
+    keys: [["↑ ↓", "Move row focus"], ["Page Up / Page Down", "Move a page"], ["Home / End", "First / last row"], ["Space / Enter", "Toggle focused header sort or row selection"]],
   },
   {
     slug: "tree", name: "Tree view", group: "Data", demo: "tree",
@@ -1323,9 +1325,28 @@ let out = ui.list_view("files", &rows, &mut selected); // selected: Option<usize
 if let Some(i) = out.activated { open(i) }            // double click or Enter`,
     options: [
       ["ListRow::new(title) .subtitle .preview .meta .icon .avatar(initials, tone) .unread .starred .badge(text, tone)", "Every field but the title is optional."],
-      ["ListOut { changed, activated, starred }", "activated fires on double click or Enter; starred when a row's star is clicked."],
+      ["ListOut { changed, activated, starred, built }", "activated fires on double click or Enter; starred when a row's star is clicked; built is how many rows were built this frame."],
+      ["ListRow::key(id)", "A stable id: rows inserted above the viewport don't move what you're reading."],
+      ["Inside ui.scroll(..)", "Only the rows in view are built (Ui::virtual_rows), so 100k rows scroll at 60 fps."],
     ],
-    keys: [["↑ ↓", "Move the selection"], ["Home / End", "First / last row"], ["Enter", "Open the selected row"]],
+    keys: [["↑ ↓", "Move the selection"], ["Page Up / Page Down", "Move a page"], ["Home / End", "First / last row"], ["Type", "Jump to the next title that starts with it"], ["Enter", "Open the selected row"]],
+  },
+  {
+    slug: "virtual-list", name: "Virtualized rows", group: "Data", demo: "virtual-list",
+    summary: "100,000 rows of different heights, of which only the twenty or so in view are built. Heights are measured as rows appear, the scrollbar is right from the start, and loading history above keeps your place.",
+    code: `ui.scroll("log").show(|ui| {
+    let key = |i: usize| lines[i].id;
+    ui.virtual_rows("lines", lines.len()).keys(&key).estimate(28.0).show(|ui, i| {
+        log_line(ui, &lines[i]);
+    });
+});`,
+    options: [
+      [".estimate(px) .gap(px)", "Height of a row before it's measured (unseen rows follow the measured average), and space between rows."],
+      [".keys(&|i| id)", "Stable row ids: measured heights and the scroll position follow rows across inserts, removals and sorts."],
+      [".pin(Some(i)) .reveal(Some(i))", "Always build a row (the focused one), and scroll a row into view (keyboard navigation)."],
+      ["VirtualOut { first, end, built, total_height }", "What was built this frame. list_view and table use this underneath."],
+    ],
+    keys: [],
   },
   {
     slug: "code-editor", name: "Code editor", group: "Developer tools", demo: "code-editor",

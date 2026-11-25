@@ -123,6 +123,7 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("flame-graph", "Flame graph"),
     ("notification-list", "Notification inbox"),
     ("list-view", "List view"),
+    ("virtual-list", "Virtualized list"),
     ("code-editor", "Code editor"),
     ("emoji-picker", "Emoji picker"),
     ("wheel-picker", "Wheel and time picker"),
@@ -314,6 +315,13 @@ struct State {
     win_look: Platform,
     win_event: Option<(&'static str, &'static str)>,
     win_events: u32,
+    /// virtual-list: 100k rows, made on first use.
+    vl_rows: Vec<lumen::ListRow>,
+    vl_sel: Option<usize>,
+    vl_mode: u8,
+    vl_next_key: u64,
+    vl_built: usize,
+    vl_off: f32,
     split_ratio: f32,
     term_lines: Vec<TermLine>,
     term_in: String,
@@ -493,6 +501,12 @@ impl State {
             win_look: Platform::Mac,
             win_event: None,
             win_events: 0,
+            vl_rows: vec![],
+            vl_sel: None,
+            vl_mode: 0,
+            vl_next_key: 0,
+            vl_built: 0,
+            vl_off: 0.0,
             split_ratio: 0.38,
             term_lines: vec![
                 TermLine::cmd("cargo test -p lumen-core --quiet"),
@@ -2404,6 +2418,72 @@ ui.button("Ship release").primary().icon("rocket");
                 ui.label(format!("Selected: {pick}. Use ↑ ↓ to move, Enter to open.")).muted().small();
             });
         }
+        "virtual-list" => {
+            if s.vl_rows.is_empty() {
+                s.vl_rows = (0..100_000u64).map(virtual_row).collect();
+                s.vl_next_key = 100_000;
+                if std::env::var_os("LUMEN_VL_TABLE").is_some() {
+                    s.vl_mode = 1;
+                }
+            }
+            let n = s.vl_rows.len();
+            let avail = (ui.screen_size().y - if s.embed { 150.0 } else { 190.0 }).max(200.0);
+            ui.column().fill_width().max_width(720.0).gap(12).show(|ui| {
+                ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                    ui.segmented(&mut s.vl_mode, &[(0u8, "List"), (1u8, "Table")]);
+                    ui.spacer();
+                    // History arriving above: what you're reading stays put.
+                    if ui.button("Load 25 earlier").icon("history").show().clicked {
+                        let base = s.vl_next_key;
+                        s.vl_next_key += 25;
+                        let mut older: Vec<lumen::ListRow> = (0..25).map(|k| virtual_row(base + k)).collect();
+                        older.append(&mut s.vl_rows);
+                        s.vl_rows = older;
+                        s.vl_sel = s.vl_sel.map(|i| i + 25);
+                    }
+                });
+                let sid = if s.vl_mode == 0 { ui.peek_id(("scroll", "vl")) } else { ui.peek_id(("scroll", ("tbody", "vl_table"))) };
+                if std::env::var_os("LUMEN_AUTOSCROLL").is_some() {
+                    // Benchmark: scroll continuously through all rows.
+                    s.vl_off += 37.0;
+                    ui.scroll_set(sid, s.vl_off);
+                    ui.request_repaint_after(0.0);
+                }
+                if s.vl_mode == 0 {
+                    let rad = ui.look().card.radius;
+                    ui.column().fill_width().bg(lumen::Token::Surface).border(lumen::Token::BorderSubtle).radius(rad).pad(6).show(|ui| {
+                        ui.scroll("vl").height(avail).show(|ui| {
+                            let out = ui.list_view("vl_list", &s.vl_rows, &mut s.vl_sel);
+                            s.vl_built = out.built;
+                            if let Some(i) = out.starred {
+                                s.vl_rows[i].starred = !s.vl_rows[i].starred;
+                            }
+                        });
+                    });
+                } else {
+                    let rows = &s.vl_rows;
+                    let clicked = ui
+                        .table("vl_table")
+                        .columns([TableCol::new("Event").fill(2.0), TableCol::new("Service"), TableCol::new("Time").width(64.0).right()])
+                        .lazy_rows(
+                            n,
+                            |i| rows[i].key.unwrap_or(i as u64) as usize,
+                            |i| {
+                                let r = &rows[i];
+                                vec![TableCell::strong(r.title.clone()), TableCell::muted(r.subtitle.clone().unwrap_or_default()), TableCell::mono(r.meta.clone().unwrap_or_default())]
+                            },
+                        )
+                        .height(avail)
+                        .show();
+                    if let Some(c) = clicked {
+                        s.vl_sel = rows.iter().position(|r| r.key == Some(c as u64));
+                    }
+                    s.vl_built = 0;
+                }
+                let shown = if s.vl_mode == 0 { format!(" · {} rows built", s.vl_built) } else { String::new() };
+                ui.label(format!("{} rows{shown}. ↑ ↓ Page Up/Down Home End move; type to jump.", group_digits(n))).muted().small();
+            });
+        }
         "notification-list" => {
             ui.column().fill_width().max_width(540.0).show(|ui| {
                 ui.notification_list("inbox", &mut s.notifs);
@@ -3699,6 +3779,40 @@ fn main() {
     } else {
         app.run(state, view);
     }
+}
+
+/// One row of the virtual-list demo: a deploy event, some with a preview
+/// line, so rows have different heights.
+fn virtual_row(k: u64) -> lumen::ListRow {
+    const SERVICES: [&str; 6] = ["edge-proxy", "renderer", "glyph-atlas", "auth", "billing", "search"];
+    const REGIONS: [&str; 4] = ["eu-central", "us-east", "ap-south", "sa-east"];
+    const VERBS: [&str; 5] = ["Deployed", "Rolled back", "Scaled", "Restarted", "Promoted"];
+    let h = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32;
+    let svc = SERVICES[(h % 6) as usize];
+    let mut r = lumen::ListRow::new(format!("{} {svc} #{k}", VERBS[(h / 7 % 5) as usize]))
+        .key(k)
+        .subtitle(REGIONS[(h / 3 % 4) as usize])
+        .meta(format!("{:02}:{:02}", (h / 11) % 24, (h / 13) % 60))
+        .icon(["rocket", "rotate-ccw", "layers", "refresh-cw", "arrow-up-circle"][(h / 7 % 5) as usize]);
+    if h % 3 == 0 {
+        r = r.preview(format!("{} replicas healthy · p95 {} ms · build {:x}", 2 + h % 9, 40 + h % 160, h & 0xFFFF));
+    }
+    if h % 11 == 0 {
+        r = r.badge("canary", Tone::Warning);
+    }
+    r.unread(h % 5 == 0)
+}
+
+fn group_digits(n: usize) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// `--chrome`: the demo inside lumen's own title bar instead of the OS's.

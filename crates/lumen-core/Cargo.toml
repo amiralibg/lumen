@@ -11,3 +11,7 @@ lumen-text.workspace = true
 ahash.workspace = true
 unicode-segmentation.workspace = true
 web-time.workspace = true
+
+[[bench]]
+name = "virtual_rows"
+harness = false

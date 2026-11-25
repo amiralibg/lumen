@@ -532,6 +532,22 @@ pub struct Table<'u> {
     sort: Option<&'u mut Option<(usize, SortDir)>>,
     selected: Option<&'u mut Vec<bool>>,
     clicked_row: Option<usize>,
+    lazy: Option<LazyRows<'u>>,
+    height: Option<f32>,
+}
+
+/// Rows produced on demand by [`Table::lazy_rows`].
+struct LazyRows<'u> {
+    count: usize,
+    id_of: Box<dyn Fn(usize) -> usize + 'u>,
+    cells_of: Box<dyn FnMut(usize) -> Vec<TableCell> + 'u>,
+}
+
+#[derive(Default)]
+struct TableMem {
+    /// Index of the row that had keyboard focus last frame.
+    focus: Option<usize>,
+    page: usize,
 }
 
 impl<'u> Table<'u> {
@@ -553,6 +569,20 @@ impl<'u> Table<'u> {
         self.rows.push((row_id, cells.into_iter().map(Into::into).collect()));
         self
     }
+    /// `count` rows made on demand: `id_of(i)` is row `i`'s stable id and
+    /// `cells_of(i)` its cells, asked only for rows in view. Use this for
+    /// big tables (100k rows) instead of [`row`](Self::row).
+    pub fn lazy_rows(mut self, count: usize, id_of: impl Fn(usize) -> usize + 'u, cells_of: impl FnMut(usize) -> Vec<TableCell> + 'u) -> Self {
+        self.lazy = Some(LazyRows { count, id_of: Box::new(id_of), cells_of: Box::new(cells_of) });
+        self
+    }
+    /// Give the body this height and scroll it under a sticky header.
+    /// Only the rows in view are built, with or without this (a table in a
+    /// [`Ui::scroll`] scrolls with the page).
+    pub fn height(mut self, px: f32) -> Self {
+        self.height = Some(px);
+        self
+    }
 
     pub fn show(mut self) -> Option<usize> {
         let ui = &mut *self.ui;
@@ -564,7 +594,19 @@ impl<'u> Table<'u> {
         let div_c = ui.color(Token::BorderSubtle);
 
         let has_sel = self.selected.is_some();
-        let row_ids: Vec<usize> = self.rows.iter().map(|(rid, _)| *rid).collect();
+        let (lazy_ids, mut lazy_cells) = match self.lazy.take() {
+            Some(l) => (Some((l.count, l.id_of)), Some(l.cells_of)),
+            None => (None, None),
+        };
+        let eager = std::mem::take(&mut self.rows);
+        let count = lazy_ids.as_ref().map_or(eager.len(), |l| l.0);
+        // Row ids are looked up per row; the full list is only collected for
+        // the select-all checkbox.
+        let rid_of = |i: usize| match &lazy_ids {
+            Some((_, f)) => f(i),
+            None => eager[i].0,
+        };
+        let row_ids: Vec<usize> = if has_sel { (0..count).map(rid_of).collect() } else { vec![] };
         if let Some(sel) = self.selected.as_deref_mut() {
             let max_id = row_ids.iter().copied().max().map(|m| m + 1).unwrap_or(0);
             if sel.len() < max_id {
@@ -572,18 +614,32 @@ impl<'u> Table<'u> {
             }
         }
 
-        // Keyboard Up/Down navigation across table rows.
-        let focus_row_ids: Vec<Id> = row_ids.iter().map(|&rid| id.with(("row", rid))).collect();
-        if let Some(cur) = ui.focused() {
-            if let Some(pos) = focus_row_ids.iter().position(|&r| r == cur) {
-                let len = focus_row_ids.len();
-                if len > 0 {
-                    if ui.key_pressed_for(cur, Key::ArrowDown) {
-                        ui.request_focus(focus_row_ids[(pos + 1) % len]);
-                    } else if ui.key_pressed_for(cur, Key::ArrowUp) {
-                        ui.request_focus(focus_row_ids[(pos + len - 1) % len]);
-                    }
-                }
+        // Keyboard navigation across rows, on the row focused last frame.
+        // The row it moves to is scrolled into view (and built) this frame.
+        let row_wid_of = |i: usize| id.with(("row", rid_of(i)));
+        let focused_i = ui.mem::<TableMem>(id).focus.filter(|&i| i < count && ui.focused() == Some(row_wid_of(i)));
+        let mut reveal = None;
+        if let Some(pos) = focused_i {
+            let cur = row_wid_of(pos);
+            let page = ui.mem::<TableMem>(id).page.max(1);
+            let go = if ui.key_pressed_for(cur, Key::ArrowDown) {
+                Some((pos + 1) % count)
+            } else if ui.key_pressed_for(cur, Key::ArrowUp) {
+                Some((pos + count - 1) % count)
+            } else if ui.key_pressed_for(cur, Key::PageDown) {
+                Some((pos + page).min(count - 1))
+            } else if ui.key_pressed_for(cur, Key::PageUp) {
+                Some(pos.saturating_sub(page))
+            } else if ui.key_pressed_for(cur, Key::Home) {
+                Some(0)
+            } else if ui.key_pressed_for(cur, Key::End) {
+                Some(count - 1)
+            } else {
+                None
+            };
+            if let Some(g) = go {
+                ui.request_focus(row_wid_of(g));
+                reveal = Some(g);
             }
         }
 
@@ -718,18 +774,29 @@ impl<'u> Table<'u> {
             *sort_ref = next_sort;
         }
 
-        // Body rows.
-        for (ri, (rid, cells)) in self.rows.iter().enumerate() {
-            let rid = *rid;
+        // Body rows: only those in view are built.
+        let cols = &self.cols;
+        let selected = &mut self.selected;
+        let clicked_row = &mut self.clicked_row;
+        let mut focus_now = None;
+        let mut body = |ui: &mut Ui, ri: usize| {
+            let rid = rid_of(ri);
+            let cells: Vec<TableCell> = match lazy_cells.as_mut() {
+                Some(f) => f(ri),
+                None => eager[ri].1.clone(),
+            };
             let row_wid = id.with(("row", rid));
             let row_ix = ui.interact(row_wid, Sense::CLICK, false);
+            if row_ix.focused {
+                focus_now = Some(ri);
+            }
             let (key_act, key_held) = key_activate(ui, &row_ix, true);
-            let is_sel = self.selected.as_deref().and_then(|s| s.get(rid).copied()).unwrap_or(false);
+            let is_sel = selected.as_deref().and_then(|s| s.get(rid).copied()).unwrap_or(false);
 
             if row_ix.clicked || key_act {
-                self.clicked_row = Some(rid);
+                *clicked_row = Some(rid);
                 if key_act {
-                    if let Some(sel) = self.selected.as_deref_mut() {
+                    if let Some(sel) = selected.as_deref_mut() {
                         if let Some(slot) = sel.get_mut(rid) {
                             *slot = !*slot;
                         }
@@ -749,7 +816,7 @@ impl<'u> Table<'u> {
                 (base_h.over(sel_bg.multiply_alpha(sel_t)), ui.color(Token::BorderSubtle), ui.color(Token::FocusRing))
             };
             let draw_top_sep = ri > 0;
-            let is_last_row = ri + 1 == self.rows.len();
+            let is_last_row = ri + 1 == count;
             let bot_rad = if is_last_row { (r_card - 1.0).max(0.0) } else { 0.0 };
 
             ui.begin(
@@ -780,7 +847,7 @@ impl<'u> Table<'u> {
             );
 
             if has_sel {
-                if let Some(sel) = self.selected.as_deref_mut() {
+                if let Some(sel) = selected.as_deref_mut() {
                     let mut v = sel[rid];
                     let c_resp = ui.scope(("rchk", rid), |ui| ui.checkbox("", &mut v).show());
                     if c_resp.changed {
@@ -789,7 +856,7 @@ impl<'u> Table<'u> {
                 }
             }
 
-            for (ci, col) in self.cols.iter().enumerate() {
+            for (ci, col) in cols.iter().enumerate() {
                 let cell = cells.get(ci).cloned().unwrap_or(TableCell::Text(String::new()));
                 let right = col.right_align;
                 let justify = if right { Justify::End } else { Justify::Start };
@@ -841,6 +908,19 @@ impl<'u> Table<'u> {
                 ui.end();
             }
             ui.end(); // row
+        };
+        let pin = focused_i.or(reveal);
+        let vout = if let Some(h) = self.height {
+            ui.scroll(("tbody", &self.key)).height(h).show(|ui| ui.virtual_rows("rows", count).estimate(40.0).pin(pin).reveal(reveal).show(&mut body)).0
+        } else {
+            ui.virtual_rows("rows", count).estimate(40.0).pin(pin).reveal(reveal).show(&mut body)
+        };
+        {
+            let m = ui.mem::<TableMem>(id);
+            m.focus = focus_now;
+            if count > 0 && vout.total_height > 0.0 {
+                m.page = ((vout.viewport / (vout.total_height / count as f32)).floor() as usize).saturating_sub(1).max(1);
+            }
         }
 
         ui.end(); // table
@@ -1220,7 +1300,7 @@ impl Ui {
 
     /// Sortable, selectable data table.
     pub fn table(&mut self, key: impl Into<String>) -> Table<'_> {
-        Table { ui: self, key: key.into(), cols: vec![], rows: vec![], sort: None, selected: None, clicked_row: None }
+        Table { ui: self, key: key.into(), cols: vec![], rows: vec![], sort: None, selected: None, clicked_row: None, lazy: None, height: None }
     }
 
     /// Expandable hierarchical tree view.

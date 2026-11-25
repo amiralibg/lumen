@@ -278,12 +278,12 @@ struct TipState {
 
 #[derive(Clone, Copy)]
 pub(crate) struct ScrollState {
-    offset: f32,
+    pub(crate) offset: f32,
     content: f32,
     viewport: f32,
     last_scroll_time: f64,
     /// Programmatic target, animated with the gentle spring.
-    target: Option<f32>,
+    pub(crate) target: Option<f32>,
 }
 
 /// Persistent state of a [`Ui::scroll_row`].
@@ -486,6 +486,9 @@ pub struct Ui {
     tip_last_closed: f64,
     hover_since: Option<(Id, f64)>,
     scrolls: Vec<(Id, NodeId)>,
+    /// Open vertical scroll areas while the view runs: id and how far the
+    /// offset moved this frame (for virtualized rows inside them).
+    pub(crate) scroll_ctx: Vec<(Id, f32)>,
     /// Horizontal scroll rows this frame, and last frame's ids (sideways
     /// wheel input goes to them; vertical input passes through).
     scrolls_x: Vec<(Id, NodeId)>,
@@ -576,6 +579,7 @@ impl Ui {
             tip_last_closed: -10.0,
             hover_since: None,
             scrolls: vec![],
+            scroll_ctx: vec![],
             scrolls_x: vec![],
             prev_scrolls_x: vec![],
             repaint_at: None,
@@ -655,6 +659,7 @@ impl Ui {
         self.layer_close = false;
         self.tooltips.clear();
         self.scrolls.clear();
+        self.scroll_ctx.clear();
         self.scrolls_x.clear();
         self.repaint_at = None;
         let root_style = Style { width: Size::FILL, height: Size::FILL, ..Default::default() };
@@ -1302,6 +1307,17 @@ impl Ui {
     // ------------------------------------------------------------ ids
 
     /// Make a stable id for a widget from a key, unique within the scope.
+    /// The id the next [`make_id`](Self::make_id) with `key` will return,
+    /// without claiming it: for addressing a widget before it's built, such
+    /// as the scroll area of `ui.scroll(key)` for [`scroll_to`](Self::scroll_to).
+    pub fn peek_id(&self, key: impl std::hash::Hash) -> Id {
+        let scope = *self.id_scope.last().unwrap_or(&Id::ROOT);
+        let id = scope.with(key);
+        match self.seen.get(&id) {
+            None | Some(0) => id,
+            Some(n) => id.with(*n + 1),
+        }
+    }
     pub fn make_id(&mut self, key: impl std::hash::Hash) -> Id {
         let scope = *self.id_scope.last().unwrap_or(&Id::ROOT);
         let id = scope.with(key);
@@ -2247,6 +2263,11 @@ pub struct ScrollArea<'u> {
 }
 
 impl ScrollArea<'_> {
+    /// A fixed height instead of filling the parent.
+    pub fn height(mut self, px: f32) -> Self {
+        self.style.height = Size::Fixed(px);
+        self
+    }
     pub fn pad(mut self, p: impl Into<Sides>) -> Self {
         self.style.pad = p.into();
         self
@@ -2309,9 +2330,11 @@ impl ScrollArea<'_> {
         let thumb = ui.color(Token::BorderStrong);
         let n = ui.begin(style, Some(id), Sense { scroll: true, ..Sense::NONE }, CursorIcon::Default, true, None);
         ui.scrolls.push((id, n));
+        ui.scroll_ctx.push((id, next.offset - st.offset));
         ui.id_scope.push(id);
         let r = f(ui);
         ui.id_scope.pop();
+        ui.scroll_ctx.pop();
         ui.end();
         if max > 0.0 && vis > 0.0 {
             let (off, content, viewport) = (next.offset, st.content, st.viewport);

@@ -40,6 +40,7 @@ pub mod charts_extra;
 pub mod planning;
 pub mod ai_devtools;
 pub mod motion_chrome;
+pub mod virtual_rows;
 pub mod workspace_pro;
 pub mod rich_views;
 pub mod inputs_pro;
@@ -89,6 +90,7 @@ pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, Log
 pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatmap, ProgressRing, RadarChart, RingSpec, ScatterChart, ScatterPoint, ScatterSeries};
 pub use planning::{KanbanCard, KanbanCol};
 pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComposer, ToolCall, ToolStatus, TraceSpan, UptimeStatus};
+pub use virtual_rows::{VirtualOut, VirtualRows};
 pub use motion_chrome::{ChromeResponse, ChromeShown, DockItem, RollingNumber, Waveform, WindowChrome};
 pub use workspace_pro::{FlameSpan, MenuBarScope, PropertyInspector, SplitPane, TermLine, TermTone, Terminal};
 pub use rich_views::{GanttTask, NotificationItem, SpotlightCard, Treemap, TreemapItem};

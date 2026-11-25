@@ -143,6 +143,7 @@ impl App {
             last_title_press: None,
             resize_dir: None,
             pointer: Vec2::ZERO,
+            trace: std::env::var_os("LUMEN_TRACE_FRAMES").map(|_| FrameTrace { since: Instant::now(), last_present: None, cpu: vec![], submit: vec![], interval: vec![] }),
         };
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -242,6 +243,45 @@ struct Runner<S> {
     resize_dir: Option<winit::window::ResizeDirection>,
     /// Latest pointer position from winit (the UI's lags by a frame).
     pointer: Vec2,
+    /// `LUMEN_TRACE_FRAMES=1`: frame times, printed every two seconds.
+    trace: Option<FrameTrace>,
+}
+
+/// Frame statistics for `LUMEN_TRACE_FRAMES=1`.
+struct FrameTrace {
+    since: Instant,
+    last_present: Option<Instant>,
+    /// Per frame: the UI (view, layout, tessellation), encoding and
+    /// submitting the draw (not waiting for a drawable), and the interval
+    /// between presents.
+    cpu: Vec<f64>,
+    submit: Vec<f64>,
+    interval: Vec<f64>,
+}
+
+impl FrameTrace {
+    fn report(&mut self) {
+        if self.since.elapsed().as_secs_f64() < 2.0 || self.cpu.is_empty() {
+            return;
+        }
+        let pct = |v: &mut Vec<f64>, p: f64| {
+            v.sort_by(|a, b| a.total_cmp(b));
+            v[((v.len() - 1) as f64 * p) as usize]
+        };
+        let secs = self.since.elapsed().as_secs_f64();
+        let fps = self.interval.len() as f64 / secs;
+        let (c50, c95, cmax) = (pct(&mut self.cpu, 0.5), pct(&mut self.cpu, 0.95), pct(&mut self.cpu, 1.0));
+        let (s50, s95) = (pct(&mut self.submit, 0.5), pct(&mut self.submit, 0.95));
+        let (i95, imax) = if self.interval.is_empty() { (0.0, 0.0) } else { (pct(&mut self.interval, 0.95), pct(&mut self.interval, 1.0)) };
+        eprintln!(
+            "lumen: {fps:.1} fps | ui p50 {c50:.2} ms p95 {c95:.2} ms max {cmax:.2} ms | draw submit p50 {s50:.2} ms p95 {s95:.2} ms | present interval p95 {i95:.1} ms max {imax:.1} ms | {} frames",
+            self.cpu.len()
+        );
+        self.cpu.clear();
+        self.submit.clear();
+        self.interval.clear();
+        self.since = Instant::now();
+    }
 }
 
 impl<S> Runner<S> {
@@ -369,6 +409,7 @@ impl<S> Runner<S> {
             self.ui.set_native_accent(native);
             self.ui.theme.settle();
         }
+        let t_frame = Instant::now();
         let scale = self.scale;
         let input = RawInput {
             screen_size: vec2(size.width as f32 / scale, size.height as f32 / scale),
@@ -380,6 +421,7 @@ impl<S> Runner<S> {
         self.ui.begin_frame(input);
         (self.view)(&mut self.ui, &mut self.state);
         let out = self.ui.end_frame();
+        let ui_ms = t_frame.elapsed().as_secs_f64() * 1e3;
 
         let gpu = self.gpu.as_mut().unwrap();
         let frame = match gpu.surface.get_current_texture() {
@@ -394,10 +436,21 @@ impl<S> Runner<S> {
                 return;
             }
         };
+        let t_submit = Instant::now();
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor { format: Some(gpu.view_format), ..Default::default() });
         gpu.renderer.draw_to(&gpu.device, &gpu.queue, &view, &out.draw);
         window.pre_present_notify();
         gpu.queue.present(frame);
+        if let Some(t) = self.trace.as_mut() {
+            let now = Instant::now();
+            t.cpu.push(ui_ms);
+            t.submit.push(now.duration_since(t_submit).as_secs_f64() * 1e3);
+            if let Some(p) = t.last_present {
+                t.interval.push(now.duration_since(p).as_secs_f64() * 1e3);
+            }
+            t.last_present = Some(now);
+            t.report();
+        }
 
         if let Some(t) = out.copied_text {
             self.clipboard.set(t);

@@ -43,5 +43,5 @@ pub use widgets::{
     ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, ScheduleRule, SchemaField, Series,
     ShortcutHint, SortDir, SpeedDialItem, SuggestionDecision, TableCell, TableCol, TermLine, TermTone, TestCase,
     TestState, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, UndoBarOut,
-    UptimeStatus, Variant, ViewMode, WaffleSlice, WorldClock,
+    UptimeStatus, Variant, ViewMode, VirtualOut, VirtualRows, WaffleSlice, WorldClock,
 };
