@@ -1223,7 +1223,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "badge" => {
-            ui.row().gap(8).show(|ui| {
+            ui.row().fill_width().gap(8).wrap().justify(Justify::Center).show(|ui| {
                 ui.badge("Neutral", Tone::Neutral);
                 ui.badge("Accent", Tone::Accent);
                 ui.badge("Live", Tone::Success);
@@ -1231,7 +1231,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 ui.badge("Down", Tone::Danger);
                 ui.badge("Beta", Tone::Info);
             });
-            ui.row().gap(20).show(|ui| {
+            ui.row().fill_width().gap(20).wrap().justify(Justify::Center).show(|ui| {
                 ui.status("Operational", Tone::Success);
                 ui.status("Partial outage", Tone::Warning);
                 ui.status("Major outage", Tone::Danger);
@@ -1655,14 +1655,16 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "sparkline" => {
-            ui.row().fill_width().gap(16).show(|ui| {
+            ui.row().fill_width().gap(16).wrap().show(|ui| {
                 for (label, value, delta, trend) in [
                     ("Revenue", "$118k", 12.4, revenue()),
                     ("Active users", "8,214", 4.1, vec![60.0, 62.0, 61.0, 66.0, 70.0, 69.0, 74.0, 78.0]),
                     ("Churn", "2.1%", -0.6, vec![3.0, 2.8, 2.9, 2.6, 2.5, 2.3, 2.2, 2.1]),
                 ] {
-                    ui.card().show(|ui| {
-                        ui.stat(label, value, Some(delta), Some(&trend));
+                    ui.column().fill_width().min_width(130.0).show(|ui| {
+                        ui.card().show(|ui| {
+                            ui.stat(label, value, Some(delta), Some(&trend));
+                        });
                     });
                 }
             });

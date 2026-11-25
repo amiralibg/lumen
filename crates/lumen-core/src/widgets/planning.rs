@@ -81,7 +81,6 @@ impl Ui {
     pub fn kanban(&mut self, key: impl std::hash::Hash, cols: &[KanbanCol], cards: &mut [KanbanCard]) -> Option<(usize, usize)> {
         let id = self.make_id(("kanban", key));
         let n_cols = cols.len().max(1);
-        let mo = self.motion();
         let mut moved: Option<(usize, usize)> = None;
 
         // Keyboard Left/Right move on any focused card.
@@ -101,6 +100,24 @@ impl Ui {
         let well_rad = self.look().card.radius;
         let card_rad = (well_rad - 2.0).max(6.0);
 
+        // Columns never get narrower than a readable card: on narrow screens
+        // the board scrolls sideways instead of breaking words.
+        let col_min = self.look().control.text_size[1] * 13.0;
+        let (_, sx) = self.scroll_row(("kanban_x", id), Style { width: Size::FILL, align: Align::Stretch, ..Default::default() }, |ui| {
+            ui.kanban_board(id, cols, cards, n_cols, col_min, well_rad, card_rad, &mut moved)
+        });
+        // Keep a card that just moved in view.
+        if let Some((ci, _)) = moved {
+            if let Some(r) = cards.get(ci).and_then(|c| self.rect_of(id.with(("card", &c.id)))) {
+                self.scroll_row_reveal(sx.id, r);
+            }
+        }
+        moved
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn kanban_board(&mut self, id: crate::Id, cols: &[KanbanCol], cards: &mut [KanbanCard], n_cols: usize, col_min: f32, well_rad: f32, card_rad: f32, moved: &mut Option<(usize, usize)>) {
+        let mo = self.motion();
         self.begin(
             Style { dir: Dir::Row, width: Size::FILL, gap: 12.0, align: Align::Stretch, ..Default::default() },
             Some(id),
@@ -123,6 +140,7 @@ impl Ui {
                 Style {
                     dir: Dir::Column,
                     width: Size::FILL,
+                    min: vec2(col_min, 0.0),
                     pad: Sides::all(10.0),
                     gap: 8.0,
                     ..Default::default()
@@ -187,10 +205,10 @@ impl Ui {
 
                 if can_left && l_ix.clicked {
                     card.col = col_idx - 1;
-                    moved = Some((ci, card.col));
+                    *moved = Some((ci, card.col));
                 } else if can_right && r_ix.clicked {
                     card.col = col_idx + 1;
-                    moved = Some((ci, card.col));
+                    *moved = Some((ci, card.col));
                 }
 
                 let any_hov = cix.hovered || l_ix.hovered || r_ix.hovered;
@@ -304,6 +322,5 @@ impl Ui {
         }
 
         self.end(); // board
-        moved
     }
 }

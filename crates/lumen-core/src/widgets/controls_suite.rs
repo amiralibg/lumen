@@ -158,6 +158,21 @@ impl Ui {
         let div_c = self.color(Token::BorderSubtle);
         let ink = self.color(Token::ShadowInk);
 
+        // A full-width slot measures the room the bar has; when last frame's
+        // labelled bar didn't fit, actions collapse to icons with tooltips.
+        let slot = id.with("slot");
+        let room = self.rect_of(slot).map(|r| r.width());
+        let full_w = self.rect_of(id).map(|r| r.width()).unwrap_or(0.0);
+        let mut compact = *self.mem::<bool>(id);
+        if !compact && room.is_some_and(|w| full_w > w + 0.5) {
+            compact = true;
+            *self.mem::<f32>(slot) = full_w;
+        } else if compact && room.is_some_and(|w| *self.mem::<f32>(slot) <= w) {
+            compact = false;
+        }
+        *self.mem::<bool>(id) = compact;
+        self.begin(Style { dir: Dir::Row, width: Size::FILL, justify: crate::layout::Justify::Center, ..Default::default() }, Some(slot), Sense::NONE, CursorIcon::Default, false, None);
+
         self.begin(
             Style {
                 dir: Dir::Row,
@@ -187,7 +202,7 @@ impl Ui {
 
         for (ai, &(icon, label, danger)) in actions.iter().enumerate() {
             let clicked = self.scope(("ab_act", ai), |ui| {
-                let b = ui.button(label).small().icon(icon);
+                let b = if compact { ui.icon_button(icon).small().tooltip(label) } else { ui.button(label).small().icon(icon) };
                 if danger {
                     b.danger().clicked()
                 } else {
@@ -204,6 +219,7 @@ impl Ui {
             out.cleared = true;
         }
         self.end();
+        self.end(); // slot
         out
     }
 
