@@ -5,6 +5,42 @@
 
 use lumen_core::{Color, SystemPrefs};
 
+/// What double-clicking a window's title bar does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TitleAction {
+    Maximize,
+    Minimize,
+    None,
+}
+
+/// The OS setting for double-clicking a title bar (System Settings > Desktop
+/// & Dock on macOS, `action-double-click-titlebar` on GNOME). Windows always
+/// maximizes.
+pub fn title_double_click() -> TitleAction {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_foundation::{NSString, NSUserDefaults};
+        let v = NSUserDefaults::standardUserDefaults().stringForKey(&NSString::from_str("AppleActionOnDoubleClick"));
+        return match v.map(|s| s.to_string()).as_deref() {
+            Some("Minimize") => TitleAction::Minimize,
+            Some("None") => TitleAction::None,
+            _ => TitleAction::Maximize,
+        };
+    }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
+    {
+        let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.wm.preferences", "action-double-click-titlebar"]).output();
+        let v = out.ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().trim_matches('\'').to_owned());
+        return match v.as_deref() {
+            Some("minimize") => TitleAction::Minimize,
+            Some("none" | "lower" | "menu") => TitleAction::None,
+            _ => TitleAction::Maximize,
+        };
+    }
+    #[allow(unreachable_code)]
+    TitleAction::Maximize
+}
+
 /// Query the OS. Cheap on macOS and the web; spawns a short-lived process
 /// on Windows and Linux, so call it on startup and focus changes, not per
 /// frame.

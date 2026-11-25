@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use lumen_core::input::{CursorIcon, Event, Key, Modifiers, PointerButton, RawInput};
-use lumen_core::{vec2, Accent, Look, Mode, Ui};
+use lumen_core::{vec2, Accent, Look, Mode, Ui, Vec2, WindowRegion, WindowRequest};
 use lumen_wgpu::Renderer;
 use web_time::Instant;
 use winit::application::ApplicationHandler;
@@ -38,6 +38,7 @@ pub struct App {
     look: Look,
     follow_reduced_motion: bool,
     canvas_id: Option<String>,
+    custom_chrome: bool,
 }
 
 impl App {
@@ -51,6 +52,7 @@ impl App {
             look: Look::lumen(),
             follow_reduced_motion: true,
             canvas_id: None,
+            custom_chrome: false,
         }
     }
     /// Initial window size in logical pixels.
@@ -83,6 +85,16 @@ impl App {
     /// Follow the OS reduce-motion setting (default on).
     pub fn follow_reduced_motion(mut self, on: bool) -> Self {
         self.follow_reduced_motion = on;
+        self
+    }
+    /// Draw the title bar yourself with `ui.window_chrome(..).window()`.
+    /// The OS title bar goes away (on macOS the traffic lights are hidden
+    /// and content runs under a transparent title bar, so the window keeps
+    /// its rounded corners and shadow). Dragging lumen's title bar moves the
+    /// window, double-clicking it maximizes, its buttons minimize, zoom and
+    /// close, and on Windows and Linux the window edges resize it.
+    pub fn custom_chrome(mut self) -> Self {
+        self.custom_chrome = true;
         self
     }
     /// Web only: render into an existing `<canvas id=...>` instead of appending one.
@@ -126,6 +138,11 @@ impl App {
             clipboard: Clipboard::new(),
             cursor: CursorIcon::Default,
             followed_system_theme: false,
+            exit: false,
+            maximized: false,
+            last_title_press: None,
+            resize_dir: None,
+            pointer: Vec2::ZERO,
         };
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -216,6 +233,15 @@ struct Runner<S> {
     clipboard: Clipboard,
     cursor: CursorIcon,
     followed_system_theme: bool,
+    /// A close request from the UI, acted on in `about_to_wait`.
+    exit: bool,
+    maximized: bool,
+    /// Time and place of the last press on the title bar (double-click).
+    last_title_press: Option<(Instant, Vec2)>,
+    /// Pointer is on a resizable window edge (custom chrome, not macOS).
+    resize_dir: Option<winit::window::ResizeDirection>,
+    /// Latest pointer position from winit (the UI's lags by a frame).
+    pointer: Vec2,
 }
 
 impl<S> Runner<S> {
@@ -229,6 +255,81 @@ impl<S> Runner<S> {
                     self.ui.set_reduced_motion(r);
                 }
             }
+        }
+    }
+
+    /// A primary press with custom chrome: resize from an edge, maximize on
+    /// a title bar double-click, or start moving the window. Window moves
+    /// must start inside the mouse-down event (macOS reads the current
+    /// event). Returns true when the press was consumed.
+    fn chrome_press(&mut self, pos: Vec2) -> bool {
+        let Some(window) = self.window.clone() else { return false };
+        if let Some(dir) = self.resize_dir {
+            return window.drag_resize_window(dir).is_ok();
+        }
+        if self.ui.window_region_at(pos) != Some(WindowRegion::Drag) {
+            self.last_title_press = None;
+            return false;
+        }
+        let now = Instant::now();
+        let double = self.last_title_press.is_some_and(|(t, p)| now.duration_since(t).as_secs_f32() < 0.4 && (p - pos).length() < 6.0);
+        // The UI still sees the press (ChromeResponse::drag_started and
+        // double_clicked); the move eats the release, so send it too.
+        self.events.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: true });
+        if double {
+            self.last_title_press = None;
+            match system::title_double_click() {
+                system::TitleAction::Maximize => window.set_maximized(!window.is_maximized()),
+                system::TitleAction::Minimize => window.set_minimized(true),
+                system::TitleAction::None => {}
+            }
+        } else {
+            self.last_title_press = Some((now, pos));
+            let _ = window.drag_window();
+        }
+        self.events.push(Event::PointerButton { pos, button: PointerButton::Primary, pressed: false });
+        true
+    }
+
+    /// Custom chrome on Windows and Linux: the outer 5 px resize the window.
+    fn update_resize_edge(&mut self, pos: Vec2) {
+        use winit::window::ResizeDirection as R;
+        if !self.app.custom_chrome || cfg!(target_os = "macos") || cfg!(target_arch = "wasm32") {
+            return;
+        }
+        let Some(window) = self.window.clone() else { return };
+        let size = self.ui.screen_size();
+        let e = 5.0;
+        let dir = if window.is_maximized() || !window.is_resizable() {
+            None
+        } else {
+            let (l, r, t, b) = (pos.x < e, pos.x > size.x - e, pos.y < e, pos.y > size.y - e);
+            match (l, r, t, b) {
+                (true, _, true, _) => Some(R::NorthWest),
+                (_, true, true, _) => Some(R::NorthEast),
+                (true, _, _, true) => Some(R::SouthWest),
+                (_, true, _, true) => Some(R::SouthEast),
+                (true, ..) => Some(R::West),
+                (_, true, ..) => Some(R::East),
+                (_, _, true, _) => Some(R::North),
+                (_, _, _, true) => Some(R::South),
+                _ => None,
+            }
+        };
+        if dir != self.resize_dir {
+            self.resize_dir = dir;
+            use winit::window::CursorIcon as C;
+            window.set_cursor(match dir {
+                Some(R::West | R::East) => C::EwResize,
+                Some(R::North | R::South) => C::NsResize,
+                Some(R::NorthWest | R::SouthEast) => C::NwseResize,
+                Some(R::NorthEast | R::SouthWest) => C::NeswResize,
+                None => {
+                    // Back to whatever the UI asked for.
+                    self.cursor = CursorIcon::Default;
+                    C::Default
+                }
+            });
         }
     }
 
@@ -301,7 +402,14 @@ impl<S> Runner<S> {
         if let Some(t) = out.copied_text {
             self.clipboard.set(t);
         }
-        if out.cursor != self.cursor {
+        for req in &out.window_requests {
+            match req {
+                WindowRequest::Close => self.exit = true,
+                WindowRequest::Minimize => window.set_minimized(true),
+                WindowRequest::ToggleMaximize => window.set_maximized(!window.is_maximized()),
+            }
+        }
+        if out.cursor != self.cursor && self.resize_dir.is_none() {
             self.cursor = out.cursor;
             window.set_cursor(match out.cursor {
                 CursorIcon::Default => winit::window::CursorIcon::Default,
@@ -343,6 +451,22 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
             if let Some((w, h)) = self.app.min_size {
                 attrs = attrs.with_min_inner_size(winit::dpi::LogicalSize::new(w, h));
             }
+            if self.app.custom_chrome {
+                #[cfg(target_os = "macos")]
+                {
+                    use winit::platform::macos::WindowAttributesExtMacOS;
+                    attrs = attrs
+                        .with_titlebar_transparent(true)
+                        .with_fullsize_content_view(true)
+                        .with_title_hidden(true)
+                        .with_titlebar_buttons_hidden(true)
+                        .with_movable_by_window_background(false);
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    attrs = attrs.with_decorations(false);
+                }
+            }
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -355,6 +479,10 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
             attrs = attrs.with_prevent_default(true).with_focusable(true);
         }
         let window = Arc::new(el.create_window(attrs).expect("window"));
+        #[cfg(target_os = "macos")]
+        if self.app.custom_chrome {
+            mac_custom_chrome(&window);
+        }
         self.scale = window.scale_factor() as f32;
         self.window = Some(window.clone());
         let size = window.inner_size();
@@ -387,7 +515,16 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
         match event {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::RedrawRequested => self.frame(),
-            WindowEvent::Resized(_) => self.request_redraw(),
+            WindowEvent::Resized(_) => {
+                if let Some(w) = &self.window {
+                    let m = w.is_maximized();
+                    if m != self.maximized {
+                        self.maximized = m;
+                        self.events.push(Event::WindowMaximized(m));
+                    }
+                }
+                self.request_redraw();
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale = scale_factor as f32;
                 self.request_redraw();
@@ -401,7 +538,10 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
                 self.request_redraw();
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.events.push(Event::PointerMoved(vec2(position.x as f32 / scale, position.y as f32 / scale)));
+                let pos = vec2(position.x as f32 / scale, position.y as f32 / scale);
+                self.pointer = pos;
+                self.update_resize_edge(pos);
+                self.events.push(Event::PointerMoved(pos));
                 self.request_redraw();
             }
             WindowEvent::CursorLeft { .. } => {
@@ -415,8 +555,13 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
                     MouseButton::Middle => PointerButton::Middle,
                     _ => return,
                 };
-                let pos = self.ui.pointer().unwrap_or_default();
-                self.events.push(Event::PointerButton { pos, button, pressed: state == ElementState::Pressed });
+                let pos = self.pointer;
+                let pressed = state == ElementState::Pressed;
+                if pressed && button == PointerButton::Primary && self.app.custom_chrome && self.chrome_press(pos) {
+                    self.request_redraw();
+                    return;
+                }
+                self.events.push(Event::PointerButton { pos, button, pressed });
                 self.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -475,6 +620,10 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        if self.exit {
+            el.exit();
+            return;
+        }
         match self.next_frame {
             Some(t) if t <= Instant::now() => {
                 self.next_frame = None;
@@ -484,6 +633,22 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
             Some(t) => el.set_control_flow(ControlFlow::WaitUntil(t)),
             None => el.set_control_flow(ControlFlow::Wait),
         }
+    }
+}
+
+/// AppKit starts its own window move for any mouse-down in the (hidden,
+/// transparent) title bar strip, which swallows the mouse-up and would steal
+/// clicks from lumen's caption buttons. Turn that off; lumen starts moves
+/// itself with `drag_window` (`performWindowDragWithEvent:`), which still works.
+#[cfg(target_os = "macos")]
+fn mac_custom_chrome(window: &Window) {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let Ok(h) = window.window_handle() else { return };
+    let RawWindowHandle::AppKit(h) = h.as_raw() else { return };
+    // SAFETY: winit hands out a valid NSView pointer for the window's lifetime.
+    let view: &objc2_app_kit::NSView = unsafe { h.ns_view.cast().as_ref() };
+    if let Some(w) = view.window() {
+        w.setMovable(false);
     }
 }
 

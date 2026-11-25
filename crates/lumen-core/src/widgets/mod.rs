@@ -89,7 +89,7 @@ pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, Log
 pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatmap, ProgressRing, RadarChart, RingSpec, ScatterChart, ScatterPoint, ScatterSeries};
 pub use planning::{KanbanCard, KanbanCol};
 pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComposer, ToolCall, ToolStatus, TraceSpan, UptimeStatus};
-pub use motion_chrome::{DockItem, RollingNumber, Waveform, WindowChrome};
+pub use motion_chrome::{ChromeResponse, ChromeShown, DockItem, RollingNumber, Waveform, WindowChrome};
 pub use workspace_pro::{FlameSpan, MenuBarScope, PropertyInspector, SplitPane, TermLine, TermTone, Terminal};
 pub use rich_views::{GanttTask, NotificationItem, SpotlightCard, Treemap, TreemapItem};
 pub use inputs_pro::{

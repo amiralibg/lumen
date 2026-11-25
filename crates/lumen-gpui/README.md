@@ -29,6 +29,17 @@ Call `.contain_overlays()` on the view to keep everything inside its bounds inst
 
 `has_open_overlay()` and `overlay_bounds()` tell your GPUI code where lumen's popups are, for example to avoid opening your own on top of them.
 
+## Custom title bar
+
+`ui.window_chrome("main", "Title").window()` inside a `LumenView` draws lumen's title bar for the current look and makes it work:
+
+- A press on the bar moves the window (`start_window_move`; on macOS AppKit moves it natively, so give the window a transparent title bar with `TitlebarOptions { appears_transparent: true, .. }`). A double-click follows the OS setting (`titlebar_double_click` on macOS, zoom elsewhere).
+- The buttons minimize, zoom and close the window. With `.handle_buttons(false)` they only report clicks in `ChromeResponse`, so you can confirm before closing.
+- The view adds a GPUI `WindowControlArea` for the drag region and each button, which is what Windows hit-tests for snapping and caption behaviour. `window_control_regions()` returns the same rects if your own GPUI elements need to stay out of them.
+- The bar dims when the window is inactive and shows restore while it's maximized.
+
+On macOS GPUI keeps its own traffic lights; there, use `.closable(false).minimizable(false).maximizable(false)` to show only the title, or position the native lights over lumen's with `traffic_light_position`.
+
 ## Text input and IME
 
 When a lumen text field is focused, the view registers a GPUI input handler, so input methods work: CJK composition shows in the field underlined (the segment being converted thicker) and commits on confirm, macOS press-and-hold accents and dead keys work, and the candidate window sits under the caret. Scripts Geist lacks (CJK, Arabic, Hebrew, emoji...) load the system fonts as fallbacks the first time they appear. Password fields take committed text only.
@@ -59,7 +70,7 @@ Start the app with `lumen_gpui::application()`, which picks the right constructo
 
 ## The self-test
 
-`cargo run --example selftest [-- out_dir]` opens a real window and drives it through the real macOS paths: clicks are `NSEvent`s sent to the window, typing and IME composition go through `insertText:` and `setMarkedText:`. It checks typing, composition and commit, a select menu that overflows a 120 pt panel over GPUI content, picking an option outside the panel, and closing on an outside click, saves window screenshots, then animates for timing. `SELFTEST_CONTAIN=1` runs it with `contain_overlays()`; `SELFTEST_PANEL_H=676` uses the tall panel from the table above.
+`cargo run --example selftest [-- out_dir]` opens a real window and drives it through the real macOS paths: clicks are `NSEvent`s sent to the window, typing and IME composition go through `insertText:` and `setMarkedText:`. It checks typing, composition and commit, a select menu that overflows a 120 pt panel over GPUI content, picking an option outside the panel, and closing on an outside click, saves window screenshots, then animates for timing. `SELFTEST_CONTAIN=1` runs it with `contain_overlays()` (give it a panel taller than the menu, e.g. `SELFTEST_PANEL_H=400`); `SELFTEST_PANEL_H=676` uses the tall panel from the table above. It also checks a lumen title bar at the top of the window: its control regions, a zoom click, and that its minimize button really miniaturizes the window.
 
 GPUI on macOS only draws a window that isn't key around input, so the script keeps moving the pointer while it waits, like a resting hand would.
 

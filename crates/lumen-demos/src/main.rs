@@ -312,6 +312,8 @@ struct State {
     audio_prog: f32,
     audio_playing: bool,
     win_look: Platform,
+    win_event: Option<(&'static str, &'static str)>,
+    win_events: u32,
     split_ratio: f32,
     term_lines: Vec<TermLine>,
     term_in: String,
@@ -489,6 +491,8 @@ impl State {
             audio_prog: 0.38,
             audio_playing: false,
             win_look: Platform::Mac,
+            win_event: None,
+            win_events: 0,
             split_ratio: 0.38,
             term_lines: vec![
                 TermLine::cmd("cargo test -p lumen-core --quiet"),
@@ -2078,7 +2082,10 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ui.column().fill_width().max_width(520.0).align(Align::Center).gap(14).show(|ui| {
                 let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
                 ui.segmented(&mut s.win_look, &opts);
-                ui.window_chrome("preview_win", "lumen — workspace")
+                let ev = s.win_event;
+                let n = s.win_events;
+                let shown = ui
+                    .window_chrome("preview_win", "lumen — workspace")
                     .subtitle("ethereal")
                     .show(|ui| {
                         ui.row().fill_width().align(Align::Center).show(|ui| {
@@ -2086,8 +2093,38 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                             ui.spacer();
                             ui.badge(s.win_look.name(), Tone::Accent);
                         });
-                        ui.label("Traffic lights on macOS, caption buttons on Windows 11, headerbar pill on GNOME, and frosted chrome on Lumen.").secondary();
+                        match ev {
+                            Some((icon, what)) => {
+                                // Each new event rises in and fades up.
+                                let eid = ui.make_id(("win_ev", n));
+                                let t = ui.fade(eid, 0, true, 0.22, 0.1, lumen::Ease::Out);
+                                let c = ui.color(lumen::Token::AccentStrong);
+                                ui.row().gap(8).align(Align::Center).layer(t, lumen::vec2(0.0, (1.0 - t) * 6.0)).show(|ui| {
+                                    ui.icon_leaf(icon, 14.0, c);
+                                    ui.label(what).secondary();
+                                });
+                            }
+                            None => {
+                                ui.label("Try the buttons, drag the title bar or double-click it. In a real window (App::custom_chrome) they move, minimize, zoom and close it.").secondary();
+                            }
+                        }
                     });
+                let r = shown.response;
+                let e = if r.close {
+                    Some(("x", "Close clicked: a real window would close (or ask first)."))
+                } else if r.minimize {
+                    Some(("minus", "Minimize clicked."))
+                } else if r.zoom || r.double_clicked {
+                    Some(if r.maximized { ("maximize-2", "Zoomed: the button now shows restore.") } else { ("minimize-2", "Restored to the previous size.") })
+                } else if r.drag_started {
+                    Some(("move", "Title bar pressed: a real window starts moving here."))
+                } else {
+                    None
+                };
+                if e.is_some() {
+                    s.win_event = e;
+                    s.win_events += 1;
+                }
             });
         }
         "split-pane" => {
@@ -3536,10 +3573,11 @@ struct Params {
     check: bool,
     /// `--click X,Y` (repeatable): clicks before the screenshot.
     clicks: Vec<lumen::Vec2>,
+    chrome: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![] };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![], chrome: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3586,6 +3624,7 @@ fn params() -> Params {
                 "--embed" => p.embed = true,
                 "--open" => p.open = true,
                 "--check" => p.check = true,
+                "--chrome" => p.chrome = true,
                 "--click" => {
                     i += 1;
                     if let Some((x, y)) = args.get(i).and_then(|v| v.split_once(',')) {
@@ -3638,7 +3677,13 @@ fn main() {
             steps.push(lumen::ShotStep::Wait(0.6));
         }
         let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
-        match lumen::screenshot(out, &shot, &mut state, view) {
+        let res = if p.chrome {
+            let t = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen").to_string();
+            lumen::screenshot(out, &shot, &mut state, move |ui, s| chrome_view(ui, s, &t))
+        } else {
+            lumen::screenshot(out, &shot, &mut state, view)
+        };
+        match res {
             Ok(()) => println!("wrote {out}"),
             Err(e) => {
                 eprintln!("screenshot failed: {e}");
@@ -3648,5 +3693,15 @@ fn main() {
         return;
     }
     let title = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen");
-    lumen::App::new(format!("lumen — {title}")).size(p.size.0, p.size.1).mode(mode).accent(p.accent).look(look).canvas("lumen").run(state, view);
+    let app = lumen::App::new(format!("lumen — {title}")).size(p.size.0, p.size.1).mode(mode).accent(p.accent).look(look).canvas("lumen");
+    if p.chrome {
+        app.custom_chrome().run(state, move |ui, s| chrome_view(ui, s, title));
+    } else {
+        app.run(state, view);
+    }
+}
+
+/// `--chrome`: the demo inside lumen's own title bar instead of the OS's.
+fn chrome_view(ui: &mut Ui, s: &mut State, title: &str) {
+    ui.window_chrome("app_chrome", title).window().show(|ui| view(ui, s));
 }

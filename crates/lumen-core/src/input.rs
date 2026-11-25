@@ -75,6 +75,10 @@ pub enum Event {
     /// Clipboard contents for a paste the app performed on Cmd/Ctrl+V.
     Paste(String),
     WindowFocused(bool),
+    /// The window was maximized (zoomed) or restored. Hosts send it when the
+    /// state changes so a custom title bar can show restore instead of
+    /// maximize.
+    WindowMaximized(bool),
 }
 
 /// An input-method event for the focused text field.

@@ -38,6 +38,7 @@ lumen is a UI toolkit for Rust in the immediate-mode style of egui, built for fi
 - **Motion you don't write.** Toggles, presses, focus rings, sliding indicators and chart values are springs solved in closed form, so they're exact at any frame rate and keep their velocity when interrupted. Reduced motion is honored everywhere.
 - **One codebase, native and web.** winit + wgpu on macOS, Windows and Linux. WebAssembly with WebGPU or WebGL2 in the browser.
 - **Idle means idle.** A UI at rest requests no frames.
+- **Your own title bar.** `App::custom_chrome()` plus `ui.window_chrome(..).window()` replaces the OS title bar with one that matches the look, and still moves, zooms, minimizes, closes and resizes the window.
 - **Plays well with GPUI.** [`lumen-gpui`](#gpui) puts lumen views inside a Zed-style GPUI app.
 
 <picture>

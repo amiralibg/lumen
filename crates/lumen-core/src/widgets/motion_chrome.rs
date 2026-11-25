@@ -11,7 +11,7 @@ use crate::layout::{Align, Dir, Justify, Size, Style};
 use crate::look::Platform;
 use crate::math::{vec2, Corners, Rect, Sides};
 use crate::theme::{Elevation, TextRole, Token};
-use crate::ui::{Placement, Response, Sense, TooltipSpec, Ui};
+use crate::ui::{Placement, Response, Sense, TooltipSpec, Ui, WindowRegion, WindowRequest};
 
 use super::{blend3, key_activate};
 
@@ -371,13 +371,51 @@ impl Drop for Waveform<'_, '_> {
 
 // =========================================================== WindowChrome
 
-/// Native-feel window frame + title bar that adapts its traffic lights or
-/// caption controls automatically to the active [`Look`]'s [`Platform`].
+/// What a [`WindowChrome`] did this frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChromeResponse {
+    /// A caption button was clicked.
+    pub close: bool,
+    pub minimize: bool,
+    pub zoom: bool,
+    /// The pointer went down on the title bar, outside the buttons.
+    pub drag_started: bool,
+    /// The title bar was double-clicked.
+    pub double_clicked: bool,
+    /// The chrome shows the maximized state (restore glyph).
+    pub maximized: bool,
+    /// Last frame's rects, in logical px (zero on the first frame or when a
+    /// button isn't shown).
+    pub title_bar: Rect,
+    pub close_rect: Rect,
+    pub minimize_rect: Rect,
+    pub zoom_rect: Rect,
+}
+
+/// The body's result and the chrome's [`ChromeResponse`].
+pub struct ChromeShown<R> {
+    pub inner: R,
+    pub response: ChromeResponse,
+}
+
+/// Native-feel window frame and title bar that follows the active
+/// [`Look`](crate::Look)'s [`Platform`]: traffic lights on macOS, caption
+/// buttons on Windows 11, round headerbar buttons on GNOME, pills on Lumen.
+///
+/// By default it draws a window *preview* (a framed card): its buttons
+/// report clicks and zoom toggles the preview's maximized state. With
+/// [`.window()`](Self::window) it is the real window's title bar: it fills
+/// its parent, registers [`WindowRegion`]s so the host can move the window
+/// and maximize it on double-click, and sends [`WindowRequest`]s for the
+/// buttons (see `App::custom_chrome` in lumen-app).
 pub struct WindowChrome<'u> {
     ui: &'u mut Ui,
     key: String,
     title: String,
     subtitle: Option<String>,
+    window: bool,
+    handle: bool,
+    buttons: [bool; 3],
 }
 
 impl<'u> WindowChrome<'u> {
@@ -385,42 +423,94 @@ impl<'u> WindowChrome<'u> {
         self.subtitle = Some(sub.into());
         self
     }
+    /// This is the real window's title bar (see the type docs).
+    pub fn window(mut self) -> Self {
+        self.window = true;
+        self
+    }
+    /// In window mode, send [`WindowRequest`]s for button clicks (default
+    /// true). Turn it off to handle [`ChromeResponse`] yourself, for example
+    /// to confirm before closing, then call [`Ui::request_window`].
+    pub fn handle_buttons(mut self, on: bool) -> Self {
+        self.handle = on;
+        self
+    }
+    /// Show the minimize button (default true).
+    pub fn minimizable(mut self, on: bool) -> Self {
+        self.buttons[1] = on;
+        self
+    }
+    /// Show the maximize/zoom button (default true).
+    pub fn maximizable(mut self, on: bool) -> Self {
+        self.buttons[2] = on;
+        self
+    }
+    /// Show the close button (default true).
+    pub fn closable(mut self, on: bool) -> Self {
+        self.buttons[0] = on;
+        self
+    }
 
-    pub fn show<R>(self, body: impl FnOnce(&mut Ui) -> R) -> R {
-        let WindowChrome { ui, key, title, subtitle } = self;
+    pub fn show<R>(self, body: impl FnOnce(&mut Ui) -> R) -> ChromeShown<R> {
+        let WindowChrome { ui, key, title, subtitle, window, handle, buttons } = self;
         let id = ui.make_id(("win_chrome", &key));
+        let bar_id = id.with("bar");
         let platform = ui.theme.target_look().platform;
-        let r_win: f32 = match platform {
-            Platform::Windows => 8.0,
-            Platform::Mac | Platform::Gnome => 12.0,
-            Platform::Lumen => 14.0,
+        let mo = ui.motion();
+        let r_win: f32 = if window {
+            0.0
+        } else {
+            match platform {
+                Platform::Windows => 8.0,
+                Platform::Mac | Platform::Gnome => 12.0,
+                Platform::Lumen => ui.look().card.radius - 2.0,
+            }
         };
         let top_rad = (r_win - 1.0).max(0.0);
+        let maximized = if window { ui.window_maximized() } else { *ui.mem::<bool>(id.with("max")) };
+        let active = ui.fade(id.with("active"), 0, !window || ui.window_focused(), mo.hover_in, mo.hover_out, Ease::Out);
 
-        let win_bg = ui.color(Token::Surface);
+        let mut resp = ChromeResponse { maximized, ..Default::default() };
+        let click = Sense { click: true, drag: false, focusable: false, scroll: false };
+        let bar_ix = ui.interact(bar_id, click, false);
+        resp.title_bar = bar_ix.rect;
+        if bar_ix.press_started {
+            resp.drag_started = true;
+            resp.double_clicked = bar_ix.click_count == 2;
+        }
+        if window {
+            ui.window_region(WindowRegion::Drag, bar_id);
+        }
+
+        let win_bg = ui.color(if window { Token::Background } else { Token::Surface });
         let win_bd = ui.color(Token::Border);
-        let hdr_bg = ui.color(Token::SurfaceMuted).multiply_alpha(0.65);
+        let hdr_bg = ui.color(Token::SurfaceMuted).multiply_alpha(if window { 1.0 } else { 0.65 });
         let div_c = ui.color(Token::BorderSubtle);
         let shadows = Elevation::Level2.shadows(ui.theme.darkness(), ui.color(Token::ShadowInk));
 
         ui.begin(
-            Style { width: Size::FILL, dir: Dir::Column, ..Default::default() },
+            Style { width: Size::FILL, height: if window { Size::FILL } else { Size::Hug }, dir: Dir::Column, ..Default::default() },
             Some(id),
             Sense::NONE,
             CursorIcon::Default,
             false,
             Some(Box::new(move |cx, r| {
-                cx.painter.shadows(r, Corners::all(r_win), &shadows);
-                cx.painter.rrect(r, Corners::all(r_win), win_bg, 1.0, win_bd);
+                if window {
+                    cx.painter.rect(r, win_bg);
+                } else {
+                    cx.painter.shadows(r, Corners::all(r_win), &shadows);
+                    cx.painter.rrect(r, Corners::all(r_win), win_bg, 1.0, win_bd);
+                }
             })),
         );
 
-        // Titlebar row.
+        // Title bar.
         let bar_h = match platform {
             Platform::Windows => 34.0,
             Platform::Mac => 36.0,
             Platform::Gnome | Platform::Lumen => 38.0,
         };
+        let inset = if window { 0.0 } else { 1.0 };
         let pad_h = if platform == Platform::Windows { 12.0 } else { 14.0 };
         ui.begin(
             Style {
@@ -430,162 +520,271 @@ impl<'u> WindowChrome<'u> {
                 pad: Sides { left: pad_h, right: if platform == Platform::Windows { 0.0 } else { pad_h }, top: 0.0, bottom: 0.0 },
                 gap: 10.0,
                 align: Align::Center,
-                justify: Justify::SpaceBetween,
                 ..Default::default()
             },
-            None,
-            Sense::NONE,
+            Some(bar_id),
+            click,
             CursorIcon::Default,
             false,
             Some(Box::new(move |cx, r| {
-                let inner = Rect::from_xywh(r.min.x + 1.0, r.min.y + 1.0, (r.width() - 2.0).max(0.0), (r.height() - 1.0).max(0.0));
+                let inner = Rect::from_xywh(r.min.x + inset, r.min.y + inset, (r.width() - 2.0 * inset).max(0.0), (r.height() - inset).max(0.0));
                 cx.painter.rrect(inner, Corners([top_rad, top_rad, 0.0, 0.0]), hdr_bg, 0.0, Color::TRANSPARENT);
-                cx.painter.rect(Rect::from_xywh(r.min.x + 1.0, r.max.y - 1.0, (r.width() - 2.0).max(0.0), 1.0), div_c);
+                cx.painter.rect(Rect::from_xywh(r.min.x + inset, r.max.y - 1.0, (r.width() - 2.0 * inset).max(0.0), 1.0), div_c);
             })),
         );
 
-        // Left slot.
-        ui.begin(Style { dir: Dir::Row, width: Size::Fixed(72.0), gap: 8.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        match platform {
-            Platform::Mac => {
-                let c_close = ui.color(Token::Danger);
-                let c_min = ui.color(Token::Warning);
-                let c_max = ui.color(Token::Success);
-                for col in [c_close, c_min, c_max] {
-                    ui.leaf(
-                        Style::default(),
-                        vec2(12.0, 12.0),
-                        None,
-                        Sense::NONE,
-                        CursorIcon::Default,
-                        Some(Box::new(move |cx, r| cx.painter.circle(r.center(), 6.0, col, 0.5, col.multiply_alpha(0.6)))),
-                    );
-                }
+        // Buttons in platform order. `slot` keeps the title centered.
+        let order: [WindowRegion; 3] = match platform {
+            Platform::Mac => [WindowRegion::Close, WindowRegion::Minimize, WindowRegion::Maximize],
+            _ => [WindowRegion::Minimize, WindowRegion::Maximize, WindowRegion::Close],
+        };
+        let shown: Vec<WindowRegion> = order.into_iter().filter(|k| buttons[btn_index(*k)]).collect();
+        let n = shown.len() as f32;
+        let (btn_w, btn_gap) = match platform {
+            Platform::Mac => (12.0, 8.0),
+            Platform::Windows => (46.0, 0.0),
+            Platform::Gnome => (24.0, 10.0),
+            Platform::Lumen => (22.0, 6.0),
+        };
+        let group_w = (n * btn_w + (n - 1.0).max(0.0) * btn_gap).max(0.0);
+        let slot = match platform {
+            Platform::Mac => group_w.max(10.0),
+            Platform::Lumen => group_w.max(10.0),
+            _ => group_w,
+        };
+
+        let fg_c = ui.color(Token::TextMuted).mix(ui.color(Token::Foreground), active);
+        let sub_c = ui.color(Token::TextMuted);
+        let st_t = ui.text_style(TextRole::BodyStrong);
+        let sub = subtitle.map(|s| (s, ui.text_style(TextRole::Caption)));
+        let title_block = |ui: &mut Ui, justify: Justify| {
+            ui.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Center, justify, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            ui.text_leaf(title.clone(), st_t, fg_c, false, true, Style::default());
+            if let Some((s, st)) = &sub {
+                ui.text_leaf(s.clone(), *st, sub_c, false, true, Style::default());
             }
+            ui.end();
+        };
+
+        let clicked = match platform {
             Platform::Windows => {
                 let ic_c = ui.color(Token::AccentStrong);
                 ui.icon_leaf("sparkles", 14.0, ic_c);
+                title_block(ui, Justify::Start);
+                caption_group(ui, id, &shown, platform, bar_h, btn_w, btn_gap, maximized, active, top_rad, window, &mut resp)
             }
-            Platform::Lumen => {
-                let dot = ui.color(Token::Accent);
-                ui.leaf(
-                    Style::default(),
-                    vec2(10.0, 10.0),
-                    None,
-                    Sense::NONE,
-                    CursorIcon::Default,
-                    Some(Box::new(move |cx, r| cx.painter.circle(r.center(), 4.5, dot, 0.0, Color::TRANSPARENT))),
-                );
+            Platform::Mac => {
+                ui.begin(Style { dir: Dir::Row, width: Size::Fixed(slot), gap: btn_gap, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                let c = caption_group(ui, id, &shown, platform, bar_h, btn_w, btn_gap, maximized, active, top_rad, window, &mut resp);
+                ui.end();
+                title_block(ui, Justify::Center);
+                ui.leaf(Style::default(), vec2(slot, 1.0), None, Sense::NONE, CursorIcon::Default, None);
+                c
             }
-            Platform::Gnome => {}
-        }
-        ui.end();
-
-        // Center title + optional subtitle.
-        let fg_c = ui.color(Token::Foreground);
-        let sub_c = ui.color(Token::TextMuted);
-        ui.begin(Style { dir: Dir::Row, gap: 6.0, align: Align::Center, justify: Justify::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        let st_t = ui.text_style(TextRole::BodyStrong);
-        ui.text_leaf(title, st_t, fg_c, false, true, Style::default());
-        if let Some(sub) = subtitle {
-            let st_s = ui.text_style(TextRole::Caption);
-            ui.text_leaf(sub, st_s, sub_c, false, false, Style::default());
-        }
-        ui.end();
-
-        // Right caption buttons slot.
-        ui.begin(
-            Style { dir: Dir::Row, width: Size::Fixed(if platform == Platform::Windows { 126.0 } else { 72.0 }), gap: if platform == Platform::Windows { 0.0 } else { 6.0 }, align: Align::Center, justify: Justify::End, ..Default::default() },
-            None,
-            Sense::NONE,
-            CursorIcon::Default,
-            false,
-            None,
-        );
-        match platform {
-            Platform::Windows => {
-                let fg = ui.color(Token::TextSecondary);
-                for kind in [0u8, 1, 2] {
-                    let bid = id.with(("wcap", kind));
-                    let bix = ui.interact(bid, Sense { click: true, drag: false, focusable: false, scroll: false }, false);
-                    let hov = ui.fade(bid, 0, bix.hovered, 0.06, 0.12, Ease::Linear);
-                    let bg = if kind == 2 {
-                        ui.color(Token::Danger).multiply_alpha(hov)
-                    } else {
-                        ui.color(Token::Hover).multiply_alpha(hov)
-                    };
-                    let stroke = if kind == 2 && hov > 0.4 { ui.color(Token::DangerForeground) } else { fg };
-                    let cr = if kind == 2 { Corners([0.0, top_rad, 0.0, 0.0]) } else { Corners::all(0.0) };
-                    ui.leaf(
-                        Style::default(),
-                        vec2(42.0, bar_h - 2.0),
-                        Some(bid),
-                        Sense { click: true, drag: false, focusable: false, scroll: false },
-                        CursorIcon::Pointer,
-                        Some(Box::new(move |cx, r| {
-                            if bg.a > 0.0 {
-                                cx.painter.rrect(r, cr, bg, 0.0, Color::TRANSPARENT);
-                            }
-                            let c = r.center();
-                            match kind {
-                                0 => cx.painter.rect(Rect::from_center_size(c, vec2(10.0, 1.2)), stroke),
-                                1 => cx.painter.rrect(Rect::from_center_size(c, vec2(9.5, 9.5)), Corners::all(1.0), Color::TRANSPARENT, 1.2, stroke),
-                                _ => {
-                                    cx.painter.polyline(&[c + vec2(-4.5, -4.5), c + vec2(4.5, 4.5)], 1.3, stroke);
-                                    cx.painter.polyline(&[c + vec2(4.5, -4.5), c + vec2(-4.5, 4.5)], 1.3, stroke);
-                                }
-                            }
-                        })),
-                    );
+            Platform::Gnome | Platform::Lumen => {
+                if platform == Platform::Lumen {
+                    let dot = ui.color(Token::Accent).multiply_alpha(0.4 + 0.6 * active);
+                    ui.begin(Style { dir: Dir::Row, width: Size::Fixed(slot), align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                    ui.leaf(Style::default(), vec2(10.0, 10.0), None, Sense::NONE, CursorIcon::Default, Some(Box::new(move |cx, r| cx.painter.circle(r.center(), 4.5, dot, 0.0, Color::TRANSPARENT))));
+                    ui.end();
+                } else {
+                    ui.leaf(Style::default(), vec2(slot, 1.0), None, Sense::NONE, CursorIcon::Default, None);
                 }
+                title_block(ui, Justify::Center);
+                ui.begin(Style { dir: Dir::Row, width: Size::Fixed(slot), gap: btn_gap, align: Align::Center, justify: Justify::End, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                let c = caption_group(ui, id, &shown, platform, bar_h, btn_w, btn_gap, maximized, active, top_rad, window, &mut resp);
+                ui.end();
+                c
             }
-            Platform::Gnome => {
-                let pill_bg = ui.color(Token::Control);
-                let fg = ui.color(Token::TextSecondary);
-                ui.leaf(
-                    Style::default(),
-                    vec2(24.0, 24.0),
-                    None,
-                    Sense::NONE,
-                    CursorIcon::Default,
-                    Some(Box::new(move |cx, r| {
-                        cx.painter.circle(r.center(), 12.0, pill_bg, 0.0, Color::TRANSPARENT);
-                        cx.icon("x", r.center(), 13.0, fg);
-                    })),
-                );
-            }
-            Platform::Lumen => {
-                let pill_bg = ui.color(Token::Control);
-                let pill_bd = ui.color(Token::BorderSubtle);
-                let fg = ui.color(Token::TextMuted);
-                for ic in ["minus", "x"] {
-                    let ic_s = ic.to_owned();
-                    ui.leaf(
-                        Style::default(),
-                        vec2(22.0, 22.0),
-                        None,
-                        Sense::NONE,
-                        CursorIcon::Default,
-                        Some(Box::new(move |cx, r| {
-                            cx.painter.circle(r.center(), 11.0, pill_bg, 1.0, pill_bd);
-                            cx.icon(&ic_s, r.center(), 12.0, fg);
-                        })),
-                    );
-                }
-            }
-            Platform::Mac => {}
+        };
+        ui.end(); // title bar
+
+        match clicked {
+            Some(WindowRegion::Close) => resp.close = true,
+            Some(WindowRegion::Minimize) => resp.minimize = true,
+            Some(WindowRegion::Maximize) => resp.zoom = true,
+            _ => {}
         }
-        ui.end();
-        ui.end(); // titlebar
+        if window && handle {
+            if resp.close {
+                ui.request_window(WindowRequest::Close);
+            }
+            if resp.minimize {
+                ui.request_window(WindowRequest::Minimize);
+            }
+            if resp.zoom {
+                ui.request_window(WindowRequest::ToggleMaximize);
+            }
+        }
+        if !window && (resp.zoom || resp.double_clicked) {
+            let m = ui.mem::<bool>(id.with("max"));
+            *m = !*m;
+            resp.maximized = *m;
+        }
 
-        // Window content body.
-        ui.begin(Style { width: Size::FILL, dir: Dir::Column, pad: Sides::all(16.0), gap: 10.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        let out = ui.scope("win_body", body);
+        // Body.
+        let body_style = if window {
+            Style { width: Size::FILL, height: Size::FILL, dir: Dir::Column, ..Default::default() }
+        } else {
+            Style { width: Size::FILL, dir: Dir::Column, pad: Sides::all(16.0), gap: 10.0, ..Default::default() }
+        };
+        ui.begin(body_style, None, Sense::NONE, CursorIcon::Default, false, None);
+        let inner = ui.scope("win_body", body);
         ui.end();
 
         ui.end();
-        out
+        ChromeShown { inner, response: resp }
     }
+}
+
+fn btn_index(k: WindowRegion) -> usize {
+    match k {
+        WindowRegion::Close => 0,
+        WindowRegion::Minimize => 1,
+        _ => 2,
+    }
+}
+
+/// Draws one platform's caption buttons; returns the one clicked.
+#[allow(clippy::too_many_arguments)]
+fn caption_group(
+    ui: &mut Ui,
+    id: crate::Id,
+    shown: &[WindowRegion],
+    platform: Platform,
+    bar_h: f32,
+    btn_w: f32,
+    _gap: f32,
+    maximized: bool,
+    active: f32,
+    top_rad: f32,
+    window: bool,
+    resp: &mut ChromeResponse,
+) -> Option<WindowRegion> {
+    let mo = ui.motion();
+    let click = Sense { click: true, drag: false, focusable: false, scroll: false };
+    // macOS shows every glyph while the pointer is over any of the lights.
+    let group_hover = shown.iter().any(|k| ui.interact(id.with(("cap", btn_index(*k))), click, false).hovered);
+    let glyphs = ui.fade(id.with("lights"), 0, group_hover, mo.hover_in, mo.hover_out, Ease::Out);
+    let reduced = ui.reduced_motion();
+    let mut clicked = None;
+    for (i, &kind) in shown.iter().enumerate() {
+        let bid = id.with(("cap", btn_index(kind)));
+        let ix = ui.interact(bid, click, false);
+        if ix.clicked {
+            clicked = Some(kind);
+        }
+        match kind {
+            WindowRegion::Close => resp.close_rect = ix.rect,
+            WindowRegion::Minimize => resp.minimize_rect = ix.rect,
+            _ => resp.zoom_rect = ix.rect,
+        }
+        if window {
+            ui.window_region(kind, bid);
+        }
+        let hov = ui.fade(bid, 0, ix.hovered, mo.hover_in, mo.hover_out, Ease::Out);
+        let press = ui.fade(bid, 1, ix.pressed, 0.0, mo.hover_out, Ease::Out);
+        let squash = if reduced { 1.0 } else { ui.spring(bid, 2, if ix.pressed { 0.9 } else { 1.0 }, mo.bouncy) };
+        // Maximize glyph cross-fades to restore.
+        let restore = ui.fade(bid, 3, maximized, mo.hover_in, mo.hover_out, Ease::Out);
+        let last = i + 1 == shown.len();
+        let ink = ui.color(Token::ShadowInk);
+        let paint: crate::ui::PaintFn = match platform {
+            Platform::Mac => {
+                let base = ui.color(match kind {
+                    WindowRegion::Close => Token::Danger,
+                    WindowRegion::Minimize => Token::Warning,
+                    _ => Token::Success,
+                });
+                let idle = ui.color(Token::BorderStrong);
+                let fill = idle.mix(base, active.max(glyphs)).mix(ink, press * 0.25);
+                let glyph = ink.with_alpha(0.62 * glyphs);
+                Box::new(move |cx, r| {
+                    let c = r.center();
+                    let rad = 6.0 * squash;
+                    cx.painter.circle(c, rad, fill, 0.5, fill.mix(ink, 0.18));
+                    if glyph.a > 0.01 {
+                        let k = 3.0 * squash;
+                        match kind {
+                            WindowRegion::Close => {
+                                cx.painter.polyline(&[c + vec2(-k, -k), c + vec2(k, k)], 1.2, glyph);
+                                cx.painter.polyline(&[c + vec2(k, -k), c + vec2(-k, k)], 1.2, glyph);
+                            }
+                            WindowRegion::Minimize => cx.painter.polyline(&[c + vec2(-k - 0.5, 0.0), c + vec2(k + 0.5, 0.0)], 1.3, glyph),
+                            _ => {
+                                cx.painter.polyline(&[c + vec2(-k - 0.5, 0.0), c + vec2(k + 0.5, 0.0)], 1.3, glyph);
+                                cx.painter.polyline(&[c + vec2(0.0, -k - 0.5), c + vec2(0.0, k + 0.5)], 1.3, glyph.with_alpha(glyph.a * (1.0 - restore)));
+                            }
+                        }
+                    }
+                })
+            }
+            Platform::Windows => {
+                let danger = kind == WindowRegion::Close;
+                let hover_bg = if danger { ui.color(Token::Danger) } else { ui.color(Token::Hover) };
+                let press_bg = if danger { ui.color(Token::Danger).mix(ink, 0.15) } else { ui.color(Token::Pressed) };
+                let bg = hover_bg.mix(press_bg, press).multiply_alpha(hov.max(press));
+                let fg = ui.color(Token::TextMuted).mix(ui.color(Token::Foreground), active);
+                let stroke = if danger { fg.mix(ui.color(Token::DangerForeground), hov) } else { fg };
+                let cr = if danger && last && !window { Corners([0.0, top_rad, 0.0, 0.0]) } else { Corners::all(0.0) };
+                Box::new(move |cx, r| {
+                    if bg.a > 0.0 {
+                        cx.painter.rrect(r, cr, bg, 0.0, Color::TRANSPARENT);
+                    }
+                    let c = r.center();
+                    let s = squash;
+                    match kind {
+                        WindowRegion::Minimize => cx.painter.rect(Rect::from_center_size(c, vec2(10.0 * s, 1.0)), stroke),
+                        WindowRegion::Close => {
+                            let k = 5.0 * s;
+                            cx.painter.polyline(&[c + vec2(-k, -k), c + vec2(k, k)], 1.0, stroke);
+                            cx.painter.polyline(&[c + vec2(k, -k), c + vec2(-k, k)], 1.0, stroke);
+                        }
+                        _ => {
+                            let a = 1.0 - restore;
+                            if a > 0.01 {
+                                cx.painter.rrect(Rect::from_center_size(c, vec2(10.0 * s, 10.0 * s)), Corners::all(1.5), Color::TRANSPARENT, 1.0, stroke.with_alpha(stroke.a * a));
+                            }
+                            if restore > 0.01 {
+                                let st = stroke.with_alpha(stroke.a * restore);
+                                cx.painter.rrect(Rect::from_center_size(c + vec2(-1.5, 1.5), vec2(8.0 * s, 8.0 * s)), Corners::all(1.5), Color::TRANSPARENT, 1.0, st);
+                                cx.painter.polyline(&[c + vec2(-1.0, -4.0 * s), c + vec2(4.0 * s, -4.0 * s), c + vec2(4.0 * s, 1.0)], 1.0, st);
+                            }
+                        }
+                    }
+                })
+            }
+            Platform::Gnome | Platform::Lumen => {
+                let gnome = platform == Platform::Gnome;
+                let danger = kind == WindowRegion::Close && !gnome;
+                let rest = ui.color(if gnome { Token::Hover } else { Token::Control });
+                let bd = if gnome { Color::TRANSPARENT } else { ui.color(Token::BorderSubtle) };
+                let hover_bg = if danger { ui.color(Token::Danger) } else { ui.color(Token::Pressed) };
+                let bg = rest.mix(hover_bg, hov).mix(ink, press * 0.12);
+                let fg = ui.color(Token::TextMuted).mix(ui.color(Token::Foreground), active * (if gnome { 1.0 } else { 0.6 }));
+                let fg = if danger { fg.mix(ui.color(Token::DangerForeground), hov) } else { fg };
+                let (ic, ic2) = match kind {
+                    WindowRegion::Close => ("x", "x"),
+                    WindowRegion::Minimize => ("minus", "minus"),
+                    _ => (if gnome { "square" } else { "maximize-2" }, if gnome { "copy" } else { "minimize-2" }),
+                };
+                let size = if gnome { 13.0 } else { 12.0 };
+                Box::new(move |cx, r| {
+                    let c = r.center();
+                    cx.painter.circle(c, r.width() * 0.5 * squash, bg, if gnome { 0.0 } else { 1.0 }, bd);
+                    if ic == ic2 {
+                        cx.icon(ic, c, size * squash, fg);
+                    } else {
+                        cx.icon(ic, c, size * squash, fg.with_alpha(fg.a * (1.0 - restore)));
+                        cx.icon(ic2, c, size * squash, fg.with_alpha(fg.a * restore));
+                    }
+                })
+            }
+        };
+        let h = if platform == Platform::Windows { bar_h - if window { 0.0 } else { 2.0 } } else { btn_w };
+        ui.leaf(Style::default(), vec2(btn_w, h), Some(bid), click, CursorIcon::Default, Some(paint));
+    }
+    clicked
 }
 
 impl Ui {
@@ -745,6 +944,6 @@ impl Ui {
     /// Platform-aware window frame and title bar (macOS traffic lights,
     /// Windows caption controls, GNOME headerbar or Lumen floating chrome).
     pub fn window_chrome(&mut self, key: impl Into<String>, title: impl Into<String>) -> WindowChrome<'_> {
-        WindowChrome { ui: self, key: key.into(), title: title.into(), subtitle: None }
+        WindowChrome { ui: self, key: key.into(), title: title.into(), subtitle: None, window: false, handle: true, buttons: [true; 3] }
     }
 }

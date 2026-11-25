@@ -1186,14 +1186,23 @@ if let Some(i) = ui.dock("app_dock", &items) {
   },
   {
     slug: "window-chrome", name: "Window chrome", group: "Layout and surfaces", demo: "window-chrome",
-    summary: "Native-feel window header bar that morphs between macOS traffic lights, Windows 11 caption buttons, GNOME Adwaita and Lumen.",
-    code: `ui.window_chrome("main_win", "lumen — workspace")
-    .subtitle("ethereal")
-    .show(|ui| {
-        ui.label("Window body");
-    });`,
+    summary: "A title bar that follows the look: macOS traffic lights, Windows 11 caption buttons, GNOME headerbar buttons or Lumen pills. As a preview card it reports clicks; with .window() it is your app's real title bar and moves, zooms, minimizes and closes the window.",
+    code: `// Your app's own title bar (the OS one is hidden):
+lumen::App::new("Notes").custom_chrome().run(state, |ui, s| {
+    ui.window_chrome("main", "Notes").window().show(|ui| {
+        notes_view(ui, s);
+    });
+});
+
+// Or ask before closing:
+let r = ui.window_chrome("main", "Notes").window().handle_buttons(false).show(body).response;
+if r.close && confirm_quit(ui) { ui.request_window(WindowRequest::Close); }`,
     options: [
-      [".subtitle(text) .show(|ui| ..)", "Follows ui.look() automatically and morphs when switching looks."],
+      [".window()", "Be the real title bar: fills the window, registers drag and button regions for the host, sends window requests."],
+      [".handle_buttons(false)", "Report clicks in ChromeResponse (close, minimize, zoom, drag_started, double_clicked) without acting on them."],
+      [".closable(b) .minimizable(b) .maximizable(b)", "Choose the buttons. Maximize shows restore while the window is maximized."],
+      [".subtitle(text)", "A muted caption after the title. Inactive windows dim the title and, on macOS, gray the lights."],
+      ["App::custom_chrome()", "lumen-app: hides the OS title bar (transparent on macOS, so corners and shadow stay), moves on drag, follows the OS double-click setting, and resizes from the edges on Windows and Linux."],
     ],
     keys: [],
   },

@@ -32,10 +32,10 @@ pub use anim::{Ease, SpringParams};
 pub use input::{CursorIcon, Event, Ime, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
-pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, ScrollX, Shown, SystemPrefs, TextFieldState, Ui};
+pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, ScrollX, Shown, SystemPrefs, TextFieldState, Ui, WindowRegion, WindowRequest};
 pub use widgets::{
     password_strength, ActionBarOut, AiModelSpec, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle,
-    CarouselSlide, ChartKind, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
+    CarouselSlide, ChartKind, ChromeResponse, ChromeShown, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
     ComposerOut, ContextSlice, Currency, DateStripDay, DescPair, DimensionUnit, DivergingBar, DockItem, EditorTab,
     EditorTabsOut, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod,
     ImageStatus, KanbanCard, KanbanCol, KpiMetric, KvPair, ListOut, ListRow, TourStep, FileEntry, FileOut, LogEntry, LogLevel, MasonryCard, MentionCandidate,

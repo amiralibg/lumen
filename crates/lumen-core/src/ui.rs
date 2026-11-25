@@ -319,6 +319,26 @@ pub struct ScrollInfo {
     pub viewport_height: f32,
 }
 
+/// A part of a custom window title bar ([`Ui::window_chrome`] with
+/// `.window()`). Hosts map these to the platform: a drag region moves the
+/// window and maximizes it on double-click, the others are caption buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WindowRegion {
+    Drag,
+    Close,
+    Minimize,
+    Maximize,
+}
+
+/// Something the UI asks the host window to do, for example from a caption
+/// button. Hosts without a native window (the web) ignore them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowRequest {
+    Close,
+    Minimize,
+    ToggleMaximize,
+}
+
 /// Per-frame output for the app layer.
 pub struct FrameOutput {
     pub draw: DrawData,
@@ -340,6 +360,12 @@ pub struct FrameOutput {
     /// Springs, fades or the theme blend are still moving (as opposed to a
     /// timer such as a tooltip delay or caret blink).
     pub animating: bool,
+    /// Window actions asked for this frame (caption buttons).
+    pub window_requests: Vec<WindowRequest>,
+    /// Custom title bar regions in logical px, buttons before the drag
+    /// region. Hosts that need hit-test areas up front (GPUI on Windows)
+    /// use these; others call [`Ui::window_region_at`] on mouse-down.
+    pub window_regions: Vec<(WindowRegion, Rect)>,
 }
 
 /// The focused text field as the platform's input method sees it. Offsets
@@ -405,6 +431,12 @@ pub struct Ui {
     press_pos: Vec2,
     last_click: (f64, Vec2, u32),
     click_count: u32,
+    window_focused: bool,
+    window_maximized: bool,
+    window_region_ids: Vec<(WindowRegion, Id)>,
+    prev_window_regions: Vec<(WindowRegion, Rect)>,
+    prev_layer_rects: Vec<Rect>,
+    window_requests: Vec<WindowRequest>,
     active: Option<Id>,
     focused: Option<Id>,
     focus_visible: bool,
@@ -495,6 +527,12 @@ impl Ui {
             press_pos: Vec2::ZERO,
             last_click: (-10.0, Vec2::ZERO, 0),
             click_count: 0,
+            window_focused: true,
+            window_maximized: false,
+            window_region_ids: vec![],
+            prev_window_regions: vec![],
+            prev_layer_rects: vec![],
+            window_requests: vec![],
             active: None,
             focused: None,
             focus_visible: false,
@@ -713,11 +751,13 @@ impl Ui {
             Event::Text(t) | Event::Paste(t) => self.text_input.push(TextIn::Text(t)),
             Event::Ime(e) => self.text_input.push(TextIn::Ime(e)),
             Event::WindowFocused(false) => {
+                self.window_focused = false;
                 self.keys_down.clear();
                 self.pointer_down = false;
                 self.active = None;
             }
-            Event::WindowFocused(true) => {}
+            Event::WindowFocused(true) => self.window_focused = true,
+            Event::WindowMaximized(m) => self.window_maximized = m,
         }
     }
 
@@ -936,7 +976,24 @@ impl Ui {
         }
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
-        FrameOutput { draw, cursor, repaint_after: repaint, copied_text: self.copied.take(), wants_text_input: self.wants_text_input, text_field: self.text_field.take(), layer_rects, animating }
+        let mut window_regions: Vec<(WindowRegion, Rect)> =
+            self.window_region_ids.drain(..).filter_map(|(k, id)| self.prev_rects.get(&id).map(|r| (k, *r))).collect();
+        window_regions.sort_by_key(|(k, _)| *k == WindowRegion::Drag);
+        self.prev_window_regions = window_regions.clone();
+        self.prev_layer_rects = layer_rects.clone();
+        let window_requests = std::mem::take(&mut self.window_requests);
+        FrameOutput {
+            draw,
+            cursor,
+            repaint_after: repaint,
+            copied_text: self.copied.take(),
+            wants_text_input: self.wants_text_input,
+            text_field: self.text_field.take(),
+            layer_rects,
+            animating,
+            window_requests,
+            window_regions,
+        }
     }
 
     /// Run one frame with a closure (convenience for tests and apps).
@@ -1090,6 +1147,37 @@ impl Ui {
     }
     pub fn pointer(&self) -> Option<Vec2> {
         self.pointer
+    }
+    /// Mark the identified node as a custom title bar region this frame.
+    /// [`Ui::window_chrome`] calls it in window mode.
+    pub fn window_region(&mut self, kind: WindowRegion, id: Id) {
+        self.window_region_ids.push((kind, id));
+    }
+    /// Ask the host window to close, minimize or toggle maximize.
+    pub fn request_window(&mut self, req: WindowRequest) {
+        self.window_requests.push(req);
+    }
+    /// The title bar region under `pos` (last frame's layout), for hosts to
+    /// call on mouse-down: start a native window move on [`WindowRegion::Drag`].
+    /// Menus and popovers over the bar take precedence and return `None`.
+    pub fn window_region_at(&self, pos: Vec2) -> Option<WindowRegion> {
+        if self.prev_layer_rects.iter().any(|r| r.contains(pos)) {
+            return None;
+        }
+        self.prev_window_regions.iter().find(|(_, r)| r.contains(pos)).map(|(k, _)| *k)
+    }
+    /// Last frame's title bar regions (buttons first, then the drag region).
+    pub fn window_regions(&self) -> &[(WindowRegion, Rect)] {
+        &self.prev_window_regions
+    }
+    /// Whether the host window has keyboard focus (true until told otherwise).
+    pub fn window_focused(&self) -> bool {
+        self.window_focused
+    }
+    /// Whether the host window is maximized, as reported by
+    /// [`Event::WindowMaximized`].
+    pub fn window_maximized(&self) -> bool {
+        self.window_maximized
     }
     /// Previous-frame rect of an identified node.
     pub fn rect_of(&self, id: Id) -> Option<Rect> {
