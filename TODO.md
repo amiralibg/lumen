@@ -9,7 +9,7 @@
 - [x] 7. Widgets batch 1 + input tests
 - [x] 8. Gallery: all widgets, theme toggle, accent picker, native + wasm
 - [x] 9. Screenshot review → fixes → approval (final sweep 2026-11-25: 1,918 renders, every demo × 4 looks × 2 modes plus card and app widths; kanban, masonry, KPI strip, action bar, stat tiles and badges fixed at card width)
-- [ ] 10. README.md + final DESIGN.md, report
+- [x] 10. README.md (CUI order: hero, features, install, quick start, components, looks, platforms, gpui, license) + final DESIGN.md (shape tables match the code; sections 10 and 11), report
 
 # Looks and customization
 
