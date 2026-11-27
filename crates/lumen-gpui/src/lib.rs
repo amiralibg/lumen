@@ -1029,6 +1029,7 @@ fn map_cursor(c: CursorIcon) -> CursorStyle {
         CursorIcon::Grab => CursorStyle::OpenHand,
         CursorIcon::Grabbing => CursorStyle::ClosedHand,
         CursorIcon::ResizeHorizontal => CursorStyle::ResizeLeftRight,
+        CursorIcon::Crosshair => CursorStyle::Crosshair,
     }
 }
 

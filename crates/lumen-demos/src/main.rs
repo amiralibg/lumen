@@ -131,6 +131,11 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("calendar-heatmap", "Calendar heatmap"),
     ("file-browser", "File browser"),
     ("tour", "Guided tour"),
+    ("signature-pad", "Signature pad"),
+    ("avatar-upload", "Avatar upload"),
+    ("time-dial", "Time dial"),
+    ("aspect-ratio", "Aspect-ratio picker"),
+    ("ruler-slider", "Ruler slider"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -345,6 +350,15 @@ struct State {
     emoji: String,
     wheel_size: usize,
     wheel_time: lumen::Time,
+    signature: lumen::Signature,
+    photo: lumen::UploadState,
+    logo: lumen::UploadState,
+    upload_t: f64,
+    dial_time: lumen::Time,
+    crop_ratio: usize,
+    crop_portrait: bool,
+    weight: f32,
+    height_cm: f32,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -542,6 +556,15 @@ impl State {
             emoji: "Ship it".into(),
             wheel_size: 3,
             wheel_time: lumen::Time::new(9, 30),
+            signature: demo_signature(),
+            photo: lumen::UploadState::Done,
+            logo: lumen::UploadState::Uploading(0.38),
+            upload_t: -1.0,
+            dial_time: lumen::Time::new(7, 30),
+            crop_ratio: 4,
+            crop_portrait: false,
+            weight: 72.4,
+            height_cm: 178.0,
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -722,6 +745,25 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+/// A signature for the demo: a tall first letter, cursive loops, and an
+/// underline flourish, in pad units.
+fn demo_signature() -> lumen::Signature {
+    use std::f32::consts::PI;
+    let sample = |n: usize, f: &dyn Fn(f32) -> (f32, f32, f32)| -> Vec<lumen::SigPoint> {
+        (0..=n).map(|k| {
+            let (x, y, w) = f(k as f32 / n as f32);
+            lumen::SigPoint { x, y, w }
+        }).collect()
+    };
+    lumen::Signature {
+        strokes: vec![
+            sample(40, &|t| (0.1 + 0.2 * t, 0.68 - 0.46 * (PI * t).sin().powf(0.8), 0.55 + 0.4 * (PI * t).sin())),
+            sample(120, &|t| (0.3 + 0.46 * t + 0.03 * (1.0 - 0.4 * t) * (11.0 * PI * t).cos(), 0.58 - 0.06 * t + 0.08 * (1.0 - 0.45 * t) * (11.0 * PI * t).sin(), 0.5 + 0.3 * (3.0 * PI * t).cos().abs())),
+            sample(50, &|t| (0.16 + 0.68 * t, 0.71 + 0.035 * (2.0 * PI * t + 0.6).sin(), 0.9 - 0.55 * t)),
+        ],
+    }
 }
 
 fn frame(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
@@ -2333,6 +2375,101 @@ ui.button("Ship release").primary().icon("rocket");
                     field(ui, &mut s.emoji, Some(200.0));
                 });
             }
+        }
+        "signature-pad" => {
+            ui.column().fill_width().max_width(520.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(12).show(|ui| {
+                    ui.column().gap(4).show(|ui| {
+                        ui.label("Lease agreement · 14 Elm Street").strong();
+                        ui.label("By signing you agree to the terms above, starting 1 December 2026.").muted().small();
+                    });
+                    let short = ui.screen_size().y < 440.0;
+                    let pad = ui.signature_pad("Signature", &mut s.signature);
+                    if short { pad.height(110.0).show() } else { pad.show() };
+                    let empty = s.signature.is_empty();
+                    ui.row().fill_width().justify(Justify::End).show(|ui| {
+                        ui.button("Agree and sign").primary().disabled(empty).show();
+                    });
+                });
+            }));
+        }
+        "avatar-upload" => {
+            // Uploads advance on the demo clock; Upload and Retry restart one.
+            let now = ui.time();
+            let dt = if s.upload_t < 0.0 { 0.0 } else { (now - s.upload_t) as f32 };
+            s.upload_t = now;
+            for st in [&mut s.photo, &mut s.logo] {
+                if let lumen::UploadState::Uploading(p) = st {
+                    *p += dt * 0.12;
+                    if *p >= 1.0 {
+                        *st = lumen::UploadState::Done;
+                    }
+                }
+            }
+            if matches!(s.photo, lumen::UploadState::Uploading(_)) || matches!(s.logo, lumen::UploadState::Uploading(_)) {
+                ui.request_repaint_after(1.0 / 30.0);
+            }
+            ui.column().fill_width().max_width(520.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(18).show(|ui| {
+                    let photo = s.photo.clone();
+                    let o = ui.avatar_upload("photo", &photo).initials("AL").tone(2).title("Profile photo").hint("PNG or JPG, at least 256 × 256 px.").show();
+                    if o.choose || o.retry {
+                        s.photo = lumen::UploadState::Uploading(0.0);
+                    }
+                    if o.remove {
+                        s.photo = lumen::UploadState::Empty;
+                    }
+                    ui.divider();
+                    let logo = s.logo.clone();
+                    let o = ui.avatar_upload("logo", &logo).initials("NS").tone(0).title("Team logo").hint("Shown in invites and the sidebar.").show();
+                    if o.choose || o.retry {
+                        s.logo = lumen::UploadState::Uploading(0.0);
+                    }
+                    if o.remove {
+                        s.logo = lumen::UploadState::Failed("Upload cancelled. The old logo is kept.".into());
+                    }
+                });
+            }));
+        }
+        "time-dial" => {
+            // Short screens (site cards, phones in landscape) get a smaller
+            // face and lose the title and caption.
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(360.0).show(|ui| ui.card().show(|ui| {
+                ui.column().gap(12).align(Align::Center).show(|ui| {
+                    if !short {
+                        ui.label("Wake-up alarm").strong();
+                    }
+                    let mut dial = ui.time_dial("alarm", &mut s.dial_time).step(5);
+                    if short {
+                        dial = dial.diameter(168.0);
+                    }
+                    dial.show();
+                    if !short {
+                        ui.label(format!("Rings at {} on weekdays", s.dial_time.format_12())).muted().small();
+                    }
+                });
+            }));
+        }
+        "aspect-ratio" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(10).show(|ui| {
+                    ui.label("Crop cover photo").strong();
+                    ui.aspect_ratio_picker("crop", &mut s.crop_ratio, &mut s.crop_portrait, &[("Free", 0.0), ("1:1", 1.0), ("4:5", 0.8), ("3:2", 1.5), ("16:9", 16.0 / 9.0)]);
+                });
+            }));
+        }
+        "ruler-slider" => {
+            ui.column().fill_width().max_width(480.0).show(|ui| ui.card().show(|ui| {
+                let short = ui.screen_size().y < 440.0;
+                ui.column().fill_width().gap(if short { 12 } else { 20 }).show(|ui| {
+                    ui.ruler_slider("Weight", &mut s.weight, 30.0..=200.0).step(0.1).major(10).unit("kg").show();
+                    ui.ruler_slider("Height", &mut s.height_cm, 100.0..=220.0).step(1.0).major(10).unit("cm").show();
+                    if !short {
+                        ui.label(format!("BMI {:.1}", s.weight / (s.height_cm / 100.0).powi(2))).muted().small();
+                    }
+                });
+            }));
         }
         "wheel-picker" => {
             ui.row().gap(40).align(Align::Center).show(|ui| {

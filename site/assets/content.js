@@ -1392,6 +1392,46 @@ ui.time_wheel("alarm", &mut time, 5); // Time { hour, minute }, 5-minute steps`,
     keys: [["↑ ↓", "Previous / next"], ["PageUp / PageDown", "Five at a time"], ["Home / End", "First / last"]],
   },
   {
+    slug: "signature-pad", name: "Signature pad", group: "Inputs", demo: "signature-pad",
+    summary: "Sign with a mouse, pen or finger. Strokes are smoothed, thin out as the pen speeds up, and land in accent ink that dries to the foreground. Undo and Clear fade strokes away, and a check pops in once it's signed. Points are stored in pad units, so a signature survives a resize.",
+    code: `let mut sig = Signature::default();
+ui.signature_pad("Signature", &mut sig).show();
+let can_submit = !sig.is_empty();`,
+    options: [["height(px)", "Height of the drawing area."], ["hint(text)", "Shown under the line while empty."], ["Signature { strokes }", "Vec of strokes of SigPoint { x, y, w } in 0..1 pad units; undo(), clear(), is_empty()."]],
+    keys: [["Backspace", "Undo the last stroke"], ["Cmd/Ctrl + Backspace", "Clear"], ["Cmd/Ctrl + Z", "Undo"]],
+  },
+  {
+    slug: "avatar-upload", name: "Avatar upload", group: "Inputs", demo: "avatar-upload",
+    summary: "A round photo slot with its actions beside it. Empty, a dashed ring and camera turn toward the accent on hover; uploading, the photo shrinks inside a progress ring; done, a check pops in; failed, the ring turns red and Retry appears. Your app owns the file dialog and the upload: the widget reports choose, retry and remove.",
+    code: `let out = ui.avatar_upload("photo", &state).initials("AL").title("Profile photo").hint("PNG or JPG").show();
+if out.choose { open_file_dialog(); }
+if out.remove { state = UploadState::Empty; }`,
+    options: [["UploadState", "Empty, Uploading(0..1), Done or Failed(reason)."], ["AvatarOut", "choose, remove (also cancels an upload) and retry."], ["initials / tone / size", "What the photo shows and how big it is."]],
+    keys: [["Enter / Space on the photo", "Choose, change or retry"]],
+  },
+  {
+    slug: "time-dial", name: "Time dial", group: "Dates", demo: "time-dial",
+    summary: "A clock face: drag or tap the hand to an hour, and the face turns into minutes. The hand springs the short way round, numerals crossfade between hours and minutes, and the chosen number sits inside the accent knob. Hour and minute tiles switch back and forth, with AM and PM beside them.",
+    code: `ui.time_dial("alarm", &mut time).step(5).show(); // Time { hour, minute }`,
+    options: [["step(minutes)", "Minutes snap to this step (1 to 30, default 5)."], ["diameter(px)", "Size of the face; defaults to seven control heights."], ["→ Response", "changed is true when the time changed."]],
+    keys: [["↑ → / ↓ ←", "Next / previous hour or minute"], ["PageUp / PageDown", "Five at a time"], ["Enter / Space on the dial", "Switch between hours and minutes"]],
+  },
+  {
+    slug: "aspect-ratio", name: "Aspect-ratio picker", group: "Selection", demo: "aspect-ratio",
+    summary: "A crop preview over a sample photo and a row of ratio chips, each drawn in its own shape. The crop frame springs to the new shape, rule-of-thirds guides flash in while it moves, the selection pill glides between chips, and the orientation toggle turns every shape on its side.",
+    code: `let ratios = [("Free", 0.0), ("1:1", 1.0), ("4:5", 0.8), ("16:9", 16.0 / 9.0)];
+ui.aspect_ratio_picker("crop", &mut selected, &mut portrait, &ratios);`,
+    options: [["ratios: &[(&str, f32)]", "Label and width / height; 0.0 is free."], ["portrait: &mut bool", "Turns fixed ratios on their side; the toggle is off for Free and 1:1."]],
+    keys: [["← →", "Previous / next ratio"], ["Enter / Space", "Choose"]],
+  },
+  {
+    slug: "ruler-slider", name: "Ruler slider", group: "Selection", demo: "ruler-slider",
+    summary: "A tick ruler that slides under a fixed needle, the way camera and scale apps pick a value. Drag it 1:1 or throw it and it springs onto a tick; ticks near the needle grow, the edges fade, the needle stretches while held, and the readout rolls the way the value moved.",
+    code: `ui.ruler_slider("Weight", &mut kg, 30.0..=200.0).step(0.1).major(10).unit("kg").show();`,
+    options: [["step(v)", "Value between ticks."], ["major(n)", "A labelled long tick every n steps."], ["unit(text) / decimals(n)", "Readout formatting."]],
+    keys: [["← → / ↓ ↑", "One tick"], ["Shift + arrows, PageUp / PageDown", "One major tick"], ["Home / End", "Ends of the range"]],
+  },
+  {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
     summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
     code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,

@@ -58,6 +58,11 @@ pub mod wheel_picker;
 pub mod calendar_heatmap;
 pub mod tour;
 pub mod file_browser;
+pub mod signature_pad;
+pub mod ruler_slider;
+pub mod time_dial;
+pub mod aspect_ratio;
+pub mod avatar_upload;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -120,6 +125,10 @@ pub use collab_suite::{
 pub use list_view::{ListOut, ListRow};
 pub use tour::TourStep;
 pub use file_browser::{FileEntry, FileOut};
+pub use signature_pad::{SigPoint, Signature, SignaturePad};
+pub use ruler_slider::RulerSlider;
+pub use time_dial::TimeDial;
+pub use avatar_upload::{AvatarOut, AvatarUpload, UploadState};
 pub use studio_suite::{
     ArenaSlab, DivergingBar, PlanSpec, PromptTemplate, SchemaField, SuggestionDecision, WaffleSlice,
 };

@@ -130,4 +130,6 @@ pub enum CursorIcon {
     Grabbing,
     /// Left-right arrows: scrubbing a number.
     ResizeHorizontal,
+    /// Drawing: signature pads and canvases.
+    Crosshair,
 }
