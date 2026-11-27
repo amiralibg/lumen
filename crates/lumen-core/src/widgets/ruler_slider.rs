@@ -208,7 +208,7 @@ impl RulerSlider<'_> {
             _ => None,
         };
         if roll.is_some() {
-            ui.request_repaint_after(0.0);
+            ui.anims.keep_alive();
         } else {
             ui.mem::<RulerMem>(id).roll = None;
         }

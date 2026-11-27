@@ -125,6 +125,12 @@ pub struct PaintCx<'a> {
 pub type PaintFn = Box<dyn FnOnce(&mut PaintCx<'_>, Rect)>;
 
 impl PaintCx<'_> {
+    /// The part of the screen this node can show (its scroll viewport, or
+    /// the screen): tall custom-painted content paints only what's in it.
+    pub fn visible_rect(&self) -> Rect {
+        self.scroll_clip
+    }
+
     pub fn color(&self, t: Token) -> Color {
         self.theme.color(t)
     }

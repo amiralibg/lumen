@@ -89,7 +89,7 @@ impl Ui {
         let moved_once = self.mem::<AspectMem>(id).changed_at > 0.0;
         let guides = self.fade(id, 3, since < 0.7 && moved_once, mo.hover_in, mo.fade_out * 3.0, Ease::Out);
         if since < 0.7 {
-            self.request_repaint_after((0.7 - since) as f64);
+            self.anims.keep_alive();
         }
 
         self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: gap * 1.5, ..Default::default() }, Some(id), Sense::NONE, CursorIcon::Default, false, None);

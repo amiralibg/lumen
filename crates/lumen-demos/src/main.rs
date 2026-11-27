@@ -136,6 +136,12 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("time-dial", "Time dial"),
     ("aspect-ratio", "Aspect-ratio picker"),
     ("ruler-slider", "Ruler slider"),
+    ("hex-viewer", "Hex viewer"),
+    ("tree-table", "Tree table"),
+    ("problems-panel", "Problems panel"),
+    ("stack-trace", "Stack trace"),
+    ("blame-view", "Blame view"),
+    ("coverage-view", "Coverage view"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -359,6 +365,11 @@ struct State {
     crop_portrait: bool,
     weight: f32,
     height_cm: f32,
+    tt_open: BTreeSet<String>,
+    tt_sel: String,
+    problem_open: Option<usize>,
+    frame_open: Option<usize>,
+    blame_pick: Option<usize>,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -565,6 +576,11 @@ impl State {
             crop_portrait: false,
             weight: 72.4,
             height_cm: 178.0,
+            tt_open: ["lumen", "crates"].iter().map(|s| s.to_string()).collect(),
+            tt_sel: "lumen-core".into(),
+            problem_open: None,
+            frame_open: None,
+            blame_pick: None,
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -745,6 +761,168 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+/// The first bytes of a PNG: signature, IHDR, a tEXt chunk and some data.
+fn demo_png_bytes() -> Vec<u8> {
+    let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let chunk = |b: &mut Vec<u8>, kind: &[u8], data: &[u8]| {
+        b.extend((data.len() as u32).to_be_bytes());
+        b.extend(kind);
+        b.extend(data);
+        let crc = data.iter().chain(kind).fold(0x1234_5678u32, |c, x| c.rotate_left(5) ^ *x as u32);
+        b.extend(crc.to_be_bytes());
+    };
+    chunk(&mut b, b"IHDR", &[0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0]);
+    chunk(&mut b, b"tEXt", b"Software\0lumen 0.1 (wgpu)");
+    chunk(&mut b, b"pHYs", &[0, 0, 0x0B, 0x13, 0, 0, 0x0B, 0x13, 1]);
+    let data: Vec<u8> = (0..300u32).map(|i| ((i * 37 + (i >> 3) * 11) % 251) as u8).collect();
+    chunk(&mut b, b"IDAT", &data);
+    chunk(&mut b, b"IEND", &[]);
+    b
+}
+
+fn demo_tree_rows() -> Vec<lumen::TreeTableRow> {
+    use lumen::TreeTableRow as R;
+    vec![R::new("lumen", &["lumen", "48.2 MB", "1,284", "Today"]).icon("folder").children([
+        R::new("crates", &["crates", "31.7 MB", "642", "Today"]).icon("folder").children([
+            R::new("lumen-core", &["lumen-core", "12.4 MB", "188", "Today"]).icon("folder"),
+            R::new("lumen-text", &["lumen-text", "9.8 MB", "21", "Nov 24"]).icon("folder"),
+            R::new("lumen-wgpu", &["lumen-wgpu", "3.1 MB", "14", "Nov 22"]).icon("folder"),
+            R::new("lumen-gpui", &["lumen-gpui", "2.6 MB", "9", "Today"]).icon("folder"),
+        ]),
+        R::new("site", &["site", "14.9 MB", "611", "Yesterday"]).icon("folder").children([
+            R::new("img", &["img", "13.2 MB", "584", "Yesterday"]).icon("folder"),
+            R::new("index.html", &["index.html", "18 KB", "1", "Nov 25"]).icon("file-code"),
+        ]),
+        R::new("docs", &["docs", "212 KB", "9", "Nov 26"]).icon("folder"),
+        R::new("Cargo.lock", &["Cargo.lock", "96 KB", "1", "Today"]).icon("file-lock"),
+    ])]
+}
+
+fn demo_problems() -> Vec<lumen::Problem> {
+    use lumen::{Problem, Severity::*};
+    let p = |severity, file: &str, line, col, message: &str, source: &str| Problem { severity, file: file.into(), line, col, message: message.into(), source: source.into() };
+    vec![
+        p(Error, "crates/app/src/config.rs", 42, 17, "mismatched types: expected `u16`, found `&str`", "rustc E0308"),
+        p(Warning, "crates/app/src/config.rs", 12, 5, "unused import: `std::env::VarError`", "rustc"),
+        p(Error, "crates/app/src/server.rs", 88, 9, "cannot borrow `self.pool` as mutable more than once", "rustc E0499"),
+        p(Warning, "crates/app/src/server.rs", 131, 13, "this `if` has identical blocks", "clippy"),
+        p(Info, "crates/app/src/server.rs", 7, 1, "consider adding `#[must_use]` to `bind`", "clippy"),
+        p(Warning, "crates/app/src/routes/health.rs", 23, 21, "variable does not need to be mutable", "rustc"),
+        p(Info, "crates/app/src/routes/health.rs", 3, 1, "item documented but not public", "rustdoc"),
+    ]
+}
+
+fn demo_frames() -> Vec<lumen::StackFrame> {
+    use lumen::StackFrame as F;
+    let lib = |f: &str, file: &str, line| F { function: f.into(), file: file.into(), line, in_app: false, context: vec![] };
+    vec![
+        lib("core::num::from_str_radix", "core/src/num/mod.rs", 1528),
+        lib("core::str::parse", "core/src/str/mod.rs", 2367),
+        F {
+            function: "app::config::port".into(),
+            file: "src/config.rs".into(),
+            line: 42,
+            in_app: true,
+            context: vec![
+                (40, "pub fn port() -> u16 {".into()),
+                (41, "    let raw = env::var(\"PORT\").unwrap_or_else(|_| \"8080\".into());".into()),
+                (42, "    raw.parse().unwrap()".into()),
+                (43, "}".into()),
+            ],
+        },
+        F { function: "app::config::Config::from_env".into(), file: "src/config.rs".into(), line: 18, in_app: true, context: vec![(17, "        Config {".into()), (18, "            port: port(),".into()), (19, "            workers: workers(),".into())] },
+        F { function: "app::main".into(), file: "src/main.rs".into(), line: 9, in_app: true, context: vec![(8, "fn main() {".into()), (9, "    let config = Config::from_env();".into()), (10, "    server::run(config);".into())] },
+        lib("std::rt::lang_start::{{closure}}", "std/src/rt.rs", 195),
+        lib("std::rt::lang_start_internal", "std/src/rt.rs", 174),
+        lib("std::rt::lang_start", "std/src/rt.rs", 194),
+    ]
+}
+
+const DEMO_CONFIG: &str = "use std::env;
+use std::time::Duration;
+
+/// Settings read from the environment at startup.
+pub struct Config {
+    pub port: u16,
+    pub workers: usize,
+    pub timeout: Duration,
+}
+
+impl Config {
+    pub fn from_env() -> Config {
+        Config {
+            port: port(),
+            workers: workers(),
+            timeout: timeout(),
+        }
+    }
+}
+
+pub fn port() -> u16 {
+    let raw = env::var(\"PORT\").unwrap_or_else(|_| \"8080\".into());
+    raw.parse().unwrap_or(8080)
+}
+
+fn workers() -> usize {
+    match env::var(\"WORKERS\") {
+        Ok(v) => v.parse().unwrap_or(4),
+        Err(_) => num_cpus(),
+    }
+}
+
+fn timeout() -> Duration {
+    let secs = env::var(\"TIMEOUT\").ok().and_then(|v| v.parse().ok());
+    Duration::from_secs(secs.unwrap_or(30))
+}
+
+fn num_cpus() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get())
+}";
+
+fn demo_blame() -> Vec<lumen::BlameLine> {
+    let commits = [
+        ("3f9c2e1a", "Ada Lovelace", 412, "Read settings from the environment"),
+        ("a81d07be", "Grace Hopper", 96, "Add worker count with a CPU default"),
+        ("c42e9f30", "Linus Pauling", 3, "Fall back to 8080 on a bad PORT"),
+        ("e5b1a6d2", "Ada Lovelace", 21, "Request timeout setting"),
+    ];
+    // Each line goes to the commit that would have written it.
+    let pick = |t: &str| {
+        if t.contains("8080") {
+            2
+        } else if ["workers", "WORKERS", "num_cpus", "available_parallelism", "Ok(v)", "Err(_)"].iter().any(|k| t.contains(k)) {
+            1
+        } else if ["Duration", "timeout", "TIMEOUT", "secs"].iter().any(|k| t.contains(k)) {
+            3
+        } else {
+            0
+        }
+    };
+    DEMO_CONFIG.lines().map(|t| {
+        let c = commits[pick(t)];
+        lumen::BlameLine { commit: c.0.into(), author: c.1.into(), age_days: c.2, summary: c.3.into(), text: t.into() }
+    }).collect()
+}
+
+fn demo_coverage() -> Vec<lumen::CoverLine> {
+    use lumen::Coverage::*;
+    DEMO_CONFIG.lines().enumerate().map(|(i, t)| {
+        let tr = t.trim();
+        let cover = if tr.is_empty() || tr.starts_with("//") || tr.starts_with("use ") || tr == "}" || tr == "{" || tr.starts_with("pub struct") || tr.starts_with("impl") || tr.starts_with("pub port") || tr.starts_with("pub workers") || tr.starts_with("pub timeout") {
+            Skip
+        } else {
+            match i {
+                23 => Partial(12),
+                28 => Miss,
+                34 => Partial(12),
+                37..=39 => Miss,
+                _ => Hit(if i < 20 { 12 } else { 24 }),
+            }
+        };
+        lumen::CoverLine { text: t.into(), cover }
+    }).collect()
 }
 
 /// A signature for the demo: a tall first letter, cursive loops, and an
@@ -2470,6 +2648,75 @@ ui.button("Ship release").primary().icon("rocket");
                     }
                 });
             }));
+        }
+        "hex-viewer" => {
+            let bytes = demo_png_bytes();
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                    ui.icon_leaf("file-image", 16.0, ui.color(lumen::Token::TextSecondary));
+                    ui.label("logo-mark.png").strong();
+                    ui.label(format!("{} bytes", bytes.len())).muted().small();
+                });
+                let short = ui.screen_size().y < 440.0;
+                ui.hex_viewer("logo-mark.png", &bytes).height(if short { 150.0 } else { 250.0 }).show();
+            });
+        }
+        "tree-table" => {
+            let rows = demo_tree_rows();
+            let narrow = ui.screen_size().x < 600.0;
+            let cols: Vec<(&str, f32)> = if narrow { vec![("Name", 0.0), ("Size", 72.0)] } else { vec![("Name", 0.0), ("Size", 80.0), ("Files", 56.0), ("Modified", 96.0)] };
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.tree_table("disk", &cols, &rows, &mut s.tt_open, &mut s.tt_sel);
+            });
+        }
+        "problems-panel" => {
+            let mut problems = demo_problems();
+            if ui.screen_size().y < 440.0 {
+                problems.truncate(4);
+            }
+            ui.column().fill_width().max_width(640.0).gap(8).show(|ui| {
+                if let Some(i) = ui.problems_panel("build", &problems) {
+                    s.problem_open = Some(i);
+                }
+                if let Some(i) = s.problem_open {
+                    let p = &problems[i];
+                    ui.label(format!("Opened {}:{}:{}", p.file, p.line, p.col)).muted().small();
+                }
+            });
+        }
+        "stack-trace" => {
+            let mut frames = demo_frames();
+            if ui.screen_size().y < 440.0 {
+                // A short card: the panic site and its callers only.
+                frames.truncate(4);
+            }
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                if let Some(i) = ui.stack_trace("panic", "ParseIntError", "invalid digit found in string: \"80a0\" (PORT)", &frames, "rust") {
+                    s.frame_open = Some(i);
+                }
+            });
+        }
+        "blame-view" => {
+            let lines = demo_blame();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(760.0).gap(8).show(|ui| {
+                if let Some(i) = ui.blame_view("config.rs", &lines).height(if short { 200.0 } else { 300.0 }).show() {
+                    s.blame_pick = Some(i);
+                }
+                let pick = s.blame_pick.map(|i| &lines[i]);
+                let text = match pick {
+                    Some(l) => format!("{} · {} · {}", &l.commit[..7], l.author, l.summary),
+                    None => "Click a line to see its commit.".to_owned(),
+                };
+                ui.label(text).muted().small();
+            });
+        }
+        "coverage-view" => {
+            let lines = demo_coverage();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).show(|ui| {
+                ui.coverage_view("cov", "src/config.rs", &lines).height(if short { 200.0 } else { 300.0 }).show();
+            });
         }
         "wheel-picker" => {
             ui.row().gap(40).align(Align::Center).show(|ui| {

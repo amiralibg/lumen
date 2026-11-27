@@ -175,7 +175,7 @@ impl SignaturePad<'_> {
         let lifted = ui.mem::<PadMem>(id).lifted;
         let wet = if reduced || drawing { if drawing { 0.0 } else { 1.0 } } else { ((now - lifted) as f32 / dry).clamp(0.0, 1.0) };
         if !ghosts.is_empty() || (wet < 1.0 && !drawing) {
-            ui.request_repaint_after(0.0);
+            ui.anims.keep_alive();
         }
         let last_ix = strokes.len().saturating_sub(1);
         let drop = if reduced { 0.0 } else { pen * 3.0 };

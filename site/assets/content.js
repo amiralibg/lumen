@@ -1432,6 +1432,54 @@ ui.aspect_ratio_picker("crop", &mut selected, &mut portrait, &ratios);`,
     keys: [["← → / ↓ ↑", "One tick"], ["Shift + arrows, PageUp / PageDown", "One major tick"], ["Home / End", "Ends of the range"]],
   },
   {
+    slug: "hex-viewer", name: "Hex viewer", group: "Developer tools", demo: "hex-viewer",
+    summary: "Offsets, bytes in two groups and an ASCII column, colored by kind (zero, printable, whitespace, control, high). Hovering a byte lights it in both columns, the cursor glides between cells, and Shift extends a selection. It shows 16 columns when they fit and 8 when they don't, and paints only the rows in view.",
+    code: `let out = ui.hex_viewer("logo.png", &bytes).height(260.0).show();
+status(format!("{} bytes selected", out.selection.len()));`,
+    options: [["height(px)", "Height of the scrolling area."], ["→ HexOut", "cursor and selection (a byte range)."]],
+    keys: [["Arrows", "Move by byte or row"], ["Shift + arrows", "Extend the selection"], ["Home / End", "Row start / end (Cmd: file)"], ["PageUp / PageDown", "Eight rows"]],
+  },
+  {
+    slug: "tree-table", name: "Tree table", group: "Data", demo: "tree-table",
+    summary: "A tree with columns: names indent under folders, numbers line up on the right. Chevrons turn, rows that appear rise in, and the selection pill glides between rows. Arrow keys walk and fold it like a file tree.",
+    code: `let rows = vec![TreeTableRow::new("src", &["src", "12 KB"]).icon("folder").children([...])];
+ui.tree_table("disk", &[("Name", 0.0), ("Size", 80.0)], &rows, &mut expanded, &mut selected);`,
+    options: [["columns: &[(title, width)]", "Width 0 fills; the first column holds the tree."], ["TreeTableRow", "id, cells, icon and children."]],
+    keys: [["↑ ↓", "Move"], ["→", "Expand, then into the first child"], ["←", "Collapse, then to the parent"], ["Enter / Space", "Toggle a folder"]],
+  },
+  {
+    slug: "problems-panel", name: "Problems panel", group: "Developer tools", demo: "problems-panel",
+    summary: "Diagnostics grouped by file, with Error, Warning and Info filters that show their counts. File groups fold, rows rise in one after another, and a click (or Enter) opens a problem at its line and column.",
+    code: `if let Some(i) = ui.problems_panel("build", &problems) {
+    open(&problems[i].file, problems[i].line);
+}`,
+    options: [["Problem", "severity, file, line, col, message and source (\"rustc E0308\")."], ["→ Option<usize>", "The problem opened this frame."]],
+    keys: [["↑ ↓ in the list", "Move"], ["Enter", "Open"], ["Enter / Space on a file", "Fold it"]],
+  },
+  {
+    slug: "stack-trace", name: "Stack trace", group: "Developer tools", demo: "stack-trace",
+    summary: "An error and its stack. Your frames show; runs of library frames fold into one row you can open. The first frame with source opens to show the lines around it, the failing one marked, and Copy puts the whole trace on the clipboard.",
+    code: `ui.stack_trace("panic", "ParseIntError", "invalid digit found in string", &frames, "rust");`,
+    options: [["StackFrame", "function, file, line, in_app and context: (line, text) pairs."], ["→ Option<usize>", "The frame clicked; one frame is open at a time."]],
+    keys: [["Tab", "Frame to frame"], ["Enter / Space", "Open a frame or a library group"]],
+  },
+  {
+    slug: "blame-view", name: "Blame view", group: "Developer tools", demo: "blame-view",
+    summary: "Code with who last changed each line. Each commit's chunk shows its author, summary and age, with a bar down the side that's brighter the newer the change. Hovering a line lights every line of the same commit; clicking pins it.",
+    code: `if let Some(i) = ui.blame_view("config.rs", &lines).height(300.0).show() {
+    show_commit(&lines[i].commit);
+}`,
+    options: [["BlameLine", "commit, author, age_days, summary and text."], ["lang(name) / height(px)", "Syntax colors and the scrolling height."]],
+    keys: [["↑ ↓, PageUp / PageDown", "Move by line"], ["Enter", "Pick the line's commit"]],
+  },
+  {
+    slug: "coverage-view", name: "Coverage view", group: "Developer tools", demo: "coverage-view",
+    summary: "Code with line coverage: hit counts in the gutter, missed lines and partly covered branches tinted, and a summary meter that fills in. Next uncovered (or N) scrolls to the next miss and pulses it.",
+    code: `ui.coverage_view("cov", "src/config.rs", &lines).height(300.0).show();`,
+    options: [["CoverLine { text, cover }", "Coverage::Skip, Hit(n), Miss or Partial(n)."], ["lang(name) / height(px)", "Syntax colors and the scrolling height."]],
+    keys: [["N", "Next uncovered line"]],
+  },
+  {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
     summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
     code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,
