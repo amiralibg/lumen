@@ -7,6 +7,7 @@
 
 use std::ops::RangeInclusive;
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::id::Id;
@@ -56,6 +57,11 @@ impl<'u> SplitPane<'u> {
         let container_rect = ui.rect_of(id).unwrap_or(Rect::from_xywh(0.0, 0.0, 520.0, height));
         let sense_drag = Sense { click: true, drag: true, focusable: true, scroll: false };
         let hix = ui.interact(handle_id, sense_drag, false);
+        ui.a11y(handle_id, || A11y::new(Role::Separator).label("Resize").numeric(*ratio as f64 * 100.0, 0.0, 100.0, Some(5.0)));
+        let (a_st, a_set) = ui.a11y_step(handle_id);
+        if a_st != 0 || a_set.is_some() {
+            *ratio = ((a_set.map(|v| v as f32 / 100.0).unwrap_or(*ratio)) + a_st as f32 * 0.05).clamp(0.05, 0.95);
+        }
 
         if hix.clicked && hix.click_count >= 2 {
             *ratio = 0.5;

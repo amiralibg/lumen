@@ -4,6 +4,7 @@
 
 use super::field::{Chrome, EditOpts};
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -286,6 +287,8 @@ impl Ui {
         // Primary circular FAB trigger.
         let fab_id = id.with("fab");
         let f_ix = self.interact(fab_id, Sense::CLICK, false);
+        let is_open = *open;
+        self.a11y(fab_id, || A11y::new(Role::Button).label("Actions").expanded(is_open));
         let press = self.spring(fab_id, 0, if f_ix.pressed { 1.0 } else { 0.0 }, mo.snappy);
         let rot_t = self.spring(fab_id, 1, if *open { 1.0 } else { 0.0 }, mo.bouncy);
         let hov = self.fade(fab_id, 2, f_ix.hovered, mo.hover_in, mo.hover_out, Ease::Out);
@@ -376,6 +379,11 @@ impl Ui {
             for (ci, &k_lbl) in row.iter().enumerate() {
                 let kid = id.with(("k", ri, ci));
                 let k_ix = self.interact(kid, Sense::CLICK, false);
+                self.a11y(kid, || A11y::new(Role::Button).label(match k_lbl {
+                    "C" => "Clear",
+                    "⌫" => "Delete",
+                    d => d,
+                }));
                 let press = self.spring(kid, 0, if k_ix.pressed { 1.0 } else { 0.0 }, mo.snappy);
                 let hov = self.fade(kid, 1, k_ix.hovered, mo.hover_in, mo.hover_out, Ease::Out);
                 let k_bg = self.color(Token::SurfaceMuted).mix(self.color(Token::Hover), hov);
@@ -751,9 +759,11 @@ impl Ui {
         self.end();
 
         self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 10.0, wrap: true, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        for (si, &(_, col)) in swatches.iter().enumerate() {
+        for (si, &(sw_name, col)) in swatches.iter().enumerate() {
             let sid = id.with(("sw", si));
             let ix = self.interact(sid, Sense::CLICK, false);
+            let sel_now = si == *selected;
+            self.a11y(sid, || A11y::new(Role::RadioButton).label(sw_name).toggled(sel_now).position(si, n));
             if ix.focused {
                 if self.key_pressed_for(sid, Key::ArrowRight) {
                     *selected = (*selected + 1) % n;

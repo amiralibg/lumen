@@ -39,9 +39,16 @@ fn run(name: &str, frames: usize, view: impl FnMut(&mut Ui, usize)) {
 
 /// `excluded()` returns time spent this frame on the caller's own data (not
 /// lumen's work), subtracted from the frame time.
-fn run_excl(name: &str, frames: usize, mut view: impl FnMut(&mut Ui, usize), excluded: impl Fn() -> Duration) {
+fn run_excl(name: &str, frames: usize, view: impl FnMut(&mut Ui, usize), excluded: impl Fn() -> Duration) {
+    run_with(name, frames, false, view, excluded);
+}
+
+/// `a11y`: also build the accessibility tree each frame, as when a screen
+/// reader is running.
+fn run_with(name: &str, frames: usize, a11y: bool, mut view: impl FnMut(&mut Ui, usize), excluded: impl Fn() -> Duration) {
     let mut ui = Ui::new();
     ui.theme.reduced_motion = true;
+    ui.set_accessibility(a11y);
     let mut t = 1.0;
     let mut times = Vec::with_capacity(frames);
     for f in 0..frames + 20 {
@@ -68,6 +75,9 @@ fn main() {
         seen = (o.built, info.offset);
     });
     println!("    (last frame: {} rows built, scrolled {:.0} px)", seen.0, seen.1);
+    run_with("list_view, 100k rows, scrolling, accessibility tree on", 600, true, |ui, _| {
+        ui.scroll("s").show(|ui| ui.list_view("l", &list, &mut sel));
+    }, || Duration::ZERO);
 
     let names: Vec<String> = (0..n).map(|i| format!("service-{i}")).collect();
     run("table (lazy_rows), 100k rows, scrolling", 600, |ui, _| {

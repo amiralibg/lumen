@@ -5,6 +5,7 @@
 use super::field::{Chrome, EditOpts};
 use super::show_on_drop;
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key};
@@ -1206,7 +1207,12 @@ fn render_transfer_pane(
                 false,
                 Some(Box::new(move |cx, r| cx.painter.rrect(r, Corners::all(6.0), bg, 0.0, Color::TRANSPARENT))),
             );
-            let cb_changed = ui.scope(("cb", idx), |ui| ui.checkbox("", &mut is_on).changed());
+            ui.a11y(rid, || A11y::new(Role::CheckBox).label(it.as_str()).toggled(is_on));
+            let cb_changed = ui.scope(("cb", idx), |ui| {
+                let r = ui.checkbox("", &mut is_on).show();
+                ui.a11y_update(r.id, |a| a.hidden = true);
+                r.changed
+            });
             ui.text_leaf(it.clone(), ui.text_style(TextRole::Body), ui.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
             ui.end();
             if r_ix.clicked && !cb_changed {

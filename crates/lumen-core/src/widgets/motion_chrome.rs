@@ -4,6 +4,7 @@
 //! - [`Waveform`] (scrubbable audio / voice waveform player with play/pause and mm:ss readout)
 //! - [`WindowChrome`] (platform-aware window header bar that morphs across Lumen, macOS, Windows and GNOME)
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -271,6 +272,12 @@ impl<'u, 'a> Waveform<'u, 'a> {
         // Scrubbable bar spectrum.
         let sense_scrub = Sense { click: true, drag: true, focusable: true, scroll: false };
         let six = ui.interact(scrub_id, sense_scrub, false);
+        let (a_st, a_set) = ui.a11y_step(scrub_id);
+        if a_st != 0 || a_set.is_some() {
+            *self.progress = (a_set.map(|v| v as f32 / 100.0).unwrap_or(*self.progress) + a_st as f32 * 0.05).clamp(0.0, 1.0);
+        }
+        let prog = *self.progress as f64 * 100.0;
+        ui.a11y(scrub_id, || A11y::new(Role::Slider).label("Position").numeric(prog, 0.0, 100.0, Some(5.0)));
         if (six.held || six.clicked) && six.rect.width() > 1.0 {
             if let Some(p) = six.pointer {
                 *self.progress = ((p.x - six.rect.min.x) / six.rect.width()).clamp(0.0, 1.0);

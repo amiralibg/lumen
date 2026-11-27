@@ -700,7 +700,12 @@ impl Ui {
             for ri in 0..roles.len() {
                 self.begin(Style { width: Size::FILL, justify: Justify::Center, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
                 if let Some(val) = granted.get_mut(ci).and_then(|r| r.get_mut(ri)) {
-                    if self.scope(("pm", ci, ri), |ui| ui.checkbox("", val).changed()) {
+                    let role = roles.get(ri).copied().unwrap_or_default();
+                    if self.scope(("pm", ci, ri), |ui| {
+                        let r = ui.checkbox("", val).show();
+                        ui.a11y_update(r.id, |a| a.label = Some(format!("{role}: {cap}")));
+                        r.changed
+                    }) {
                         changed = true;
                     }
                 }

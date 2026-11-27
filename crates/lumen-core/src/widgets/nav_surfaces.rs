@@ -3,6 +3,7 @@
 //! [`UndoBar`], and [`ImageFrame`].
 
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Justify, Size, Style};
@@ -268,6 +269,7 @@ impl<'u> Carousel<'u> {
             let did = id.with(("dot", di));
             let d_ix = ui.interact(did, Sense::CLICK, false);
             let is_act = di == *self.active;
+            ui.a11y(did, || A11y::new(Role::Tab).label(format!("Slide {}", di + 1)).selected(is_act).position(di, n));
             let t = ui.spring(did, 0, if is_act { 1.0 } else { 0.0 }, mo.snappy).clamp(0.0, 1.0);
             let dw = 7.0 + 15.0 * t;
             let dc = ui.color(Token::BorderStrong).mix(ui.color(Token::Accent), t);

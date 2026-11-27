@@ -124,6 +124,7 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("notification-list", "Notification inbox"),
     ("list-view", "List view"),
     ("virtual-list", "Virtualized list"),
+    ("accessibility", "Accessibility"),
     ("code-editor", "Code editor"),
     ("emoji-picker", "Emoji picker"),
     ("wheel-picker", "Wheel and time picker"),
@@ -322,6 +323,15 @@ struct State {
     vl_next_key: u64,
     vl_built: usize,
     vl_off: f32,
+    /// accessibility: a form a screen reader can drive.
+    ax_name: String,
+    ax_wifi: bool,
+    ax_vol: f32,
+    ax_theme: u8,
+    ax_dialog: bool,
+    ax_log: String,
+    ax_sel: Option<usize>,
+    ax_rows: Vec<lumen::ListRow>,
     split_ratio: f32,
     term_lines: Vec<TermLine>,
     term_in: String,
@@ -507,6 +517,14 @@ impl State {
             vl_next_key: 0,
             vl_built: 0,
             vl_off: 0.0,
+            ax_name: String::new(),
+            ax_wifi: false,
+            ax_vol: 4.0,
+            ax_theme: 0,
+            ax_dialog: false,
+            ax_log: "Nothing yet".into(),
+            ax_sel: None,
+            ax_rows: vec![],
             split_ratio: 0.38,
             term_lines: vec![
                 TermLine::cmd("cargo test -p lumen-core --quiet"),
@@ -2418,6 +2436,56 @@ ui.button("Ship release").primary().icon("rocket");
                 ui.label(format!("Selected: {pick}. Use ↑ ↓ to move, Enter to open.")).muted().small();
             });
         }
+        "accessibility" => {
+            if s.ax_rows.is_empty() {
+                s.ax_rows = (0..1000u64).map(|k| lumen::ListRow::new(format!("Message {}", k + 1)).subtitle(["Ada", "Grace", "Linus", "Barbara"][(k % 4) as usize])).collect();
+            }
+            ui.row().fill_width().gap(24).align(Align::Start).wrap().show(|ui| {
+                ui.column().width(320.0).gap(12).show(|ui| {
+                    ui.heading("Profile").level(2);
+                    ui.text_input(&mut s.ax_name).label("Name").placeholder("Your name").show();
+                    ui.switch("Wi-Fi", &mut s.ax_wifi).show();
+                    ui.slider("Volume", &mut s.ax_vol, 0.0..=10.0).step(1.0).show();
+                    ui.select(&mut s.ax_theme, &[(0, "System"), (1, "Light"), (2, "Dark")]).label("Theme").show();
+                    ui.row().gap(8).show(|ui| {
+                        if ui.button("Save").primary().show().clicked() {
+                            s.ax_log = format!("Saved {}", if s.ax_name.is_empty() { "(no name)" } else { s.ax_name.as_str() });
+                        }
+                        let more = ui.button("More").icon("chevron-down").show();
+                        ui.menu(&more, |ui| {
+                            if ui.menu_item("copy", "Duplicate").shortcut("⌘D").show().clicked() {
+                                s.ax_log = "Duplicated".into();
+                            }
+                            if ui.menu_item("trash", "Delete…").danger().show().clicked() {
+                                s.ax_dialog = true;
+                            }
+                        });
+                    });
+                    ui.label(format!("Last action: {}", s.ax_log)).muted();
+                });
+                ui.column().fill_width().min_width(260.0).gap(8).show(|ui| {
+                    ui.heading("Inbox").level(2);
+                    ui.scroll("ax-inbox").height(300.0).show(|ui| {
+                        ui.list_view("ax-inbox", &s.ax_rows, &mut s.ax_sel);
+                    });
+                });
+            });
+            let mut deleted = false;
+            ui.dialog("ax-confirm", &mut s.ax_dialog).title("Delete profile?").description("This can't be undone.").show(|ui| {
+                ui.row().gap(8).show(|ui| {
+                    if ui.button("Cancel").show().clicked() {
+                        ui.close_layer();
+                    }
+                    if ui.button("Delete").variant(lumen::Variant::Danger).show().clicked() {
+                        deleted = true;
+                        ui.close_layer();
+                    }
+                });
+            });
+            if deleted {
+                s.ax_log = "Deleted".into();
+            }
+        }
         "virtual-list" => {
             if s.vl_rows.is_empty() {
                 s.vl_rows = (0..100_000u64).map(virtual_row).collect();
@@ -3654,10 +3722,11 @@ struct Params {
     /// `--click X,Y` (repeatable): clicks before the screenshot.
     clicks: Vec<lumen::Vec2>,
     chrome: bool,
+    a11y: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![], chrome: false };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![], chrome: false, a11y: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3705,6 +3774,7 @@ fn params() -> Params {
                 "--open" => p.open = true,
                 "--check" => p.check = true,
                 "--chrome" => p.chrome = true,
+                "--a11y" => p.a11y = true,
                 "--click" => {
                     i += 1;
                     if let Some((x, y)) = args.get(i).and_then(|v| v.split_once(',')) {
@@ -3756,7 +3826,7 @@ fn main() {
             steps.push(lumen::ShotStep::Click(c));
             steps.push(lumen::ShotStep::Wait(0.6));
         }
-        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
+        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, a11y: p.a11y, ..Default::default() };
         let res = if p.chrome {
             let t = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen").to_string();
             lumen::screenshot(out, &shot, &mut state, move |ui, s| chrome_view(ui, s, &t))

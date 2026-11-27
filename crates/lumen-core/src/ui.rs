@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use lumen_text::{Galley, TextAlign, TextStyle, TextSystem};
 
+use crate::a11y::{A11y, A11yAction, A11yNode, A11yTree, Role};
 use crate::anim::{AnimStore, Ease, SpringParams};
 use crate::color::Color;
 use crate::id::Id;
@@ -116,6 +117,9 @@ pub struct PaintCx<'a> {
     pub time: f64,
     deferred: &'a mut Vec<(Rect, PaintFn)>,
     scroll_clip: Rect,
+    /// Text each node's paint closures drew (`node, log range`), recorded
+    /// while accessibility is on: it names controls that paint their text.
+    painted: Option<Vec<(NodeId, usize, usize)>>,
 }
 
 pub type PaintFn = Box<dyn FnOnce(&mut PaintCx<'_>, Rect)>;
@@ -366,6 +370,8 @@ pub struct FrameOutput {
     /// region. Hosts that need hit-test areas up front (GPUI on Windows)
     /// use these; others call [`Ui::window_region_at`] on mouse-down.
     pub window_regions: Vec<(WindowRegion, Rect)>,
+    /// The accessibility tree, when [`Ui::set_accessibility`] is on.
+    pub a11y: Option<A11yTree>,
 }
 
 /// The focused text field as the platform's input method sees it. Offsets
@@ -499,6 +505,20 @@ pub struct Ui {
     pub(crate) nav: Option<crate::widgets::nav::NavCtx>,
     applied_fonts: Option<Fonts>,
     system: SystemPrefs,
+
+    // Accessibility (see `a11y`).
+    a11y_on: bool,
+    a11y_by_id: FastMap<Id, A11y>,
+    a11y_by_node: Vec<(NodeId, A11y)>,
+    a11y_requests: Vec<(Id, A11yAction)>,
+    /// Icon leaves this frame: a name for controls that show only an icon.
+    a11y_icons: FastMap<NodeId, String>,
+    a11y_painted: FastMap<NodeId, Vec<String>>,
+    /// A field label waiting for its editor (see `field_label`).
+    pub(crate) a11y_field_label: Option<(String, NodeId)>,
+    /// Last frame: expanded state and scroll context per exposed widget.
+    a11y_expanded: FastMap<Id, bool>,
+    a11y_scroll: FastMap<Id, (Id, Rect, Rect)>,
 }
 
 impl Default for Ui {
@@ -588,6 +608,15 @@ impl Ui {
             nav: None,
             applied_fonts: None,
             system: SystemPrefs::default(),
+            a11y_on: false,
+            a11y_by_id: FastMap::default(),
+            a11y_by_node: vec![],
+            a11y_requests: vec![],
+            a11y_icons: FastMap::default(),
+            a11y_painted: FastMap::default(),
+            a11y_field_label: None,
+            a11y_expanded: FastMap::default(),
+            a11y_scroll: FastMap::default(),
         }
     }
 
@@ -625,6 +654,11 @@ impl Ui {
         self.any_key = false;
         self.press_at = None;
         self.secondary_at = None;
+        self.a11y_requests.clear();
+        self.a11y_by_id.clear();
+        self.a11y_by_node.clear();
+        self.a11y_icons.clear();
+        self.a11y_field_label = None;
         if let Some(f) = self.pending_focus.take() {
             self.focused = Some(f);
         }
@@ -763,7 +797,61 @@ impl Ui {
             }
             Event::WindowFocused(true) => self.window_focused = true,
             Event::WindowMaximized(m) => self.window_maximized = m,
+            Event::A11y { target, action } => self.a11y_event(target, action),
         }
+    }
+
+    fn a11y_event(&mut self, target: Id, action: A11yAction) {
+        let focusable = self.prev_focus_order.contains(&target);
+        match &action {
+            A11yAction::Click => {
+                self.clicked.push(target);
+                self.any_press = true;
+                if focusable {
+                    self.focused = Some(target);
+                    self.focus_visible = true;
+                }
+            }
+            A11yAction::Expand | A11yAction::Collapse => {
+                let open = matches!(action, A11yAction::Expand);
+                if self.a11y_expanded.get(&target).copied() != Some(open) {
+                    self.clicked.push(target);
+                    self.any_press = true;
+                }
+            }
+            A11yAction::Focus => {
+                self.focused = Some(target);
+                self.focus_visible = true;
+            }
+            A11yAction::Blur => {
+                if self.focused == Some(target) {
+                    self.focused = None;
+                }
+            }
+            A11yAction::Increment | A11yAction::Decrement | A11yAction::SetValue(_) | A11yAction::SetNumber(_) => {
+                if focusable {
+                    self.focused = Some(target);
+                    self.focus_visible = true;
+                }
+            }
+            A11yAction::ScrollIntoView => {
+                if let Some(&(scroll, r, view)) = self.a11y_scroll.get(&target) {
+                    let st = self.mem::<ScrollState>(scroll);
+                    let off = st.offset;
+                    let d = if r.min.y < view.min.y {
+                        r.min.y - view.min.y
+                    } else if r.max.y > view.max.y {
+                        (r.max.y - view.max.y).min(r.min.y - view.min.y)
+                    } else {
+                        0.0
+                    };
+                    if d != 0.0 {
+                        self.scroll_to(scroll, off + d);
+                    }
+                }
+            }
+        }
+        self.a11y_requests.push((target, action));
     }
 
     fn move_focus(&mut self, forward: bool) {
@@ -874,11 +962,12 @@ impl Ui {
             painter.rect(screen, bg);
         }
         let mut layer_rects = vec![];
-        if self.check_layout {
+        if self.check_layout || self.a11y_on {
             painter.text_log = Some(vec![]);
         }
         let mut extras = std::mem::take(&mut self.extras);
         let mut deferred: Vec<(Rect, PaintFn)> = vec![];
+        let mut painted;
         {
             let mut cx = PaintCx {
                 painter: &mut painter,
@@ -889,6 +978,7 @@ impl Ui {
                 time: self.time,
                 deferred: &mut deferred,
                 scroll_clip: screen,
+                painted: self.a11y_on.then(Vec::new),
             };
             paint_node(&self.tree, &mut extras, &self.leaves, self.root, screen, &mut cx, &mut hits);
             let deferred_now = std::mem::take(cx.deferred);
@@ -939,6 +1029,7 @@ impl Ui {
                 paint_overlay(&self.tree, &mut extras, &self.leaves, ov.root, d, alpha, &mut cx);
                 cx.painter.pop_clip();
             }
+            painted = cx.painted.take();
         }
         self.extras = extras;
 
@@ -972,13 +1063,28 @@ impl Ui {
 
         let mut repaint = self.repaint_at.map(|t| (t - self.time).max(0.0));
         let animating = self.anims.is_active() || self.theme.is_animating();
-        if animating {
+        // A click, key or screen reader action may change state that parts
+        // of the view built earlier this frame already read: draw once more
+        // so the change shows without waiting for the next input.
+        let acted = !self.clicked.is_empty() || self.released.is_some() || self.any_key || !self.a11y_requests.is_empty();
+        if animating || acted {
             repaint = Some(0.0);
         }
         if let Some(log) = painter.text_log.take() {
-            self.issues = text_issues(&log);
-            self.issues.append(&mut painter.paint_issues);
+            if self.check_layout {
+                self.issues = text_issues(&log);
+                self.issues.append(&mut painter.paint_issues);
+            }
+            if let Some(rec) = painted.take() {
+                let mut map: FastMap<NodeId, Vec<String>> = FastMap::default();
+                for (n, a, b) in rec {
+                    let texts = log[a..b].iter().filter(|t| t.alpha >= 0.3 && !t.text.trim().is_empty()).map(|t| t.text.trim().to_owned());
+                    map.entry(n).or_default().extend(texts);
+                }
+                self.a11y_painted = map;
+            }
         }
+        let a11y = self.a11y_on.then(|| self.build_a11y());
         let mut draw = painter.finish();
         draw.atlas = self.text.take_atlas_delta();
         let mut window_regions: Vec<(WindowRegion, Rect)> =
@@ -998,6 +1104,7 @@ impl Ui {
             animating,
             window_requests,
             window_regions,
+            a11y,
         }
     }
 
@@ -1184,6 +1291,128 @@ impl Ui {
     pub fn window_maximized(&self) -> bool {
         self.window_maximized
     }
+    // ------------------------------------------------------ accessibility
+
+    /// Build an accessibility tree each frame ([`FrameOutput::a11y`]).
+    /// Hosts turn it on when a screen reader asks for the tree.
+    pub fn set_accessibility(&mut self, on: bool) {
+        self.a11y_on = on;
+    }
+
+    pub fn accessibility(&self) -> bool {
+        self.a11y_on
+    }
+
+    /// Describe widget `id` (its layout node) to assistive technology. The
+    /// closure only runs while accessibility is on.
+    pub fn a11y(&mut self, id: Id, f: impl FnOnce() -> A11y) {
+        if self.a11y_on {
+            self.a11y_by_id.entry(id).or_insert_with(f);
+        }
+    }
+
+    /// Change what widget `id` already said about itself this frame (a
+    /// popover marks its trigger expanded).
+    pub fn a11y_update(&mut self, id: Id, f: impl FnOnce(&mut A11y)) {
+        if self.a11y_on {
+            if let Some(a) = self.a11y_by_id.get_mut(&id) {
+                f(a);
+            }
+        }
+    }
+
+    /// Hide a node from assistive technology: a visible field label that
+    /// already names its control.
+    pub fn a11y_hide(&mut self, n: NodeId) {
+        if self.a11y_on {
+            self.a11y_by_node.push((n, A11y::hidden()));
+        }
+    }
+
+    /// Describe a layout node that has no id (a heading's text leaf).
+    pub fn a11y_node(&mut self, n: NodeId, f: impl FnOnce() -> A11y) {
+        if self.a11y_on {
+            self.a11y_by_node.push((n, f()));
+        }
+    }
+
+    /// Actions assistive technology requested for `id` this frame (clicks
+    /// and focus are already applied as ordinary input).
+    pub fn a11y_actions(&self, id: Id) -> Vec<A11yAction> {
+        self.a11y_requests.iter().filter(|(t, _)| *t == id).map(|(_, a)| a.clone()).collect()
+    }
+
+    /// Step a value control by a screen reader's increment or decrement:
+    /// `+1`, `-1` or `0`, and a set number if one was sent.
+    pub fn a11y_step(&self, id: Id) -> (i32, Option<f64>) {
+        let mut step = 0;
+        let mut set = None;
+        for (t, a) in &self.a11y_requests {
+            if *t != id {
+                continue;
+            }
+            match a {
+                A11yAction::Increment => step += 1,
+                A11yAction::Decrement => step -= 1,
+                A11yAction::SetNumber(v) => set = Some(*v),
+                A11yAction::SetValue(v) => set = v.trim().parse().ok().or(set),
+                _ => {}
+            }
+        }
+        (step, set)
+    }
+
+    fn build_a11y(&mut self) -> A11yTree {
+        let mut info: FastMap<NodeId, A11y> = FastMap::default();
+        for (n, a) in self.a11y_by_node.drain(..) {
+            info.insert(n, a);
+        }
+        if !self.a11y_by_id.is_empty() {
+            for (i, e) in self.extras.iter().enumerate() {
+                if let Some(id) = e.id {
+                    if let Some(a) = self.a11y_by_id.remove(&id) {
+                        info.entry(i).or_insert(a);
+                    }
+                }
+            }
+        }
+        let scroll_of: FastMap<NodeId, Id> = self.scrolls.iter().map(|(id, n)| (*n, *id)).collect();
+        let screen = Rect::from_min_size(Vec2::ZERO, self.screen);
+        let mut b = A11yBuild {
+            tree: &self.tree,
+            extras: &self.extras,
+            leaves: &self.leaves,
+            info,
+            scroll_of,
+            tips: &self.tooltips,
+            icons: &self.a11y_icons,
+            painted: &self.a11y_painted,
+            icon_names: vec![],
+            nodes: vec![],
+            names: vec![],
+            seen: FastMap::default(),
+            expanded: FastMap::default(),
+            scroll: FastMap::default(),
+        };
+        let mut root = A11yNode { id: Id::ROOT.0, info: A11y::new(Role::Window), rect: screen, children: vec![], actions: Default::default() };
+        root.info.label = None;
+        b.nodes.push(root);
+        b.names.push(None);
+        b.icon_names.push(None);
+        b.seen.insert(Id::ROOT.0, ());
+        b.walk(self.root, 0, Sink::None, screen, None);
+        for ly in &self.layers {
+            if ly.alpha > 0.01 {
+                b.walk(ly.root, 0, Sink::None, screen, None);
+            }
+        }
+        b.finish_names();
+        let focus = self.focused.map(|f| f.0).filter(|f| b.seen.contains_key(f)).unwrap_or(Id::ROOT.0);
+        self.a11y_expanded = std::mem::take(&mut b.expanded);
+        self.a11y_scroll = std::mem::take(&mut b.scroll);
+        A11yTree { nodes: b.nodes, root: Id::ROOT.0, focus }
+    }
+
     /// Previous-frame rect of an identified node.
     pub fn rect_of(&self, id: Id) -> Option<Rect> {
         self.prev_rects.get(&id).copied()
@@ -1421,6 +1650,10 @@ impl Ui {
     /// Add an icon leaf (Lucide glyph in a square of `size`).
     pub fn icon_leaf(&mut self, name: &str, size: f32, color: Color) -> NodeId {
         let name = name.to_owned();
+        if self.a11y_on {
+            let n = self.tree.nodes.len();
+            self.a11y_icons.insert(n, name.clone());
+        }
         // Glyphs don't scale with their rect, so a crowded row must not
         // squeeze one (it would spill into the next item).
         self.leaf(
@@ -2022,6 +2255,12 @@ fn paint_node(
     if let Some(p) = e.paint.take() {
         let logged = cx.painter.text_log.as_ref().map(|l| l.len());
         p(cx, r);
+        if let (Some(rec), Some(from)) = (cx.painted.as_mut(), logged) {
+            let to = cx.painter.text_log.as_ref().map_or(from, |l| l.len());
+            if to > from {
+                rec.push((n, from, to));
+            }
+        }
         // A fixed-size leaf the layout squeezed below its size: charts
         // redraw smaller, but text drawn past the rect means the widget
         // needed that width as a `min`.
@@ -2065,7 +2304,14 @@ fn paint_node(
         cx.scroll_clip = saved_scroll_clip;
     }
     if let Some(p) = extras[n].paint_after.take() {
+        let from = cx.painter.text_log.as_ref().map(|l| l.len());
         p(cx, r);
+        if let (Some(rec), Some(from)) = (cx.painted.as_mut(), from) {
+            let to = cx.painter.text_log.as_ref().map_or(from, |l| l.len());
+            if to > from {
+                rec.push((n, from, to));
+            }
+        }
     }
 }
 
@@ -2350,5 +2596,203 @@ impl ScrollArea<'_> {
             );
         }
         (r, info)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Sink {
+    None,
+    /// Text names this node (index into `nodes`).
+    Name(usize),
+    /// Text belongs to a value control; drop it.
+    Drop,
+}
+
+struct A11yBuild<'a> {
+    tree: &'a Tree,
+    extras: &'a [NodeExtra],
+    leaves: &'a [TextLeaf],
+    info: FastMap<NodeId, A11y>,
+    scroll_of: FastMap<NodeId, Id>,
+    tips: &'a FastMap<Id, TooltipSpec>,
+    icons: &'a FastMap<NodeId, String>,
+    painted: &'a FastMap<NodeId, Vec<String>>,
+    /// Icon names seen under each node, for controls without text.
+    icon_names: Vec<Option<String>>,
+    nodes: Vec<A11yNode>,
+    /// Text collected for each node's name.
+    names: Vec<Option<String>>,
+    seen: FastMap<u64, ()>,
+    expanded: FastMap<Id, bool>,
+    scroll: FastMap<Id, (Id, Rect, Rect)>,
+}
+
+impl A11yBuild<'_> {
+    fn add(&mut self, parent: usize, want: u64, info: A11y, rect: Rect, clickable: bool, focusable: bool) -> usize {
+        let mut id = want;
+        let mut k = 0u32;
+        while self.seen.contains_key(&id) {
+            k += 1;
+            id = Id(want).with(k).0;
+        }
+        self.seen.insert(id, ());
+        let actions = A11yTree::default_actions(&info, clickable, focusable);
+        let ix = self.nodes.len();
+        self.nodes.push(A11yNode { id, info, rect, children: vec![], actions });
+        self.names.push(None);
+        self.icon_names.push(None);
+        self.nodes[parent].children.push(id);
+        ix
+    }
+
+    fn walk(&mut self, n: NodeId, parent: usize, sink: Sink, clip: Rect, scroll: Option<(Id, Rect)>) {
+        let node = &self.tree.nodes[n];
+        let e = &self.extras[n];
+        let rect = node.rect;
+        // Collapsed or clipped away (not scrolled away: a screen reader can
+        // still reach content below the fold).
+        if clip.width() <= 0.0 || clip.height() <= 0.0 {
+            return;
+        }
+        let vis = rect.intersect(&clip);
+        if rect.width() > 0.0 && rect.height() > 0.0 && (vis.width() <= 0.0 || vis.height() <= 0.0) {
+            return;
+        }
+        let mut info = self.info.remove(&n);
+        if info.as_ref().is_some_and(|i| i.hidden) {
+            return;
+        }
+        // An unnamed group says nothing: pass through to its children.
+        let explicit = info.is_some();
+        if info.as_ref().is_some_and(|i| i.role == Role::Group && i.label.is_none() && i.description.is_none()) {
+            info = None;
+        }
+        let parent_role = self.nodes[parent].info.role;
+        if info.is_none() {
+            if let (Some(icon), Sink::Name(s)) = (self.icons.get(&n), sink) {
+                self.icon_names[s].get_or_insert_with(|| crate::widgets::button::humanize(icon));
+                return;
+            }
+            if let Content::Measured(k) = node.content {
+                let text = self.leaves[k as usize].text.trim();
+                if text.is_empty() {
+                    return;
+                }
+                match sink {
+                    Sink::Name(s) => {
+                        let nm = self.names[s].get_or_insert_with(String::new);
+                        if !nm.is_empty() {
+                            nm.push(' ');
+                        }
+                        nm.push_str(text);
+                    }
+                    Sink::Drop => {}
+                    Sink::None => {
+                        if !parent_role.owns_text() {
+                            let want = Id(self.nodes[parent].id).with(("text", self.nodes[parent].children.len())).0;
+                            let a = A11y::new(Role::Label).label(text);
+                            self.add(parent, want, a, rect, false, false);
+                        }
+                    }
+                }
+                return;
+            }
+            // Something clickable that never described itself: a generic
+            // button, named by its text.
+            if !explicit && e.sense.click && e.sense.focusable && e.id.is_some() && matches!(sink, Sink::None) {
+                info = Some(A11y::new(Role::Button));
+            }
+        }
+        let clip = if e.clip && !self.scroll_of.contains_key(&n) { clip.intersect(&rect) } else { clip };
+        let scroll = self.scroll_of.get(&n).map(|id| (*id, rect)).or(scroll);
+        let (here, sink) = match info {
+            Some(mut a) => {
+                if let (Content::Measured(k), None) = (node.content, &a.label) {
+                    a.label = Some(self.leaves[k as usize].text.trim().to_owned());
+                }
+                if let Some(id) = e.id {
+                    if let Some(t) = self.tips.get(&id) {
+                        if a.label.is_none() && !a.role.owns_text() {
+                            a.label = Some(t.text.clone());
+                        } else if a.label.as_deref() != Some(t.text.as_str()) && a.description.is_none() {
+                            a.description = Some(t.text.clone());
+                        }
+                    }
+                    if let Some(x) = a.expanded {
+                        self.expanded.insert(id, x);
+                    }
+                    if let Some((sid, view)) = scroll {
+                        self.scroll.insert(id, (sid, rect, view));
+                    }
+                }
+                let role = a.role;
+                let named = a.label.is_some();
+                let want = e.id.map(|i| i.0).unwrap_or_else(|| Id(self.nodes[parent].id).with(("node", n)).0);
+                let ix = self.add(parent, want, a, rect, e.sense.click, e.sense.focusable);
+                let sink = if role.owns_text() {
+                    Sink::Drop
+                } else if role.named_by_contents() {
+                    if named {
+                        Sink::Drop
+                    } else {
+                        Sink::Name(ix)
+                    }
+                } else {
+                    Sink::None
+                };
+                (ix, sink)
+            }
+            None => (parent, sink),
+        };
+        if let (Some(texts), Sink::Name(s)) = (self.painted.get(&n), sink) {
+            let nm = self.names[s].get_or_insert_with(String::new);
+            for t in texts {
+                if !nm.is_empty() {
+                    nm.push(' ');
+                }
+                nm.push_str(t);
+            }
+        }
+        for &c in &self.tree.nodes[n].children {
+            self.walk(c, here, sink, clip, scroll);
+        }
+    }
+
+    fn finish_names(&mut self) {
+        for (i, nm) in self.names.iter_mut().enumerate() {
+            let node = &mut self.nodes[i];
+            if let Some(nm) = nm.take() {
+                if node.info.label.is_none() && !nm.is_empty() {
+                    node.info.label = Some(nm);
+                }
+            }
+            if node.info.label.is_none() {
+                node.info.label = self.icon_names[i].take();
+            }
+        }
+        // A form control with no label of its own (a switch in a settings
+        // row) is named by the text just before it, the way a row's title
+        // labels its control.
+        let index: FastMap<u64, usize> = self.nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
+        for p in 0..self.nodes.len() {
+            let mut last: Option<String> = None;
+            for k in 0..self.nodes[p].children.len() {
+                let Some(&c) = index.get(&self.nodes[p].children[k]) else { continue };
+                let n = &self.nodes[c];
+                if n.info.role == Role::Label || n.info.role == Role::Heading {
+                    last = n.info.label.clone();
+                    continue;
+                }
+                let form = matches!(
+                    n.info.role,
+                    Role::CheckBox | Role::Switch | Role::Slider | Role::TextInput | Role::ComboBox | Role::SpinButton | Role::MultilineTextInput | Role::SearchInput | Role::PasswordInput
+                );
+                if form && n.info.label.is_none() && n.info.placeholder.is_none() {
+                    if let Some(l) = &last {
+                        self.nodes[c].info.label = Some(l.clone());
+                    }
+                }
+            }
+        }
     }
 }

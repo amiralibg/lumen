@@ -1,5 +1,6 @@
 //! Menus: a popover of actions.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key};
@@ -88,6 +89,18 @@ impl MenuItem<'_> {
         let radius = (ui.look().control.radius[0] - 1.0).max(0.0);
         let body = ui.text_style(TextRole::Body);
         let checked = self.checked;
+        let disabled = self.disabled;
+        ui.a11y(id, || {
+            let a = match checked {
+                Some(on) => A11y::new(Role::MenuItemCheckBox).toggled(on),
+                None => A11y::new(Role::MenuItem),
+            };
+            let mut a = a.label(self.label.as_str()).disabled(disabled);
+            if let Some(s) = &self.shortcut {
+                a = a.description(s.as_str());
+            }
+            a
+        });
         ui.begin(
             Style { dir: Dir::Row, width: Size::FILL, height: Size::Fixed(ch), pad: Sides::xy(8.0, 0.0), gap: 8.0, align: Align::Center, ..Default::default() },
             Some(id),
@@ -137,7 +150,7 @@ impl Ui {
     /// and [`menu_label`](Self::menu_label).
     pub fn menu(&mut self, anchor: &Response, f: impl FnOnce(&mut Ui)) {
         let prev = self.menu.replace(MenuCtx { anchor: anchor.id });
-        self.popover(anchor).pad(4.0).show(|ui| {
+        self.popover(anchor).pad(4.0).role(Role::Menu).show(|ui| {
             ui.begin(Style { width: Size::FILL, min: vec2(180.0, 0.0), gap: 1.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
             f(ui);
             ui.end();
@@ -167,7 +180,8 @@ impl Ui {
         let st = self.text_style(TextRole::Caption);
         let c = self.color(Token::TextMuted);
         self.begin(Style { pad: Sides { left: 8.0, right: 8.0, top: 6.0, bottom: 2.0 }, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-        self.text_leaf(text, st, c, false, true, Style::default());
+        let n = self.text_leaf(text, st, c, false, true, Style::default());
+        self.a11y_node(n, || A11y::new(Role::Heading).level(4));
         self.end();
     }
 }

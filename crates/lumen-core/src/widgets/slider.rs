@@ -4,6 +4,7 @@ use std::ops::RangeInclusive;
 
 use lumen_text::TextAlign;
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
@@ -114,10 +115,20 @@ impl<'u> Slider<'u> {
                     jump = true;
                 }
             }
+            let (st, set) = ui.a11y_step(id);
+            if st != 0 || set.is_some() {
+                let step = self.step.unwrap_or(span / 100.0);
+                new = set.map(|v| v as f32).unwrap_or(new) + st as f32 * step;
+                new = new.clamp(lo.min(hi), hi.max(lo));
+                jump = true;
+            }
         }
         let new = quantize(new);
         let changed = new != old;
         *self.value = new;
+        let disabled = self.disabled;
+        let a_step = self.step.map(|s| s as f64);
+        ui.a11y(id, || A11y::new(Role::Slider).label(self.label.as_str()).numeric(new as f64, lo as f64, hi as f64, a_step).disabled(disabled));
         let norm = ((new - lo) / span).clamp(0.0, 1.0);
         let tracking = ix.held && ui.mem::<DragState>(id).tracking && !jump;
         let pos = if tracking && self.step.is_none() {
@@ -158,7 +169,8 @@ impl<'u> Slider<'u> {
         if !self.label.is_empty() {
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
             let st = ui.text_style(TextRole::Label);
-            ui.text_leaf(self.label.clone(), st, lc, false, true, Style::default());
+            let n = ui.text_leaf(self.label.clone(), st, lc, false, true, Style::default());
+            ui.a11y_hide(n);
         }
         ui.begin(Style { dir: Dir::Row, gap: 12.0, width: fw, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         let cursor = if self.disabled { CursorIcon::Default } else { CursorIcon::Pointer };
@@ -198,6 +210,7 @@ impl<'u> Slider<'u> {
             let mut st = ui.text_style(TextRole::Label);
             st.tabular = true;
             let n = ui.text_leaf(text, st, readout_c, false, false, Style { width: Size::Fixed(44.0), ..Default::default() });
+            ui.a11y_hide(n);
             ui.set_text_align(n, TextAlign::End);
         }
         ui.end();

@@ -1,5 +1,6 @@
 //! Select: pick one value from a list in a popover.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::{Ease, SpringParams};
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
@@ -57,6 +58,7 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
         let key: Vec<&str> = self.options.iter().map(|o| o.1).collect();
         let id = ui.make_id(("select", self.label.as_deref().unwrap_or(""), key));
         let ix = ui.interact(id, Sense::CLICK, self.disabled);
+        let a11y_label = if ui.accessibility() { self.label.clone() } else { None };
         let open = ui.mem::<PopState>(id).open;
         let key_open = ix.focused && !open && !self.disabled && (ui.key_pressed_for(id, Key::Space) || ui.key_pressed_for(id, Key::Enter) || ui.key_pressed_for(id, Key::ArrowDown));
         let m = ui.control_metrics(ControlSize::Md);
@@ -91,7 +93,8 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
         if let Some(l) = self.label.take() {
             let st = ui.text_style(TextRole::Label);
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
-            ui.text_leaf(l, st, lc, false, true, Style::default());
+            let n = ui.text_leaf(l, st, lc, false, true, Style::default());
+            ui.a11y_hide(n);
         }
         let bw = if border.a > 0.0 { 1.0 } else { 0.0 };
         ui.begin(
@@ -165,6 +168,11 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
         );
         ui.end();
         let resp = Response { id, rect: ix.rect, hovered: ix.hovered, clicked: (ix.clicked || key_open) && !self.disabled, changed: false, focused: ix.focused };
+        let disabled = self.disabled;
+        ui.a11y(id, || {
+            let cur = self.options.iter().find(|o| o.0 == *self.value).map(|o| o.1).unwrap_or("");
+            A11y::new(Role::ComboBox).label(a11y_label.unwrap_or_default()).value(cur).disabled(disabled)
+        });
         if key_open {
             let st = ui.mem::<PopState>(id);
             st.open = true;
@@ -173,7 +181,7 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
         let value = *self.value;
         let options = self.options;
         let kb = key_open;
-        ui.popover(&Response { clicked: resp.clicked && !key_open, ..resp }).match_width().pad(4.0).show(|ui| {
+        ui.popover(&Response { clicked: resp.clicked && !key_open, ..resp }).match_width().pad(4.0).role(Role::ListBox).show(|ui| {
             let items = ui.mem_get::<PopState>(id).map(|s| s.items.clone()).unwrap_or_default();
             let body = ui.text_style(TextRole::Body);
             let ch = (m.height - 4.0).max(24.0);
@@ -193,6 +201,8 @@ impl<T: Copy + PartialEq> Select<'_, '_, T> {
                 if selected {
                     sel_id = Some(oid);
                 }
+                let n_opts = options.len();
+                ui.a11y(oid, || A11y::new(Role::ListBoxOption).label(label).selected(selected).position(i, n_opts));
                 let hot = oix.hovered || oix.focused;
                 let hh = ui.fade(oid, 1, hot, 0.0, mo.hover_out, Ease::Linear);
                 let hl = ui.color(Token::Hover).over(ui.color(Token::Hover)).multiply_alpha(hh);

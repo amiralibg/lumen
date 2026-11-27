@@ -17,6 +17,9 @@ png.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster.workspace = true
+# Screen readers: VoiceOver, Narrator/NVDA (UIA), Orca (AT-SPI).
+accesskit_winit = "0.33.2"
+lumen-core = { workspace = true, features = ["accesskit"] }
 env_logger.workspace = true
 arboard.workspace = true
 

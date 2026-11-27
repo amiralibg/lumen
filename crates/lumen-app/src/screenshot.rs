@@ -39,11 +39,14 @@ pub struct Shot {
     /// Print clipped and overlapping text found in the final frame to
     /// stderr (see [`Ui::check_layout`]).
     pub check_layout: bool,
+    /// Print the accessibility tree of the final frame to stdout, and
+    /// unnamed controls to stderr.
+    pub a11y: bool,
 }
 
 impl Default for Shot {
     fn default() -> Self {
-        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Blue, look: Look::lumen(), native_accent: None, steps: vec![], check_layout: false }
+        Shot { size: (1280, 860), scale: 2.0, mode: Mode::Light, accent: Accent::Blue, look: Look::lumen(), native_accent: None, steps: vec![], check_layout: false, a11y: false }
     }
 }
 
@@ -58,6 +61,7 @@ pub fn screenshot<S>(path: impl AsRef<Path>, shot: &Shot, state: &mut S, mut vie
     ui.theme.settle();
     ui.caret_blink = false;
     ui.check_layout = shot.check_layout;
+    ui.set_accessibility(shot.a11y);
     let mut t = 1.0f64;
     let dt = 1.0 / 60.0;
     let screen = vec2(shot.size.0 as f32, shot.size.1 as f32);
@@ -120,6 +124,12 @@ pub fn screenshot<S>(path: impl AsRef<Path>, shot: &Shot, state: &mut S, mut vie
     let out = frame(&mut ui, vec![], &mut t, state);
     for issue in ui.layout_issues() {
         eprintln!("layout: {issue}");
+    }
+    if let Some(tree) = &out.a11y {
+        print!("{}", tree.dump());
+        for p in tree.problems() {
+            eprintln!("a11y: {p}");
+        }
     }
     let px = offscreen::capture(&device, &queue, &mut renderer, &out.draw);
     let [w, h] = out.draw.size_px;

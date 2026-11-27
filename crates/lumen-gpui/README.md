@@ -68,6 +68,10 @@ lumen-gpui = { git = "https://github.com/amiralibg/lumen", default-features = fa
 
 Start the app with `lumen_gpui::application()`, which picks the right constructor for either GPUI. The `ce` build compiles and passes the unit tests. It isn't verified in a real window yet: on macOS 27, gpui-ce 0.3.0 deadlocks inside its own `open_window` (its README hello world too), before any lumen code runs.
 
+## Accessibility (gpui-ce)
+
+With the `ce` feature, a lumen view's accessibility tree joins the window's: lumen's nodes become synthetic children of the view's element, nested as in lumen, and screen reader actions on them (press, focus, step, set value) reach lumen as input. Since GPUI gathers its tree while laying out, before lumen runs, lumen's part shows one frame later. `cargo +1.95 test --no-default-features --features ce-test --test a11y_ce` checks it headlessly.
+
 ## The self-test
 
 `cargo run --example selftest [-- out_dir]` opens a real window and drives it through the real macOS paths: clicks are `NSEvent`s sent to the window, typing and IME composition go through `insertText:` and `setMarkedText:`. It checks typing, composition and commit, a select menu that overflows a 120 pt panel over GPUI content, picking an option outside the panel, and closing on an outside click, saves window screenshots, then animates for timing. `SELFTEST_CONTAIN=1` runs it with `contain_overlays()` (give it a panel taller than the menu, e.g. `SELFTEST_PANEL_H=400`); `SELFTEST_PANEL_H=676` uses the tall panel from the table above. It also checks a lumen title bar at the top of the window: its control regions, a zoom click, and that its minimize button really miniaturizes the window.
@@ -76,7 +80,7 @@ GPUI on macOS only draws a window that isn't key around input, so the script kee
 
 ## Limits
 
-- No accessibility bridge to GPUI yet.
+- Zed's GPUI 0.2 has no accessibility tree, so lumen views are invisible to screen readers there. gpui-ce bridges it (see below).
 - While a menu overflows the view, frames are read back for the union of the view and the menu, and need a straight-alpha conversion on the CPU (about 1 ms more at Retina sizes).
 
 This crate keeps its own `Cargo.lock` and is excluded from the main workspace, because GPUI needs Xcode's Metal toolchain on macOS and Wayland/X11 headers on Linux.

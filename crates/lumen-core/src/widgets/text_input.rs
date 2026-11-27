@@ -4,6 +4,7 @@ use lumen_text::{TextAlign, TextStyle};
 
 use super::edit::TextEdit;
 use super::show_on_drop;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
@@ -192,6 +193,25 @@ impl<'u> TextInput<'u> {
         if let Some(c) = copied {
             ui.set_copied_text(c);
         }
+        if !self.disabled {
+            for a in ui.a11y_actions(id) {
+                if let crate::a11y::A11yAction::SetValue(v) = a {
+                    let st = ui.mem::<EditState>(id);
+                    st.edit.select_all(self.value);
+                    st.edit.insert(self.value, &v);
+                }
+            }
+        }
+        ui.a11y(id, || {
+            let label = self.label.clone().unwrap_or_else(|| self.placeholder.clone());
+            A11y::new(Role::TextInput)
+                .label(label)
+                .value(self.value.as_str())
+                .placeholder(self.placeholder.as_str())
+                .disabled(self.disabled)
+                .invalid(self.error.is_some())
+                .description(self.error.clone().or_else(|| self.helper.clone()).unwrap_or_default())
+        });
         if !ix.focused {
             // Collapse the selection when focus leaves.
             if let Some(st) = ui.mem_get::<EditState>(id) {
@@ -320,7 +340,8 @@ impl<'u> TextInput<'u> {
         if let Some(l) = self.label.take() {
             let lc = if self.disabled { ui.color(Token::TextDisabled) } else { ui.color(Token::Foreground) };
             let st = ui.text_style(TextRole::Label);
-            ui.text_leaf(l, st, lc, false, true, Style::default());
+            let n = ui.text_leaf(l, st, lc, false, true, Style::default());
+            ui.a11y_hide(n);
         }
         let cursor_icon = if self.disabled { CursorIcon::Default } else { CursorIcon::Text };
         let galley2 = galley.clone();

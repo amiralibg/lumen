@@ -115,7 +115,7 @@ impl App {
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
             let _ = console_log::init_with_level(log::Level::Warn);
         }
-        let event_loop = EventLoop::<Gpu>::with_user_event().build().expect("event loop");
+        let event_loop = EventLoop::<UserEvent>::with_user_event().build().expect("event loop");
         let proxy = event_loop.create_proxy();
         let mut ui = Ui::new();
         // CJK, Arabic, emoji and other scripts fall back to system fonts.
@@ -143,6 +143,10 @@ impl App {
             last_title_press: None,
             resize_dir: None,
             pointer: Vec2::ZERO,
+            #[cfg(not(target_arch = "wasm32"))]
+            a11y: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            a11y_sent: None,
             trace: std::env::var_os("LUMEN_TRACE_FRAMES").map(|_| FrameTrace { since: Instant::now(), last_present: None, cpu: vec![], submit: vec![], interval: vec![] }),
         };
         #[cfg(not(target_arch = "wasm32"))]
@@ -168,6 +172,21 @@ fn is_mac_web() -> bool {
 }
 
 /// GPU objects, created asynchronously on the web.
+/// Events the runner sends itself: the GPU once it's ready, and screen
+/// reader requests.
+pub enum UserEvent {
+    Gpu(Box<Gpu>),
+    #[cfg(not(target_arch = "wasm32"))]
+    A11y(accesskit_winit::Event),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<accesskit_winit::Event> for UserEvent {
+    fn from(e: accesskit_winit::Event) -> Self {
+        UserEvent::A11y(e)
+    }
+}
+
 pub struct Gpu {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -224,7 +243,13 @@ struct Runner<S> {
     view: ViewFn<S>,
     window: Option<Arc<Window>>,
     gpu: Option<Gpu>,
-    proxy: Option<EventLoopProxy<Gpu>>,
+    proxy: Option<EventLoopProxy<UserEvent>>,
+    /// Screen reader bridge (AccessKit), created with the window.
+    #[cfg(not(target_arch = "wasm32"))]
+    a11y: Option<accesskit_winit::Adapter>,
+    /// The tree last sent, so updates carry only what changed.
+    #[cfg(not(target_arch = "wasm32"))]
+    a11y_sent: Option<lumen_core::A11yTree>,
     start: Instant,
     events: Vec<Event>,
     modifiers: Modifiers,
@@ -420,8 +445,16 @@ impl<S> Runner<S> {
         };
         self.ui.begin_frame(input);
         (self.view)(&mut self.ui, &mut self.state);
-        let out = self.ui.end_frame();
+        #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+        let mut out = self.ui.end_frame();
         let ui_ms = t_frame.elapsed().as_secs_f64() * 1e3;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let (Some(tree), Some(adapter)) = (out.a11y.take(), self.a11y.as_mut()) {
+            let prev = self.a11y_sent.take();
+            let title = &self.app.title;
+            adapter.update_if_active(|| tree.update_since(prev.as_ref(), scale, title));
+            self.a11y_sent = Some(tree);
+        }
 
         let gpu = self.gpu.as_mut().unwrap();
         let frame = match gpu.surface.get_current_texture() {
@@ -491,7 +524,7 @@ impl<S> Runner<S> {
     }
 }
 
-impl<S> ApplicationHandler<Gpu> for Runner<S> {
+impl<S> ApplicationHandler<UserEvent> for Runner<S> {
     fn resumed(&mut self, el: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
@@ -531,6 +564,11 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
             attrs = if canvas.is_some() { attrs.with_canvas(canvas) } else { attrs.with_append(true) };
             attrs = attrs.with_prevent_default(true).with_focusable(true);
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // AccessKit must hook the window before it's first shown.
+            attrs = attrs.with_visible(false);
+        }
         let window = Arc::new(el.create_window(attrs).expect("window"));
         #[cfg(target_os = "macos")]
         if self.app.custom_chrome {
@@ -542,15 +580,17 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
         let proxy = self.proxy.take().unwrap();
         #[cfg(not(target_arch = "wasm32"))]
         {
+            self.a11y = Some(accesskit_winit::Adapter::with_event_loop_proxy(el, &window, proxy.clone()));
+            window.set_visible(true);
             let gpu = pollster::block_on(create_gpu(window, (size.width, size.height))).expect("GPU init");
-            let _ = proxy.send_event(gpu);
+            let _ = proxy.send_event(UserEvent::Gpu(Box::new(gpu)));
         }
         #[cfg(target_arch = "wasm32")]
         {
             wasm_bindgen_futures::spawn_local(async move {
                 match create_gpu(window, (size.width, size.height)).await {
                     Ok(gpu) => {
-                        let _ = proxy.send_event(gpu);
+                        let _ = proxy.send_event(UserEvent::Gpu(Box::new(gpu)));
                     }
                     Err(e) => log::error!("lumen: GPU init failed: {e}"),
                 }
@@ -558,13 +598,44 @@ impl<S> ApplicationHandler<Gpu> for Runner<S> {
         }
     }
 
-    fn user_event(&mut self, _el: &ActiveEventLoop, gpu: Gpu) {
-        self.gpu = Some(gpu);
-        self.request_redraw();
+    fn user_event(&mut self, _el: &ActiveEventLoop, ev: UserEvent) {
+        match ev {
+            UserEvent::Gpu(gpu) => {
+                self.gpu = Some(*gpu);
+                self.request_redraw();
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            UserEvent::A11y(e) => {
+                use accesskit_winit::WindowEvent as A;
+                match e.window_event {
+                    A::InitialTreeRequested => {
+                        self.ui.set_accessibility(true);
+                        self.a11y_sent = None;
+                    }
+                    A::ActionRequested(req) => {
+                        if std::env::var_os("LUMEN_TRACE_A11Y").is_some() {
+                            eprintln!("a11y request: {:?} on {:?} {:?}", req.action, req.target_node, req.data);
+                        }
+                        if let Some((target, action)) = lumen_core::A11yAction::from_accesskit(&req) {
+                            self.events.push(Event::A11y { target, action });
+                        }
+                    }
+                    A::AccessibilityDeactivated => {
+                        self.ui.set_accessibility(false);
+                        self.a11y_sent = None;
+                    }
+                }
+                self.request_redraw();
+            }
+        }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         let scale = self.scale;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let (Some(a), Some(w)) = (self.a11y.as_mut(), self.window.as_ref()) {
+            a.process_event(w, &event);
+        }
         match event {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::RedrawRequested => self.frame(),

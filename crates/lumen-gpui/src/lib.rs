@@ -197,6 +197,10 @@ pub struct LumenView<S: 'static> {
     window_regions: Vec<(WindowRegion, Rect)>,
     window_active: bool,
     window_maximized: bool,
+    /// gpui-ce: lumen's accessibility tree from the last frame, with the
+    /// window position of lumen's origin and the scale it was built at.
+    #[cfg(feature = "ce")]
+    a11y: Option<(lumen_core::A11yTree, lumen_core::Vec2, f32)>,
 }
 
 impl<S: 'static> LumenView<S> {
@@ -253,6 +257,8 @@ impl<S: 'static> LumenView<S> {
             window_regions: vec![],
             window_active: true,
             window_maximized: false,
+            #[cfg(feature = "ce")]
+            a11y: None,
         }
     }
 
@@ -528,9 +534,22 @@ impl<S: 'static> LumenView<S> {
                 events: std::mem::take(&mut self.events),
                 modifiers: self.modifiers,
             };
+            #[cfg(feature = "ce")]
+            self.ui.set_accessibility(window.is_a11y_active());
             self.ui.begin_frame(input);
             (self.view)(&mut self.ui, &mut self.state);
             let mut out = self.ui.end_frame();
+            #[cfg(feature = "ce")]
+            {
+                let o = vec2(f32::from(self.origin.x), f32::from(self.origin.y));
+                let next = out.a11y.take().map(|t| (t, o, scale));
+                if next != self.a11y {
+                    // GPUI gathers the tree while it lays out, before lumen
+                    // runs: show the new one on the next frame.
+                    self.a11y = next;
+                    cx.notify();
+                }
+            }
 
             // The image covers the view, plus any menu that sticks out of it.
             let window_rect = Rect::from_min_size(lumen_core::Vec2::ZERO, screen);
@@ -829,7 +848,17 @@ impl<S: 'static> Render for LumenView<S> {
             let b = bounds_of(*r);
             div().absolute().left(b.origin.x - origin.x).top(b.origin.y - origin.y).w(b.size.width).h(b.size.height).window_control_area(area)
         });
-        div()
+        let root = div().id("lumen-view");
+        #[cfg(feature = "ce")]
+        let root = {
+            let tree = self.a11y.clone();
+            root.role(gpui::Role::Group).a11y_synthetic_children(move |b| {
+                if let Some((t, o, scale)) = &tree {
+                    a11y_children(b, t, *o, *scale);
+                }
+            })
+        };
+        root
             .size_full()
             .relative()
             .children(controls)
@@ -873,6 +902,8 @@ impl<S: 'static> Render for LumenView<S> {
 
 fn paint<S: 'static>(entity: Entity<LumenView<S>>, bounds: Bounds<Pixels>, hitbox: Hitbox, window: &mut Window, cx: &mut App) {
     entity.update(cx, |this, cx| this.frame(bounds, window, cx));
+    #[cfg(feature = "ce")]
+    a11y_listeners(&entity, window, cx);
     let this = entity.read(cx);
     if let Some(s) = this.shown.as_ref().filter(|s| !s.overflow) {
         paint_frame(window, bounds_of(s.region), s.image.clone());
@@ -998,5 +1029,62 @@ mod tests {
         assert_eq!(utf16_at(s, 8), 4);
         assert_eq!(utf16(s, &(1..8)), 1..4);
         assert_eq!(bytes(s, &(2..4)), 4..8);
+    }
+}
+
+/// gpui-ce: lumen's nodes as synthetic children of the view's element.
+/// Every node is pushed under the view (that's how the builder adds
+/// them), then the view's children are cut back to lumen's top level; the
+/// nested nodes keep their own child lists, so the tree keeps its shape.
+#[cfg(feature = "ce")]
+fn a11y_children(b: &mut gpui::A11ySubtreeBuilder, t: &lumen_core::A11yTree, origin: lumen_core::Vec2, scale: f32) {
+    use gpui::accesskit::{NodeId, Rect as AkRect};
+    let Some(root) = t.get(t.root) else { return };
+    let s = scale as f64;
+    for n in t.nodes.iter().filter(|n| n.id != t.root) {
+        let mut node = n.to_accesskit(scale);
+        let r = n.rect.translate(origin);
+        node.set_bounds(AkRect { x0: r.min.x as f64 * s, y0: r.min.y as f64 * s, x1: r.max.x as f64 * s, y1: r.max.y as f64 * s });
+        b.push_child(NodeId(n.id), node);
+    }
+    b.parent_node().set_children(root.children.iter().map(|c| NodeId(*c)).collect::<Vec<_>>());
+}
+
+/// gpui-ce: route screen reader actions on lumen's nodes back into lumen.
+#[cfg(feature = "ce")]
+fn a11y_listeners<S: 'static>(entity: &Entity<LumenView<S>>, window: &mut Window, cx: &mut App) {
+    use gpui::accesskit::{Action, ActionData, ActionRequest, NodeId, TreeId};
+    let Some((tree, _, _)) = entity.read(cx).a11y.clone() else { return };
+    for n in &tree.nodes {
+        let a = n.actions;
+        let mut kinds = vec![Action::ScrollIntoView];
+        if a.click {
+            kinds.push(Action::Click);
+        }
+        if a.focus {
+            kinds.push(Action::Focus);
+        }
+        if a.increment {
+            kinds.extend([Action::Increment, Action::Decrement]);
+        }
+        if a.set_value {
+            kinds.push(Action::SetValue);
+        }
+        if a.expand {
+            kinds.extend([Action::Expand, Action::Collapse]);
+        }
+        for action in kinds {
+            let e = entity.clone();
+            let id = n.id;
+            window.on_a11y_action(NodeId(id), action, move |data: Option<&ActionData>, _, cx| {
+                let req = ActionRequest { action, target_tree: TreeId::ROOT, target_node: NodeId(id), data: data.cloned() };
+                if let Some((target, act)) = lumen_core::A11yAction::from_accesskit(&req) {
+                    e.update(cx, |this, cx| {
+                        this.events.push(Event::A11y { target, action: act });
+                        this.refresh(cx);
+                    });
+                }
+            });
+        }
     }
 }

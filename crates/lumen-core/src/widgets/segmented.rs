@@ -1,6 +1,7 @@
 //! Segmented control: one choice from a few, with a pill that slides to
 //! the selection.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Justify, Size, Style};
@@ -51,6 +52,12 @@ impl Ui {
         }
         let changed = *value != old;
         let sel = options.iter().position(|o| o.0 == *value);
+        if self.accessibility() {
+            self.a11y(group, || A11y::new(Role::RadioGroup));
+            for (i, o) in options.iter().enumerate() {
+                self.a11y(ids[i], || A11y::new(Role::RadioButton).label(o.1).toggled(sel == Some(i)).selected(sel == Some(i)).position(i, options.len()));
+            }
+        }
         let sel_id = sel.map(|i| ids[i]);
         let pressed_sel = sel.is_some_and(|i| ixs[i].pressed);
         let squeeze = self.spring(group, 0, if pressed_sel { 1.0 } else { 0.0 }, if pressed_sel { mo.snappy } else { mo.bouncy });

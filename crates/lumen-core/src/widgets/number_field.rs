@@ -309,6 +309,18 @@ impl<'u> NumberField<'u> {
         o.min_w = 36.0;
         o.accept = Some(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | ',' | ' '));
         let ed = ui.inline_edit(edit_id, &mut text, o);
+        let a_label = self.label.clone().or_else(|| self.id_key.clone());
+        let (cur, step) = (*self.value, self.step);
+        ui.a11y_update(edit_id, |a| {
+            a.role = crate::a11y::Role::SpinButton;
+            if a.label.is_none() {
+                a.label = a_label;
+            }
+            if min_v.is_finite() && max_v.is_finite() {
+                a.numeric = Some(crate::a11y::Numeric { value: cur, min: min_v, max: max_v, step: Some(step) });
+            }
+            a.actions.increment = true;
+        });
 
         if let Some(suf) = &self.suffix {
             let st = ui.text_style(TextRole::Label);
@@ -317,6 +329,10 @@ impl<'u> NumberField<'u> {
         }
 
         let mut step_dir = 0.0f64;
+        let (a_st, _) = ui.a11y_step(edit_id);
+        if a_st != 0 {
+            step_dir = a_st.signum() as f64;
+        }
         if self.controls {
             let line = ui.color(Token::BorderSubtle);
             ui.leaf(Style::default(), vec2(1.0, m.height - 12.0), None, Sense::NONE, CursorIcon::Default, Some(Box::new(move |cx, r| cx.painter.rect(r, line))));

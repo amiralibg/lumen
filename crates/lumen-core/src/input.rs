@@ -79,6 +79,8 @@ pub enum Event {
     /// state changes so a custom title bar can show restore instead of
     /// maximize.
     WindowMaximized(bool),
+    /// A screen reader asked for an action on a widget (see [`crate::a11y`]).
+    A11y { target: crate::Id, action: crate::a11y::A11yAction },
 }
 
 /// An input-method event for the focused text field.

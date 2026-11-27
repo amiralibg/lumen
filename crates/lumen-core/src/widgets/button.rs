@@ -1,5 +1,6 @@
 //! Button (spec section 3).
 
+use crate::a11y::{A11y, Role};
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Justify, Size, Style};
 use crate::math::{vec2, Corners, Rect, Sides};
@@ -119,6 +120,19 @@ impl<'u> Button<'u> {
         let ix = ui.interact(id, Sense::CLICK, busy);
         let (key_act, key_held) = key_activate(ui, &ix, true);
         let clicked = (ix.clicked || key_act) && !busy;
+        ui.a11y(id, || {
+            let mut a = A11y::new(Role::Button).label(self.label.as_str()).disabled(self.disabled);
+            if let Some((t, _)) = &self.tooltip {
+                a = if a.label.is_none() { a.label(t.as_str()) } else { a.description(t.as_str()) };
+            }
+            if a.label.is_none() {
+                a = a.label(humanize(self.icon.as_deref().unwrap_or("")));
+            }
+            if self.loading {
+                a = a.description("Loading");
+            }
+            a
+        });
         let (h, p) = ui.state_weights(&ix, key_held);
         let m = ui.control_metrics(self.size);
         let look = ui.look().button;
@@ -309,5 +323,15 @@ impl Ui {
         b.icon = Some(icon.to_owned());
         b.icon_only = true;
         b
+    }
+}
+
+/// An icon name as words ("chevron-left" reads "Chevron left").
+pub(crate) fn humanize(name: &str) -> String {
+    let words = name.replace(['-', '_'], " ");
+    let mut c = words.trim().chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
     }
 }

@@ -4,6 +4,7 @@
 //! [`paint::DrawData`] (triangles plus clip commands). It never touches a
 //! window or GPU.
 
+pub mod a11y;
 pub mod anim;
 pub mod color;
 pub mod date;
@@ -28,6 +29,7 @@ pub type FastMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherD
 pub mod ui;
 pub mod widgets;
 
+pub use a11y::{A11y, A11yAction, A11yNode, A11yTree, Role, Toggled};
 pub use anim::{Ease, SpringParams};
 pub use input::{CursorIcon, Event, Ime, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};

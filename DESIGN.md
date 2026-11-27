@@ -414,6 +414,7 @@ The bar each widget clears before it ships.
 - **Micro-motion.** Every component moves a little: press squash of about 0.96 on `bouncy`, values that roll in, staggered entrances for rows, check marks that grow, end dots that pop. Motion is a spring or a named ease from `ui.motion()`, never linear except fades, and every movement has the reduced-motion fallback from 7.3.
 - **Looks and themes.** It reads geometry from `ui.look()` and colors from tokens, and it's checked in all four looks in both modes.
 - **Keyboard first.** Roving focus inside composites (lists, grids, toolbars, tabs), Escape closes overlays, and focus returns to the trigger.
+- **Named for screen readers.** Each control calls `ui.a11y(id, || A11y::new(Role::…))` with its name, value and state (toggled, selected, expanded, numeric range). Text inside a control names it, any other text is read as a label, and a field's visible label names its input instead of being read twice. Value controls take `ui.a11y_step(id)` for increment and decrement. `lumen-demos <demo> --screenshot out.png --a11y` prints the tree and lists anything a screen reader couldn't name.
 - **No native popups.** Selects, menus and pickers open lumen's own popover, with the spring entrance, a check on the chosen row and full keyboard support.
 - **A real demo.** The demo page shows the component in a real use ("Add a runner", not a lone "Button") and has a poster rendered by `scripts/screenshots.sh`.
 - **Idle at rest.** A settled component requests no frames.

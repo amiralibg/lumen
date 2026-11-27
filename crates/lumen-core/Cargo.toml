@@ -11,6 +11,11 @@ lumen-text.workspace = true
 ahash.workspace = true
 unicode-segmentation.workspace = true
 web-time.workspace = true
+accesskit = { version = "0.24.1", optional = true }
+
+[features]
+# AccessKit conversions for the accessibility tree (hosts enable it).
+accesskit = ["dep:accesskit"]
 
 [[bench]]
 name = "virtual_rows"

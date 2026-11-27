@@ -1,6 +1,7 @@
 //! Popover: a floating panel anchored to a widget. The base of menus,
 //! selects and the date picker.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key};
@@ -35,6 +36,7 @@ pub struct Popover<'u> {
     toggle: bool,
     at: Option<Vec2>,
     return_to: Option<Id>,
+    role: Role,
 }
 
 impl Popover<'_> {
@@ -83,8 +85,15 @@ impl Popover<'_> {
     }
 
     /// Show the panel when open. Returns the closure's result while open.
+    /// What the panel is to a screen reader (a group by default; menus
+    /// and list boxes say so).
+    pub fn role(mut self, r: Role) -> Self {
+        self.role = r;
+        self
+    }
+
     pub fn show<R>(self, f: impl FnOnce(&mut Ui) -> R) -> Option<R> {
-        let Popover { ui, anchor, placement, align, gap, match_width, pad, width, toggle, at, return_to } = self;
+        let Popover { ui, anchor, placement, align, gap, match_width, pad, width, toggle, at, return_to, role } = self;
         let back = return_to.unwrap_or(anchor.id);
         let id = anchor.id;
         let panel_id = id.with("popover-panel");
@@ -109,6 +118,11 @@ impl Popover<'_> {
             }
         }
         let open = ui.mem::<PopState>(id).open;
+        ui.a11y_update(id, |a| {
+            a.expanded = Some(open);
+            a.actions.expand = true;
+        });
+        ui.a11y(panel_id, || A11y::new(role));
         let mo = ui.motion();
         let t = ui.fade(id, 700, open, mo.layer_in, mo.fade_out, Ease::Out);
         if t <= 0.0 {
@@ -187,6 +201,7 @@ impl Ui {
             toggle: true,
             at: None,
             return_to: None,
+            role: Role::Group,
         }
     }
 

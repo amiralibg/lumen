@@ -3,6 +3,7 @@
 //! dots pop in and out, and the arrow keys walk the selection.
 
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -195,6 +196,7 @@ impl Ui {
             lead.max(lines) + 16.0
         });
 
+        self.a11y(id, || A11y::new(Role::ListBox));
         let node = self.begin(Style { dir: Dir::Column, width: Size::FILL, ..Default::default() }, Some(id), Sense::NONE, CursorIcon::Default, false, None);
 
         let mut focus_within = false;
@@ -237,6 +239,7 @@ impl Ui {
             built += 1;
 
             let is_sel = *selected == Some(i);
+            ui.a11y(rid, || A11y::new(Role::ListBoxOption).selected(is_sel).position(i, n));
             let hov = ui.fade(rid, 0, ix.hovered && !is_sel, mo.hover_in, mo.hover_out, Ease::Linear);
             let press = ui.fade(rid, 1, ix.pressed, 0.0, mo.press_out, Ease::Out);
             let dot = ui.spring(rid, 2, if row.unread { 1.0 } else { 0.0 }, mo.bouncy).max(0.0);
@@ -331,6 +334,7 @@ impl Ui {
                 let on_c = ui.color(Token::Warning);
                 let off_c = ui.color(Token::TextMuted).mix(ui.color(Token::Foreground), sh);
                 let starred = row.starred;
+                ui.a11y(sid, || A11y::new(Role::Button).label("Star").toggled(starred));
                 if six.clicked {
                     out.starred = Some(i);
                 }

@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 
 use lumen_text::TextAlign;
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key};
@@ -643,6 +644,7 @@ impl<'u> Table<'u> {
             }
         }
 
+        ui.a11y(id, || A11y::new(Role::Table));
         ui.begin(
             Style { width: Size::FILL, dir: Dir::Column, ..Default::default() },
             Some(id),
@@ -682,6 +684,7 @@ impl<'u> Table<'u> {
             let some_sel = sel_count > 0 && !all_sel;
             let mut hdr_chk = all_sel;
             let resp = ui.scope("hdr_chk", |ui| ui.checkbox("", &mut hdr_chk).indeterminate(some_sel).show());
+            ui.a11y_update(resp.id, |a| a.label = Some("Select all rows".into()));
             if resp.changed {
                 let target = if some_sel { true } else { hdr_chk };
                 for &rid in &row_ids {
@@ -700,6 +703,11 @@ impl<'u> Table<'u> {
             let active_dir = cur_sort.and_then(|(sc, sd)| (sc == ci).then_some(sd));
             let can_sort = col.sortable && self.sort.is_some();
             let ix = ui.interact(cid, if can_sort { Sense::CLICK } else { Sense::NONE }, false);
+            ui.a11y(cid, || match active_dir {
+                Some(SortDir::Asc) => A11y::new(Role::ColumnHeader).description("Sorted ascending"),
+                Some(SortDir::Desc) => A11y::new(Role::ColumnHeader).description("Sorted descending"),
+                None => A11y::new(Role::ColumnHeader),
+            });
             let (key_act, key_held) = if can_sort { key_activate(ui, &ix, true) } else { (false, false) };
             if can_sort && (ix.clicked || key_act) {
                 next_sort = match active_dir {
@@ -790,6 +798,14 @@ impl<'u> Table<'u> {
             if row_ix.focused {
                 focus_now = Some(ri);
             }
+            let row_sel = selected.as_deref().and_then(|s| s.get(rid).copied());
+            ui.a11y(row_wid, || {
+                let a = A11y::new(Role::Row).position(ri, count);
+                match row_sel {
+                    Some(s) => a.selected(s),
+                    None => a,
+                }
+            });
             let (key_act, key_held) = key_activate(ui, &row_ix, true);
             let is_sel = selected.as_deref().and_then(|s| s.get(rid).copied()).unwrap_or(false);
 
@@ -850,6 +866,7 @@ impl<'u> Table<'u> {
                 if let Some(sel) = selected.as_deref_mut() {
                     let mut v = sel[rid];
                     let c_resp = ui.scope(("rchk", rid), |ui| ui.checkbox("", &mut v).show());
+                    ui.a11y_update(c_resp.id, |a| a.label = Some("Select row".into()));
                     if c_resp.changed {
                         sel[rid] = v;
                     }
