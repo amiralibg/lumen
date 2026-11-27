@@ -1480,6 +1480,42 @@ ui.tree_table("disk", &[("Name", 0.0), ("Size", 80.0)], &rows, &mut expanded, &m
     keys: [["N", "Next uncovered line"]],
   },
   {
+    slug: "query-builder", name: "Query builder", group: "Developer tools", demo: "query-builder",
+    summary: "Build a filter from rules and nested groups: pick a field, an operator that suits it and a value (a list for choice fields, checked for numbers). Each group joins its rules with All or Any, new rows rise in, and the query it makes sits underneath, ready to copy.",
+    code: `let fields = [QueryField::choice("Status", &["open", "closed"]), QueryField::number("Priority")];
+ui.query_builder("issues", &fields, &mut query);
+let sql_where = query.to_query(&fields);`,
+    options: [["QueryField", "text, number or choice; decides the operators and the value input."], ["QueryGroup { any, rules, groups }", "to_query(&fields) writes status = \"open\" AND (...)."]],
+    keys: [["Tab", "Through each rule's field, operator and value"], ["Space / Enter", "Open a list, pick"]],
+  },
+  {
+    slug: "regex-tester", name: "Regex tester", group: "Developer tools", demo: "regex-tester",
+    summary: "A pattern with i, m and s toggles, test text, and the text again with every match boxed and each capture group underlined in its own color, plus a list of matches with their groups. A bad pattern shakes and says why. Bring your regex engine: the widget calls it only when something changes.",
+    code: `ui.regex_tester("dates", &mut pattern, &mut flags, &mut text, |p, f, t| {
+    let re = regex::Regex::new(p).map_err(|e| e.to_string())?;
+    Ok(re.captures_iter(t).map(to_match).collect())
+});`,
+    options: [["run(pattern, RegexFlags, text)", "→ Result<Vec<RegexMatch>, String>; byte ranges for the match and each group."], ["RegexFlags", "ignore_case, multi_line, dot_all."]],
+    keys: [["Tab", "Pattern, flags, test text"]],
+  },
+  {
+    slug: "feature-flags", name: "Feature flags", group: "Developer tools", demo: "feature-flags",
+    summary: "Flags with a switch per environment and a rollout slider for the last one, which wakes up when the flag is live there. Filter by name, see how many are live, spot stale flags; a row flashes when it changes. On narrow screens the switches move under the name.",
+    code: `if let Some(i) = ui.feature_flags("flags", &["Dev", "Staging", "Production"], &mut flags) {
+    save(&flags[i]);
+}`,
+    options: [["FeatureFlag", "key, description, on (per environment), rollout (0 to 100) and stale."], ["→ Option<usize>", "The flag that changed this frame."]],
+    keys: [["Space on a switch", "Toggle"], ["← → on a rollout", "5% steps"]],
+  },
+  {
+    slug: "dependency-graph", name: "Dependency graph", group: "Developer tools", demo: "dependency-graph",
+    summary: "Packages in layers, each one past everything that depends on it, joined by curved arrows. Selecting (or hovering) a package lights what it pulls in and what pulls it in, in two colors, and dims the rest. Layers arrive in turn and edges draw in; on narrow widths the layers stack top to bottom.",
+    code: `let edges = [(0, 1), (0, 2), (1, 3)]; // (dependent, dependency)
+ui.dependency_graph("deps", &nodes, &edges, &mut selected);`,
+    options: [["DepNode { name, version }", "One package."], ["edges", "(dependent, dependency) index pairs; layers come from the longest path."]],
+    keys: [["← → (↑ ↓ when stacked)", "Previous / next layer"], ["↑ ↓ (← → when stacked)", "Within a layer"], ["Escape", "Clear"]],
+  },
+  {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
     summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
     code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,

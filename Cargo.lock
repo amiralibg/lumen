@@ -1432,6 +1432,7 @@ name = "lumen-demos"
 version = "0.1.0"
 dependencies = [
  "lumen",
+ "regex",
  "wasm-bindgen",
  "web-sys",
 ]

@@ -142,6 +142,10 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("stack-trace", "Stack trace"),
     ("blame-view", "Blame view"),
     ("coverage-view", "Coverage view"),
+    ("query-builder", "Query builder"),
+    ("regex-tester", "Regex tester"),
+    ("feature-flags", "Feature flags"),
+    ("dependency-graph", "Dependency graph"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -370,6 +374,13 @@ struct State {
     problem_open: Option<usize>,
     frame_open: Option<usize>,
     blame_pick: Option<usize>,
+    query: lumen::QueryGroup,
+    query_init: bool,
+    re_pattern: String,
+    re_flags: lumen::RegexFlags,
+    re_text: String,
+    flags: Vec<lumen::FeatureFlag>,
+    dep_sel: Option<usize>,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -581,6 +592,13 @@ impl State {
             problem_open: None,
             frame_open: None,
             blame_pick: None,
+            query: demo_query(),
+            query_init: false,
+            re_pattern: r"(\d{4})-(\d{2})-(\d{2})".into(),
+            re_flags: lumen::RegexFlags::default(),
+            re_text: "Released 2026-11-28, patched 2026-12-03.\nNext review: 2027-01-15 (tentative)".into(),
+            flags: demo_flags(),
+            dep_sel: Some(1),
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -761,6 +779,71 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+fn demo_query_fields() -> Vec<lumen::QueryField> {
+    use lumen::QueryField as F;
+    vec![F::choice("Status", &["open", "in progress", "closed"]), F::number("Priority"), F::text("Assignee"), F::choice("Label", &["bug", "feature", "docs"])]
+}
+
+fn demo_query() -> lumen::QueryGroup {
+    use lumen::{QueryGroup, QueryRule};
+    QueryGroup {
+        any: false,
+        rules: vec![QueryRule { field: 0, op: 0, value: "open".into() }, QueryRule { field: 1, op: 4, value: "2".into() }],
+        groups: vec![QueryGroup { any: true, rules: vec![QueryRule { field: 2, op: 0, value: "ada".into() }, QueryRule { field: 3, op: 0, value: "bug".into() }], groups: vec![] }],
+    }
+}
+
+/// The regex tester's engine for the demo: the regex crate, with the flags as
+/// inline options.
+fn run_regex(pattern: &str, flags: lumen::RegexFlags, text: &str) -> Result<Vec<lumen::RegexMatch>, String> {
+    let mut p = String::new();
+    if flags.ignore_case {
+        p.push_str("(?i)");
+    }
+    if flags.multi_line {
+        p.push_str("(?m)");
+    }
+    if flags.dot_all {
+        p.push_str("(?s)");
+    }
+    p.push_str(pattern);
+    let re = regex::Regex::new(&p).map_err(|e| e.to_string().lines().last().unwrap_or("invalid pattern").trim().to_owned())?;
+    Ok(re
+        .captures_iter(text)
+        .take(500)
+        .map(|c| lumen::RegexMatch { range: c.get(0).map_or(0..0, |m| m.range()), groups: (1..c.len()).map(|k| c.get(k).map(|m| m.range())).collect() })
+        .collect())
+}
+
+fn demo_flags() -> Vec<lumen::FeatureFlag> {
+    let f = |key: &str, description: &str, on: [bool; 3], rollout: f32, stale: bool| lumen::FeatureFlag { key: key.into(), description: description.into(), on: on.to_vec(), rollout, stale };
+    vec![
+        f("new-checkout", "One-page checkout with saved cards.", [true, true, true], 25.0, false),
+        f("search-ranking-ml", "Rank results with the learned model.", [true, true, false], 0.0, false),
+        f("dark-mode-v2", "Follow the OS theme and blend on change.", [true, true, true], 100.0, false),
+        f("beta-onboarding", "Guided tour for new workspaces.", [true, false, false], 0.0, false),
+        f("legacy-export", "CSV export from the old reports page.", [false, false, true], 100.0, true),
+    ]
+}
+
+fn demo_deps() -> (Vec<lumen::DepNode>, Vec<(usize, usize)>) {
+    let n = |name: &str, version: &str| lumen::DepNode { name: name.into(), version: version.into() };
+    let nodes = vec![
+        n("app", "0.4.0"),
+        n("axum", "0.8.4"),
+        n("sqlx", "0.8.6"),
+        n("serde_json", "1.0.140"),
+        n("tower", "0.5.2"),
+        n("hyper", "1.6.0"),
+        n("serde", "1.0.219"),
+        n("tokio", "1.45.1"),
+        n("bytes", "1.10.1"),
+        n("mio", "1.0.4"),
+    ];
+    let edges = vec![(0, 1), (0, 2), (0, 3), (1, 4), (1, 5), (1, 6), (2, 7), (2, 6), (3, 6), (4, 7), (5, 7), (5, 8), (7, 9), (7, 8)];
+    (nodes, edges)
 }
 
 /// The first bytes of a PNG: signature, IHDR, a tEXt chunk and some data.
@@ -2716,6 +2799,36 @@ ui.button("Ship release").primary().icon("rocket");
             let short = ui.screen_size().y < 440.0;
             ui.column().fill_width().max_width(720.0).show(|ui| {
                 ui.coverage_view("cov", "src/config.rs", &lines).height(if short { 200.0 } else { 300.0 }).show();
+            });
+        }
+        "query-builder" => {
+            let fields = demo_query_fields();
+            // A short card starts without the nested group (set once, so
+            // edits stay).
+            if !s.query_init {
+                s.query_init = true;
+                if ui.screen_size().y < 440.0 {
+                    s.query.groups.clear();
+                }
+            }
+            ui.column().fill_width().max_width(680.0).show(|ui| {
+                ui.query_builder("issues", &fields, &mut s.query);
+            });
+        }
+        "regex-tester" => {
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.regex_tester("dates", &mut s.re_pattern, &mut s.re_flags, &mut s.re_text, run_regex);
+            });
+        }
+        "feature-flags" => {
+            ui.column().fill_width().max_width(760.0).show(|ui| {
+                ui.feature_flags("flags", &["Dev", "Staging", "Production"], &mut s.flags);
+            });
+        }
+        "dependency-graph" => {
+            let (nodes, edges) = demo_deps();
+            ui.column().fill_width().max_width(760.0).show(|ui| {
+                ui.dependency_graph("deps", &nodes, &edges, &mut s.dep_sel);
             });
         }
         "wheel-picker" => {

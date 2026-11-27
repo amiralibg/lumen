@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 lumen.workspace = true
+# The regex tester demo brings its own engine (lumen-core has none).
+regex = { version = "1.13", default-features = false, features = ["std", "unicode-perl", "unicode-case"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true

@@ -52,7 +52,7 @@ CUI lists 174 component entries (several bundle more than one component) and 11 
 
 - **Apps:** a small "caffeine curve" style toy app; lumen now has mail, music, tracker, notes, assistant, finance, to-do and settings.
 - **Inputs and pickers:** landed in November 2026: signature pad, avatar upload, circular time dial, aspect-ratio picker and ruler slider (with the wheel and emoji pickers before them).
-- **Data and devtools:** hex viewer, tree table, problems panel, query builder, regex tester, stack trace, blame and coverage views, feature flags, dependency graph.
+- **Data and devtools:** landed in November 2026: hex viewer, tree table, problems panel, query builder, regex tester, stack trace, blame and coverage views, feature flags and dependency graph.
 - **Overlays and feedback:** veil, onboarding checklist, swipe actions, docking panels.
 - **Charts:** bubble chart, chart annotations, dot-matrix display.
 - **Voice AI:** recorder, voice note and live session.
