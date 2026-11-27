@@ -146,6 +146,10 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("regex-tester", "Regex tester"),
     ("feature-flags", "Feature flags"),
     ("dependency-graph", "Dependency graph"),
+    ("veil", "Veil"),
+    ("onboarding-checklist", "Onboarding checklist"),
+    ("swipe-actions", "Swipe actions"),
+    ("docking-panels", "Docking panels"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -381,6 +385,13 @@ struct State {
     re_text: String,
     flags: Vec<lumen::FeatureFlag>,
     dep_sel: Option<usize>,
+    veil_key: bool,
+    onboard: Vec<lumen::OnboardingStep>,
+    onboard_open: bool,
+    swipe_init: bool,
+    swipe_rows: Vec<(String, String, String, bool)>,
+    swipe_note: String,
+    dock: lumen::DockLayout,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -599,6 +610,13 @@ impl State {
             re_text: "Released 2026-11-28, patched 2026-12-03.\nNext review: 2027-01-15 (tentative)".into(),
             flags: demo_flags(),
             dep_sel: Some(1),
+            veil_key: false,
+            onboard: demo_onboarding(),
+            onboard_open: true,
+            swipe_init: false,
+            swipe_rows: demo_swipe_rows(),
+            swipe_note: String::new(),
+            dock: demo_dock(),
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -779,6 +797,93 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+fn demo_onboarding() -> Vec<lumen::OnboardingStep> {
+    use lumen::OnboardingStep as S;
+    vec![
+        S::new("Create your workspace", "Name it and pick a region.", "Create", true),
+        S::new("Invite your team", "Teammates get an email with a join link.", "Invite", true),
+        S::new("Connect a repository", "We'll build every push to main and preview every pull request.", "Connect GitHub", false),
+        S::new("Ship your first deploy", "Promote a preview to production when it looks right.", "Deploy", false),
+        S::new("Turn on alerts", "Get a message when a deploy fails or latency spikes.", "Set up alerts", false),
+    ]
+}
+
+fn demo_swipe_rows() -> Vec<(String, String, String, bool)> {
+    [
+        ("Grace Hopper", "Compiler review on Thursday", "I left comments on the parser changes; mostly naming.", true),
+        ("Ada Lovelace", "Re: notes on the engine", "Attached the table for the Bernoulli numbers, take a look.", true),
+        ("Linus Pauling", "Lab booking", "The spectrometer is free Friday afternoon if you still need it.", false),
+        ("Katherine Johnson", "Trajectory numbers", "Rechecked the figures by hand; they match the run.", false),
+    ]
+    .iter()
+    .map(|(a, b, c, d)| (a.to_string(), b.to_string(), c.to_string(), *d))
+    .collect()
+}
+
+fn demo_dock_panels() -> Vec<lumen::DockPanel> {
+    use lumen::DockPanel as P;
+    vec![
+        P::new("files", "Explorer", "folder-tree"),
+        P::new("outline", "Outline", "list-tree"),
+        P::new("main", "main.rs", "file-code"),
+        P::new("preview", "Preview", "eye"),
+        P::new("props", "Properties", "sliders-horizontal"),
+        P::new("term", "Terminal", "square-terminal"),
+        P::new("problems", "Problems", "circle-alert"),
+    ]
+}
+
+fn demo_dock() -> lumen::DockLayout {
+    let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    lumen::DockLayout { zones: [v(&["files", "outline"]), v(&["main", "preview"]), v(&["props"]), v(&["term", "problems"])], active: [0; 4], left: 180.0, right: 180.0, bottom: 110.0 }
+}
+
+fn demo_dock_body(ui: &mut Ui, pid: &str) {
+    match pid {
+        "files" => {
+            for (d, f) in [(0, "src"), (1, "main.rs"), (1, "config.rs"), (1, "server.rs"), (0, "Cargo.toml")] {
+                ui.row().gap(6).align(Align::Center).show(|ui| {
+                    ui.column().width(d as f32 * 14.0).show(|_| {});
+                    let c = ui.color(lumen::Token::TextSecondary);
+                    ui.icon_leaf(if d == 0 && f == "src" { "folder" } else { "file" }, 14.0, c);
+                    ui.label(f).small().truncate();
+                });
+            }
+        }
+        "outline" => {
+            for f in ["struct Config", "fn from_env", "fn port", "fn workers"] {
+                ui.label(f).mono().small().truncate();
+            }
+        }
+        "main" => {
+            for l in ["fn main() {", "    let config = Config::from_env();", "    server::run(config);", "}"] {
+                ui.label(l).mono().small().truncate();
+            }
+        }
+        "preview" => {
+            ui.label("Server listening on :8080").small().truncate();
+            ui.label("3 routes · 4 workers").muted().small().truncate();
+        }
+        "props" => {
+            for (k, v) in [("Port", "8080"), ("Workers", "4"), ("Timeout", "30 s")] {
+                ui.row().fill_width().show(|ui| {
+                    ui.label(k).muted().small().truncate();
+                    ui.column().fill_width().show(|_| {});
+                    ui.label(v).small().truncate();
+                });
+            }
+        }
+        "term" => {
+            ui.label("$ cargo run").mono().small().truncate();
+            ui.label("   Compiling app v0.4.0").mono().small().truncate();
+            ui.label("    Finished dev in 3.2s").mono().small().truncate();
+        }
+        _ => {
+            ui.label("2 warnings in config.rs").small().truncate();
+        }
+    }
 }
 
 fn demo_query_fields() -> Vec<lumen::QueryField> {
@@ -2829,6 +2934,105 @@ ui.button("Ship release").primary().icon("rocket");
             let (nodes, edges) = demo_deps();
             ui.column().fill_width().max_width(760.0).show(|ui| {
                 ui.dependency_graph("deps", &nodes, &edges, &mut s.dep_sel);
+            });
+        }
+        "veil" => {
+            ui.column().fill_width().max_width(560.0).gap(12).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(12).show(|ui| {
+                    ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                        ui.label("Production API key").strong();
+                        ui.badge("Live", lumen::Tone::Success);
+                    });
+                    ui.veil("key", &mut s.veil_key, "Secret key", |ui| {
+                        ui.column().fill_width().pad(12).bg(lumen::Token::SurfaceMuted).radius(10.0).show(|ui| {
+                            ui.label("nsk_demo_0000-not-a-real-key-4hG6").mono();
+                            ui.label("Created Nov 3 by Ada Lovelace · last used 2 hours ago").muted().small();
+                        });
+                    });
+                    ui.row().fill_width().gap(8).justify(Justify::End).show(|ui| {
+                        if s.veil_key && ui.button("Hide").icon("eye-off").ghost().small().show().clicked {
+                            s.veil_key = false;
+                        }
+                        ui.copy_button("Copy", "nsk_demo_0000-not-a-real-key-4hG6");
+                    });
+                });
+            }));
+        }
+        "onboarding-checklist" => {
+            let short = ui.screen_size().y < 440.0;
+            let out = ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.column().fill_width().pad(if short { 8 } else { 16 }).bg(lumen::Token::SurfaceMuted).radius(14.0).gap(10).show(|ui| {
+                    if !short {
+                        ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                            ui.label("Northstar workspace").strong();
+                            ui.badge("Trial · 12 days left", lumen::Tone::Accent);
+                        });
+                    }
+                    ui.row().fill_width().justify(Justify::End).show(|ui| {
+                        // A short card shows the first four steps.
+                        let n = if short { 4.min(s.onboard.len()) } else { s.onboard.len() };
+                        ui.onboarding_checklist("setup", "Get started", &s.onboard[..n], &mut s.onboard_open)
+                    })
+                }).inner
+            }).inner;
+            if let Some(i) = out.inner.action {
+                s.onboard[i].done = true;
+            }
+            if out.inner.dismissed {
+                s.onboard = demo_onboarding();
+            }
+        }
+        "swipe-actions" => {
+            use lumen::{SwipeAction, Tone};
+            if !s.swipe_init {
+                s.swipe_init = true;
+                ui.scope("inbox", |ui| ui.swipe_row_reveal(1usize, Some(true)));
+            }
+            let leading = [SwipeAction::new("Unread", "mail", Tone::Accent)];
+            let trailing = [SwipeAction::new("Archive", "archive", Tone::Success), SwipeAction::new("Delete", "trash-2", Tone::Danger)];
+            ui.column().fill_width().max_width(480.0).gap(8).show(|ui| {
+                ui.column().fill_width().radius(14.0).border(lumen::Token::BorderSubtle).clip().show(|ui| {
+                    ui.scope("inbox", |ui| {
+                        let mut hit = None;
+                        for (i, (from, subject, preview, unread)) in s.swipe_rows.iter().enumerate() {
+                            if let Some(h) = ui.swipe_row(i, &format!("{from}: {subject}"), &leading, &trailing, |ui| {
+                                ui.row().fill_width().pad(12).gap(10).align(Align::Start).show(|ui| {
+                                    ui.avatar(&from[..1], i, 32.0, None);
+                                    ui.column().fill_width().gap(2).show(|ui| {
+                                        if *unread {
+                                            ui.label(from.as_str()).strong();
+                                        } else {
+                                            ui.label(from.as_str());
+                                        }
+                                        ui.label(subject.as_str()).small();
+                                        ui.label(preview.as_str()).muted().small();
+                                    });
+                                });
+                            }) {
+                                hit = Some((i, h));
+                            }
+                            if i + 1 < s.swipe_rows.len() {
+                                ui.divider();
+                            }
+                        }
+                        if let Some((i, h)) = hit {
+                            let name = if h.trailing { trailing[h.index].label.clone() } else { leading[h.index].label.clone() };
+                            s.swipe_note = format!("{name}: {}", s.swipe_rows[i].1);
+                            if !h.trailing {
+                                s.swipe_rows[i].3 = !s.swipe_rows[i].3;
+                            }
+                        }
+                    });
+                });
+                let note = if s.swipe_note.is_empty() { "Swipe a message, or focus it and use ← →.".to_owned() } else { s.swipe_note.clone() };
+                ui.label(note).muted().small();
+            });
+        }
+        "docking-panels" => {
+            let panels = demo_dock_panels();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(900.0).show(|ui| {
+                ui.dock_area("ide", &panels, &mut s.dock, if short { 280.0 } else { 380.0 }, |ui, pid| demo_dock_body(ui, pid));
             });
         }
         "wheel-picker" => {

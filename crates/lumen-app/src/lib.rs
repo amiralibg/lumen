@@ -505,6 +505,7 @@ impl<S> Runner<S> {
                 CursorIcon::Grabbing => winit::window::CursorIcon::Grabbing,
                 CursorIcon::ResizeHorizontal => winit::window::CursorIcon::EwResize,
                 CursorIcon::Crosshair => winit::window::CursorIcon::Crosshair,
+                CursorIcon::ResizeVertical => winit::window::CursorIcon::NsResize,
             });
         }
         window.set_ime_allowed(out.wants_text_input);

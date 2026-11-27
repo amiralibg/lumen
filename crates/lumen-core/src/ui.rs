@@ -1267,6 +1267,10 @@ impl Ui {
     pub fn modifiers(&self) -> Modifiers {
         self.modifiers
     }
+    /// True while the primary button is held (anywhere in the window).
+    pub fn pointer_down(&self) -> bool {
+        self.pointer_down
+    }
     pub fn pointer(&self) -> Option<Vec2> {
         self.pointer
     }

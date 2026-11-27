@@ -1516,6 +1516,42 @@ ui.dependency_graph("deps", &nodes, &edges, &mut selected);`,
     keys: [["← → (↑ ↓ when stacked)", "Previous / next layer"], ["↑ ↓ (← → when stacked)", "Within a layer"], ["Escape", "Clear"]],
   },
   {
+    slug: "veil", name: "Veil", group: "Overlays", demo: "veil",
+    summary: "Frost over something sensitive (an API key, a spoiler, an image) until it's revealed. A click dissolves the frost outward from where you clicked; setting revealed back to false brings it back. While veiled, the content isn't drawn, can't be clicked, and is hidden from screen readers.",
+    code: `ui.veil("key", &mut revealed, "Secret key", |ui| {
+    ui.label(api_key).mono();
+});`,
+    options: [["revealed: &mut bool", "Set false to veil again."], ["label", "Shown on the veil and read as \"Reveal …\"."]],
+    keys: [["Enter / Space on the veil", "Reveal"]],
+  },
+  {
+    slug: "onboarding-checklist", name: "Onboarding checklist", group: "Overlays", demo: "onboarding-checklist",
+    summary: "A getting-started checklist that lives in a corner: a pill with a progress ring opens into the list. The next step shows its detail and button, finished steps check off with a pop, and when everything is done it celebrates with a burst and offers Dismiss.",
+    code: `let out = ui.onboarding_checklist("setup", "Get started", &steps, &mut open);
+if let Some(i) = out.action { run_step(i); }`,
+    options: [["OnboardingStep", "title, detail, action label and done."], ["→ OnboardingOut", "action (a step's button) and dismissed."]],
+    keys: [["Enter / Space on the pill", "Open or close"]],
+  },
+  {
+    slug: "swipe-actions", name: "Swipe actions", group: "Overlays", demo: "swipe-actions",
+    summary: "Rows you swipe sideways to reveal actions, like a mail app: drag or scroll sideways with a trackpad and the row snaps open; swipe far enough and the outermost action fires as the row flies out. Past the actions it rubber-bands. While open, a tap closes it or hits an action.",
+    code: `if let Some(hit) = ui.swipe_row(i, "Message from Ada", &leading, &trailing, |ui| row(ui)) {
+    if hit.trailing && hit.index == 1 { delete(i); }
+}`,
+    options: [["SwipeAction { label, icon, tone }", "Leading on the left, trailing on the right."], ["swipe_row_reveal(key, Some(true))", "Open a row from code."]],
+    keys: [["← / →", "Open the trailing / leading actions"], ["Enter", "Fire the outermost"], ["Escape", "Close"]],
+  },
+  {
+    slug: "docking-panels", name: "Docking panels", group: "Layout and surfaces", demo: "docking-panels",
+    summary: "Panels docked left, right, bottom and in the middle, each zone with tabs. Drag a tab and a preview springs to the zone it'll land in; drop it there. Splitters resize the docks, empty docks fold away, and the active tab's underline glides. Cmd/Ctrl+Shift+arrows move the focused tab.",
+    code: `ui.dock_area("ide", &panels, &mut layout, 380.0, |ui, id| match id {
+    "files" => file_tree(ui),
+    _ => editor(ui, id),
+});`,
+    options: [["DockLayout", "zones (panel ids per zone), active tabs, and left / right / bottom sizes."], ["DockPanel { id, title, icon }", "A panel; content draws its body by id."]],
+    keys: [["← → on tabs", "Switch tab"], ["Cmd/Ctrl + Shift + arrows", "Move the tab to a zone (↑ is the middle)"]],
+  },
+  {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
     summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
     code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,

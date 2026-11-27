@@ -132,4 +132,6 @@ pub enum CursorIcon {
     ResizeHorizontal,
     /// Drawing: signature pads and canvases.
     Crosshair,
+    /// Up-down arrows: resizing a horizontal splitter.
+    ResizeVertical,
 }
