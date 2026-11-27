@@ -83,4 +83,6 @@ GPUI on macOS only draws a window that isn't key around input, so the script kee
 - Zed's GPUI 0.2 has no accessibility tree, so lumen views are invisible to screen readers there. gpui-ce bridges it (see below).
 - While a menu overflows the view, frames are read back for the union of the view and the menu, and need a straight-alpha conversion on the CPU (about 1 ms more at Retina sizes).
 
+- Linux with Zed's GPUI 0.2.2: its `zed-async-tar` uses `xattr` 0.2.3, which doesn't build with libc 0.2.190 or newer (`ENOATTR` was removed). This crate's lock pins libc 0.2.189 (and mio 1.2.4, which allows it); an app on Linux needs the same pin: `cargo update -p mio --precise 1.2.4 && cargo update -p libc --precise 0.2.189`. gpui-ce isn't affected.
+
 This crate keeps its own `Cargo.lock` and is excluded from the main workspace, because GPUI needs Xcode's Metal toolchain on macOS and Wayland/X11 headers on Linux.
