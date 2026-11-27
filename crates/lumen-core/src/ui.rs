@@ -403,6 +403,10 @@ pub struct SystemPrefs {
     pub dark: Option<bool>,
     pub accent: Option<Color>,
     pub reduced_motion: Option<bool>,
+    /// Title bar buttons the desktop shows, `[close, minimize, maximize]`
+    /// (GNOME's `button-layout`; stock GNOME shows only close). A window
+    /// title bar in the GNOME look follows it.
+    pub title_buttons: Option<[bool; 3]>,
 }
 
 /// The UI context. Persistent across frames.

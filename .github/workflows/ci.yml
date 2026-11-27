@@ -1,10 +1,15 @@
 name: CI
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_TERM_COLOR: always
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -20,15 +25,75 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: Check the web build
         run: cargo check -p lumen-gallery -p lumen-demos --target wasm32-unknown-unknown
+
+  # lumen-app and the demos on each desktop OS. No runner has a GPU, so the
+  # screenshots render on a software adapter (lavapipe on Linux, WARP on
+  # Windows): real pixels from each OS's font fallback, shader compiler and
+  # GPU backend. They're uploaded for review.
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux packages (software Vulkan)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+      - name: Build lumen-app and the demos
+        run: cargo build --release -p lumen-app -p lumen-demos
+      - name: Test
+        run: cargo test --release -p lumen-core -p lumen-app
+      - name: Render demos in every look
+        run: |
+          mkdir -p shots
+          status=0
+          for demo in hero button text-input select accessibility window-chrome; do
+            for look in lumen mac windows gnome; do
+              for mode in light dark; do
+                flag=""; [ "$mode" = dark ] && flag="--dark"
+                out="shots/$demo-$look-$mode.png"
+                ./target/release/lumen-demos "$demo" --look "$look" $flag --screenshot "$out" --check 2>> shots/check.txt || status=1
+              done
+            done
+          done
+          cat shots/check.txt
+          ls shots | wc -l
+          exit $status
+      - name: Accessibility tree
+        run: ./target/release/lumen-demos accessibility --screenshot shots/a11y.png --a11y | tee shots/a11y-tree.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ runner.os }}
+          path: shots
+
+  # The GPUI adapter, with Zed's GPUI and with gpui-ce.
   gpui:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/lumen-gpui
-      - name: Test the GPUI adapter
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev
+          libwayland-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libasound2-dev
+          libssl-dev libzstd-dev libvulkan1 mesa-vulkan-drivers
+      - name: Build and test (Zed's GPUI)
         run: cargo test --manifest-path crates/lumen-gpui/Cargo.toml --all-targets
-      - name: Check the gpui-ce build
-        run: cargo check --manifest-path crates/lumen-gpui/Cargo.toml --all-targets --no-default-features --features ce
+      - name: Build and test (gpui-ce)
+        run: cargo test --manifest-path crates/lumen-gpui/Cargo.toml --all-targets --no-default-features --features ce-test

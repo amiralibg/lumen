@@ -711,7 +711,11 @@ impl<S> ApplicationHandler<UserEvent> for Runner<S> {
                     }
                     self.events.push(Event::Key { key, pressed, repeat: event.repeat, modifiers: m });
                 }
-                if pressed && !self.modifiers.command() && !self.modifiers.ctrl {
+                // Text, unless it's a shortcut. On Windows and Linux AltGr
+                // arrives as Ctrl+Alt and types characters (@, €, {).
+                let m = self.modifiers;
+                let altgr = !m.mac && m.ctrl && m.alt;
+                if pressed && ((!m.command() && !m.ctrl) || altgr) {
                     if let Some(t) = event.text.as_ref().map(|t| t.to_string()) {
                         if t.chars().any(|c| !c.is_control()) {
                             self.events.push(Event::Text(t));

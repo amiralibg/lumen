@@ -3692,6 +3692,7 @@ fn parse_look(s: &str) -> Platform {
         "mac" | "macos" => Platform::Mac,
         "windows" | "win" => Platform::Windows,
         "gnome" | "linux" => Platform::Gnome,
+        "native" => Platform::current(),
         _ => Platform::Lumen,
     }
 }
@@ -3811,6 +3812,10 @@ fn main() {
     state.embed = p.embed;
     state.force_open = p.open;
     state.look = p.look;
+    if p.look != Platform::Lumen {
+        // The window-chrome demo shows that look's title bar first.
+        state.win_look = p.look;
+    }
     let mode = if p.dark { Mode::Dark } else { Mode::Light };
     let mut look: Look = p.look.look();
     if p.speed > 0.0 && p.speed != 1.0 {

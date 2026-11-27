@@ -145,3 +145,18 @@ fn popups_over_the_title_bar_win_hit_tests() {
     assert!(bar.contains(over) && r.contains(over), "the popover overlaps the bar: {r:?} {bar:?}");
     assert_eq!(h.ui.window_region_at(over), None);
 }
+
+/// A real GNOME window shows the buttons the desktop's `button-layout`
+/// lists (stock GNOME: close only); other looks and previews ignore it.
+#[test]
+fn gnome_follows_the_desktop_button_layout() {
+    let close_only = SystemPrefs { title_buttons: Some([true, false, false]), ..Default::default() };
+    let regions = |platform, window| {
+        let mut h = H::new(S { window, handle: true, platform: Some(platform), ..Default::default() });
+        h.ui.set_system(close_only);
+        h.frame(vec![]);
+        h.frame(vec![]).window_regions.iter().map(|(k, _)| *k).filter(|k| *k != WindowRegion::Drag).collect::<Vec<_>>()
+    };
+    assert_eq!(regions(Platform::Gnome, true), vec![WindowRegion::Close]);
+    assert_eq!(regions(Platform::Windows, true).len(), 3);
+}

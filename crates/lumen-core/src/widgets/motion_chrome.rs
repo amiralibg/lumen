@@ -459,10 +459,16 @@ impl<'u> WindowChrome<'u> {
     }
 
     pub fn show<R>(self, body: impl FnOnce(&mut Ui) -> R) -> ChromeShown<R> {
-        let WindowChrome { ui, key, title, subtitle, window, handle, buttons } = self;
+        let WindowChrome { ui, key, title, subtitle, window, handle, mut buttons } = self;
         let id = ui.make_id(("win_chrome", &key));
         let bar_id = id.with("bar");
         let platform = ui.theme.target_look().platform;
+        // A real GNOME window shows the buttons the desktop is set to show.
+        if let (true, Platform::Gnome, Some(b)) = (window, platform, ui.system().title_buttons) {
+            for (on, os) in buttons.iter_mut().zip(b) {
+                *on &= os;
+            }
+        }
         let mo = ui.motion();
         let r_win: f32 = if window {
             0.0

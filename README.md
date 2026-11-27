@@ -157,9 +157,11 @@ A look bundles neutrals, control sizes, radii, per-widget shapes, fonts and moti
 | Platform | Window and input | Renderer | Status |
 |---|---|---|---|
 | macOS | winit | wgpu (Metal) | Used daily. OS accent, reduce motion and live dark mode are read. |
-| Windows | winit | wgpu (DirectX 12, Vulkan) | Not yet tested on a real machine. Accent and reduce motion come from registry queries. |
-| Linux (X11, Wayland) | winit | wgpu (Vulkan, OpenGL) | Checked in CI on Ubuntu, not yet run on a real desktop. GNOME accent and reduce motion come from `gsettings`. |
+| Windows | winit | wgpu (DirectX 12, Vulkan) | Built, tested and rendered in CI (WARP software GPU), not yet run on a real machine. Accent and reduce motion come from the registry and `SystemParametersInfo`. |
+| Linux (X11, Wayland) | winit | wgpu (Vulkan, OpenGL) | Built, tested and rendered in CI on Ubuntu (lavapipe), not yet run on a real desktop. GNOME accent, reduce motion and title bar buttons come from `gsettings`. |
 | Browsers | winit (web) | WebGPU, or WebGL2 | Every page of the site. |
+
+CI renders demos in every look on each OS and uploads the images. What it can't check (OS settings, input methods, display scaling, screen readers) is in the [platform checklist](docs/platform-checklist.md), with results per machine.
 
 How it draws:
 

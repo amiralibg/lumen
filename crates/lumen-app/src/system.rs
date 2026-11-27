@@ -41,11 +41,11 @@ pub fn title_double_click() -> TitleAction {
     TitleAction::Maximize
 }
 
-/// Query the OS. Cheap on macOS and the web; spawns a short-lived process
-/// on Windows and Linux, so call it on startup and focus changes, not per
+/// Query the OS. Cheap on macOS, Windows and the web; spawns a short-lived
+/// `gsettings` on Linux, so call it on startup and focus changes, not per
 /// frame.
 pub fn query() -> SystemPrefs {
-    SystemPrefs { dark: None, accent: accent(), reduced_motion: reduced_motion() }
+    SystemPrefs { dark: None, accent: accent(), reduced_motion: reduced_motion(), title_buttons: title_buttons() }
 }
 
 #[cfg(target_os = "macos")]
@@ -61,21 +61,24 @@ pub fn reduced_motion() -> Option<bool> {
     Some(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion())
 }
 
+/// A DWORD under HKEY_CURRENT_USER.
 #[cfg(target_os = "windows")]
 fn reg_dword(path: &str, name: &str) -> Option<u32> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let out = std::process::Command::new("reg").args(["query", path, "/v", name]).creation_flags(CREATE_NO_WINDOW).output().ok()?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    let line = text.lines().find(|l| l.contains("REG_DWORD"))?;
-    let hex = line.split_whitespace().last()?.trim_start_matches("0x");
-    u32::from_str_radix(hex, 16).ok()
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let (path, name) = (wide(path), wide(name));
+    let mut v: u32 = 0;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: both strings are NUL-terminated and the buffer is a u32 of
+    // the size passed.
+    let err = unsafe { RegGetValueW(HKEY_CURRENT_USER, path.as_ptr(), name.as_ptr(), RRF_RT_REG_DWORD, std::ptr::null_mut(), (&mut v as *mut u32).cast(), &mut size) };
+    (err == 0).then_some(v)
 }
 
 #[cfg(target_os = "windows")]
 pub fn accent() -> Option<Color> {
-    // AccentColor is 0xAABBGGRR.
-    let v = reg_dword(r"HKCU\Software\Microsoft\Windows\DWM", "AccentColor")?;
+    // Settings > Personalization > Colors. AccentColor is 0xAABBGGRR.
+    let v = reg_dword(r"Software\Microsoft\Windows\DWM", "AccentColor")?;
     let (r, g, b) = (v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF);
     Some(Color::hex((r << 16) | (g << 8) | b))
 }
@@ -83,8 +86,11 @@ pub fn accent() -> Option<Color> {
 #[cfg(target_os = "windows")]
 pub fn reduced_motion() -> Option<bool> {
     // Settings > Accessibility > Visual effects > Animation effects.
-    let v = reg_dword(r"HKCU\Control Panel\Desktop\WindowMetrics", "MinAnimate");
-    v.map(|v| v == 0)
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION};
+    let mut on: i32 = 1;
+    // SAFETY: SPI_GETCLIENTAREAANIMATION writes one BOOL to the pointer.
+    let ok = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&mut on as *mut i32).cast(), 0) };
+    (ok != 0).then_some(on == 0)
 }
 
 #[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
@@ -119,6 +125,28 @@ pub fn reduced_motion() -> Option<bool> {
     gsettings("enable-animations").map(|v| v == "false")
 }
 
+/// GNOME's title bar buttons, `[close, minimize, maximize]`, from
+/// `button-layout` (e.g. `appmenu:close`, `close,minimize,maximize:`).
+#[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
+pub fn title_buttons() -> Option<[bool; 3]> {
+    let out = std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.wm.preferences", "button-layout"]).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(parse_button_layout(String::from_utf8_lossy(&out.stdout).trim().trim_matches('\'')))
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"), not(target_arch = "wasm32"))))]
+pub fn title_buttons() -> Option<[bool; 3]> {
+    None
+}
+
+/// `[close, minimize, maximize]` named anywhere in a GNOME button layout.
+pub fn parse_button_layout(s: &str) -> [bool; 3] {
+    let has = |n: &str| s.split([':', ',']).any(|p| p.trim() == n);
+    [has("close"), has("minimize"), has("maximize")]
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn accent() -> Option<Color> {
     None
@@ -138,4 +166,17 @@ pub fn accent() -> Option<Color> {
 #[cfg(not(any(unix, windows, target_arch = "wasm32")))]
 pub fn reduced_motion() -> Option<bool> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gnome_button_layouts() {
+        assert_eq!(parse_button_layout("appmenu:close"), [true, false, false]);
+        assert_eq!(parse_button_layout("close,minimize,maximize:"), [true, true, true]);
+        assert_eq!(parse_button_layout(":minimize,close"), [true, true, false]);
+        assert_eq!(parse_button_layout(""), [false, false, false]);
+    }
 }
