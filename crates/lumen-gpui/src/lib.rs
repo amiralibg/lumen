@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! lumen_gpui::application().run(|cx: &mut App| {
+//! lumen_gpui::run(lumen_gpui::application(), |cx: &mut App| {
 //!     let bounds = Bounds::centered(None, size(px(720.), px(480.)), cx);
 //!     cx.open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |window, cx| {
 //!         let panel = LumenView::build(Settings::default(), |ui, s| {
@@ -697,6 +697,31 @@ pub fn application() -> gpui::Application {
     gpui::Application::new()
 }
 
+/// Runs `app` and calls `launch` once it has finished launching, where you
+/// open your windows. Use this instead of `app.run(launch)`: with gpui-ce
+/// 0.3.0 on macOS, the launch callback runs while the platform lock is
+/// held, so an `open_window` inside it deadlocks (gpui-ce discussion #433,
+/// fixed on their main branch). Here `launch` runs from a foreground task
+/// on the next turn of the main loop, after the lock is released. With
+/// Zed's GPUI it's called directly.
+///
+/// ```no_run
+/// lumen_gpui::run(lumen_gpui::application(), |_cx| {
+///     // cx.open_window(...)
+/// });
+/// ```
+pub fn run(app: gpui::Application, launch: impl FnOnce(&mut App) + 'static) {
+    app.run(move |cx: &mut App| {
+        #[cfg(feature = "ce")]
+        cx.spawn(async move |cx| {
+            let _ = cx.update(launch);
+        })
+        .detach();
+        #[cfg(not(feature = "ce"))]
+        launch(cx);
+    });
+}
+
 // The few calls that differ between gpui 0.2 and gpui-ce 0.3.
 
 fn paint_frame(window: &mut Window, bounds: Bounds<Pixels>, image: Arc<RenderImage>) {
@@ -852,9 +877,10 @@ impl<S: 'static> Render for LumenView<S> {
         #[cfg(feature = "ce")]
         let root = {
             let tree = self.a11y.clone();
+            let view = cx.entity_id().as_u64();
             root.role(gpui::Role::Group).a11y_synthetic_children(move |b| {
                 if let Some((t, o, scale)) = &tree {
-                    a11y_children(b, t, *o, *scale);
+                    a11y_children(b, t, view, *o, *scale);
                 }
             })
         };
@@ -1037,17 +1063,29 @@ mod tests {
 /// them), then the view's children are cut back to lumen's top level; the
 /// nested nodes keep their own child lists, so the tree keeps its shape.
 #[cfg(feature = "ce")]
-fn a11y_children(b: &mut gpui::A11ySubtreeBuilder, t: &lumen_core::A11yTree, origin: lumen_core::Vec2, scale: f32) {
-    use gpui::accesskit::{NodeId, Rect as AkRect};
+fn a11y_children(b: &mut gpui::A11ySubtreeBuilder, t: &lumen_core::A11yTree, view: u64, origin: lumen_core::Vec2, scale: f32) {
+    use gpui::accesskit::Rect as AkRect;
     let Some(root) = t.get(t.root) else { return };
     let s = scale as f64;
+    let ids = |c: &[u64]| c.iter().map(|c| ak_id(view, *c)).collect::<Vec<_>>();
     for n in t.nodes.iter().filter(|n| n.id != t.root) {
         let mut node = n.to_accesskit(scale);
+        if !n.children.is_empty() {
+            node.set_children(ids(&n.children));
+        }
         let r = n.rect.translate(origin);
         node.set_bounds(AkRect { x0: r.min.x as f64 * s, y0: r.min.y as f64 * s, x1: r.max.x as f64 * s, y1: r.max.y as f64 * s });
-        b.push_child(NodeId(n.id), node);
+        b.push_child(ak_id(view, n.id), node);
     }
-    b.parent_node().set_children(root.children.iter().map(|c| NodeId(*c)).collect::<Vec<_>>());
+    b.parent_node().set_children(ids(&root.children));
+}
+
+/// lumen's node ids are only unique within one view (they derive from the
+/// same root id), so each view's nodes are scoped by its entity id in the
+/// window's tree.
+#[cfg(feature = "ce")]
+fn ak_id(view: u64, id: u64) -> gpui::accesskit::NodeId {
+    gpui::accesskit::NodeId(lumen_core::Id(view).with(id).0)
 }
 
 /// gpui-ce: route screen reader actions on lumen's nodes back into lumen.
@@ -1055,6 +1093,7 @@ fn a11y_children(b: &mut gpui::A11ySubtreeBuilder, t: &lumen_core::A11yTree, ori
 fn a11y_listeners<S: 'static>(entity: &Entity<LumenView<S>>, window: &mut Window, cx: &mut App) {
     use gpui::accesskit::{Action, ActionData, ActionRequest, NodeId, TreeId};
     let Some((tree, _, _)) = entity.read(cx).a11y.clone() else { return };
+    let view = entity.entity_id().as_u64();
     for n in &tree.nodes {
         let a = n.actions;
         let mut kinds = vec![Action::ScrollIntoView];
@@ -1076,7 +1115,7 @@ fn a11y_listeners<S: 'static>(entity: &Entity<LumenView<S>>, window: &mut Window
         for action in kinds {
             let e = entity.clone();
             let id = n.id;
-            window.on_a11y_action(NodeId(id), action, move |data: Option<&ActionData>, _, cx| {
+            window.on_a11y_action(ak_id(view, id), action, move |data: Option<&ActionData>, _, cx| {
                 let req = ActionRequest { action, target_tree: TreeId::ROOT, target_node: NodeId(id), data: data.cloned() };
                 if let Some((target, act)) = lumen_core::A11yAction::from_accesskit(&req) {
                     e.update(cx, |this, cx| {

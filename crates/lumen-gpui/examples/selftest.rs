@@ -55,7 +55,7 @@ mod mac {
         ui.column().fill().pad(16).gap(12).show(|ui| {
             s.input = ui.text_input(&mut s.text).placeholder("Type here").id("name").fill_width().show().rect;
             ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
-                s.select = ui.select(&mut s.region, &[(0, REGIONS[0]), (1, REGIONS[1]), (2, REGIONS[2]), (3, REGIONS[3])]).show().rect;
+                s.select = ui.select(&mut s.region, &[(0, REGIONS[0]), (1, REGIONS[1]), (2, REGIONS[2]), (3, REGIONS[3])]).label("Region").show().rect;
                 if s.spin {
                     ui.spinner(20.0);
                     ui.progress(None);
@@ -183,8 +183,6 @@ mod mac {
         bar: Entity<LumenView<Bar>>,
         view: usize,
         out: PathBuf,
-        /// Content height in points, to flip y for AppKit.
-        height: f64,
         results: Rc<RefCell<Vec<(String, bool)>>>,
     }
 
@@ -207,12 +205,15 @@ mod mac {
                     unsafe { Encoding::from_str("{CGPoint=dd}") }
                 }
             }
+            // Content height in points, to flip y for AppKit. Read per event:
+            // the window can still be settling its size when the script starts.
+            let height = self.cx.clone().update(|w, _| f32::from(w.viewport_size().height) as f64).unwrap();
             unsafe {
                 let view = self.view as *mut Object;
                 let window: *mut Object = msg_send![view, window];
                 let num: i64 = msg_send![window, windowNumber];
                 // Window coordinates have their origin at the bottom left.
-                let loc = NSPoint { x: f32::from(p.x) as f64, y: self.height - f32::from(p.y) as f64 };
+                let loc = NSPoint { x: f32::from(p.x) as f64, y: height - f32::from(p.y) as f64 };
                 let e: *mut Object = msg_send![class!(NSEvent), mouseEventWithType: kind location: loc modifierFlags: 0u64 timestamp: 0.0f64 windowNumber: num context: std::ptr::null_mut::<Object>() eventNumber: 0i64 clickCount: 1i64 pressure: 1.0f32];
                 let _: () = msg_send![window, sendEvent: e];
             }
@@ -264,7 +265,16 @@ mod mac {
             if !visible || !key {
                 println!("note: the window is {}; GPUI draws it only around input, so the script moves the pointer while it waits", if visible { "not key" } else { "occluded" });
             }
-            self.height = self.cx.update(|w, _| f32::from(w.viewport_size().height) as f64).unwrap();
+            // A cold first launch (new GPU device, uncompiled pipelines, font
+            // loading) can take longer than the wait above; click only once
+            // lumen has laid out the panel.
+            for _ in 0..100 {
+                if self.read(|p| p.state().input.width() > 0.0) {
+                    break;
+                }
+                self.send_mouse(5, pt(450.0, 400.0));
+                self.wait(100).await;
+            }
             let input = self.read(|p| p.state().input).translate(panel_origin());
             self.click(pt(input.center().x, input.center().y)).await;
 
@@ -376,10 +386,14 @@ mod mac {
     pub fn run() {
         let out = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| "target/selftest".into()));
         std::fs::create_dir_all(&out).unwrap();
-        lumen_gpui::application().run(move |cx: &mut App| {
+        lumen_gpui::run(lumen_gpui::application(), move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(900.), px(WINDOW_H as f32)), cx);
+            // SELFTEST_BACKGROUND=1 leaves the app inactive and the window
+            // unfocused, so it doesn't take over the screen while you work.
+            let background = std::env::var_os("SELFTEST_BACKGROUND").is_some();
+            let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), focus: !background, ..Default::default() };
             let window = cx
-                .open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |window, cx| {
+                .open_window(options, |window, cx| {
                     // SELFTEST_CONTAIN=1 keeps menus inside the panel.
                     let contain = std::env::var_os("SELFTEST_CONTAIN").is_some();
                     let panel = cx.new(|cx| {
@@ -390,7 +404,9 @@ mod mac {
                     cx.new(|_| Shell { bar, panel })
                 })
                 .unwrap();
-            cx.activate(true);
+            if !background {
+                cx.activate(true);
+            }
             window
                 .update(cx, |shell, window, cx| {
                     let view = match window.window_handle().unwrap().as_raw() {
@@ -401,7 +417,7 @@ mod mac {
                     let bar = shell.bar.clone();
                     window
                         .spawn(cx, async move |cx| {
-                            Script { cx: cx.clone(), panel, bar, view, out, height: 0.0, results: Rc::default() }.run().await;
+                            Script { cx: cx.clone(), panel, bar, view, out, results: Rc::default() }.run().await;
                         })
                         .detach();
                 })

@@ -5,7 +5,7 @@
 //!     cargo +1.95 test --no-default-features --features ce-test --test a11y_ce
 
 use gpui::accesskit::{Action, ActionData, NodeId, Role, Toggled, TreeUpdate};
-use gpui::TestAppContext;
+use gpui::{AppContext as _, TestAppContext};
 use lumen_core::Ui;
 use lumen_gpui::LumenView;
 
@@ -65,4 +65,51 @@ fn lumen_nodes_in_the_gpui_tree() {
     assert_eq!(vcx.update(|_, cx| entity.read(cx).state().name.clone()), "Ada");
     let (_, sw) = t.nodes.iter().find(|(id, _)| *id == wifi).unwrap();
     assert_eq!(sw.toggled(), Some(Toggled::True));
+}
+
+struct Two {
+    a: gpui::Entity<LumenView<S>>,
+    b: gpui::Entity<LumenView<S>>,
+}
+
+impl gpui::Render for Two {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+        use gpui::{div, prelude::*};
+        div().size_full().flex().flex_col().child(div().h(gpui::px(240.)).child(self.a.clone())).child(div().h(gpui::px(240.)).child(self.b.clone()))
+    }
+}
+
+/// Two lumen views in one window build the same node ids; each must keep
+/// its own nodes, and a press must reach the view it belongs to.
+#[test]
+fn two_views_in_one_window() {
+    let mut cx = TestAppContext::single();
+    let (two, vcx) = cx.add_window_view(|window, cx| {
+        window.set_a11y_forced(true);
+        let a = cx.new(|cx| LumenView::new(S::default(), view, window, cx));
+        let b = cx.new(|cx| LumenView::new(S::default(), view, window, cx));
+        Two { a, b }
+    });
+    let mut t = None;
+    for _ in 0..4 {
+        vcx.update(|w, _| w.refresh());
+        vcx.run_until_parked();
+        t = vcx.update(|w, _| w.a11y_tree().cloned());
+    }
+    let t = t.expect("a tree");
+    let saves: Vec<NodeId> = t.nodes.iter().filter(|(_, n)| n.role() == Role::Button && n.label() == Some("Save")).map(|(id, _)| *id).collect();
+    assert_eq!(saves.len(), 2, "both views' buttons are in the tree");
+    assert_ne!(saves[0], saves[1]);
+    for s in &saves {
+        let parents: usize = t.nodes.iter().map(|(_, n)| n.children().iter().filter(|c| *c == s).count()).sum();
+        assert_eq!(parents, 1, "each button has one parent");
+    }
+    vcx.update(|w, cx| w.perform_a11y_action(saves[1], Action::Click, None, cx));
+    vcx.update(|w, _| w.refresh());
+    vcx.run_until_parked();
+    let (a, b) = vcx.update(|_, cx| {
+        let two = two.read(cx);
+        (two.a.read(cx).state().saves, two.b.read(cx).state().saves)
+    });
+    assert_eq!(a + b, 1, "one press, one save");
 }

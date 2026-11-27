@@ -160,3 +160,21 @@ fn gnome_follows_the_desktop_button_layout() {
     assert_eq!(regions(Platform::Gnome, true), vec![WindowRegion::Close]);
     assert_eq!(regions(Platform::Windows, true).len(), 3);
 }
+
+#[test]
+fn caption_buttons_describe_themselves_and_take_screen_reader_presses() {
+    for p in Platform::ALL {
+        let mut h = H::new(S { handle: false, platform: Some(p), ..Default::default() });
+        h.ui.set_accessibility(true);
+        h.frame(vec![]);
+        let out = h.frame(vec![]);
+        let tree = out.a11y.expect("tree");
+        let zoom = if p == Platform::Mac { "Zoom" } else { "Maximize" };
+        for name in ["Close", "Minimize", zoom] {
+            assert!(tree.find(Role::Button, name).is_some(), "{p:?}: no button {name:?}\n{}", tree.dump());
+        }
+        let id = tree.find(Role::Button, "Minimize").unwrap().id;
+        h.frame(vec![Event::A11y { target: Id(id), action: A11yAction::Click }]);
+        assert!(h.s.last.minimize, "{p:?}: screen reader press reaches the button");
+    }
+}

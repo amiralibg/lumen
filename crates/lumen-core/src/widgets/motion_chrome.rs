@@ -687,6 +687,15 @@ fn caption_group(
         if ix.clicked {
             clicked = Some(kind);
         }
+        ui.a11y(bid, || {
+            A11y::new(Role::Button).label(match kind {
+                WindowRegion::Close => "Close",
+                WindowRegion::Minimize => "Minimize",
+                _ if maximized => "Restore",
+                _ if platform == Platform::Mac => "Zoom",
+                _ => "Maximize",
+            })
+        });
         match kind {
             WindowRegion::Close => resp.close_rect = ix.rect,
             WindowRegion::Minimize => resp.minimize_rect = ix.rect,
