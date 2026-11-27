@@ -150,6 +150,9 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("onboarding-checklist", "Onboarding checklist"),
     ("swipe-actions", "Swipe actions"),
     ("docking-panels", "Docking panels"),
+    ("bubble-chart", "Bubble chart"),
+    ("chart-annotations", "Chart annotations"),
+    ("dot-matrix", "Dot-matrix display"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -392,6 +395,10 @@ struct State {
     swipe_rows: Vec<(String, String, String, bool)>,
     swipe_note: String,
     dock: lumen::DockLayout,
+    bubble_year: f32,
+    bubble_play: bool,
+    bubble_t: f64,
+    board_step: usize,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -617,6 +624,10 @@ impl State {
             swipe_rows: demo_swipe_rows(),
             swipe_note: String::new(),
             dock: demo_dock(),
+            bubble_year: 2023.0,
+            bubble_play: false,
+            bubble_t: 0.0,
+            board_step: 0,
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -797,6 +808,33 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+/// Coffee chains over the years: revenue (log), satisfaction, customers.
+fn demo_bubbles(year: i32) -> Vec<lumen::Bubble> {
+    let t = (year - 2019) as f32 / 7.0;
+    let chains: [(&str, usize, f32, f32, f32, f32, f32, f32); 12] = [
+        ("Lisbon", 0, 60.0, 420.0, 72.0, 86.0, 8_000.0, 30_000.0),
+        ("Oslo", 0, 120.0, 380.0, 80.0, 84.0, 6_000.0, 12_000.0),
+        ("Berlin", 0, 300.0, 1400.0, 70.0, 90.0, 20_000.0, 70_000.0),
+        ("Porto", 0, 40.0, 160.0, 76.0, 92.0, 3_000.0, 9_000.0),
+        ("Austin", 1, 200.0, 900.0, 68.0, 78.0, 15_000.0, 45_000.0),
+        ("Bogotá", 1, 30.0, 240.0, 62.0, 88.0, 5_000.0, 40_000.0),
+        ("Toronto", 1, 400.0, 700.0, 82.0, 80.0, 25_000.0, 38_000.0),
+        ("Lima", 1, 25.0, 110.0, 58.0, 74.0, 2_500.0, 18_000.0),
+        ("Seoul", 2, 500.0, 1800.0, 74.0, 93.0, 30_000.0, 90_000.0),
+        ("Hanoi", 2, 22.0, 300.0, 64.0, 85.0, 4_000.0, 60_000.0),
+        ("Osaka", 2, 350.0, 520.0, 88.0, 83.0, 22_000.0, 26_000.0),
+        ("Pune", 2, 35.0, 500.0, 55.0, 81.0, 6_000.0, 75_000.0),
+    ];
+    chains
+        .iter()
+        .map(|(name, g, x0, x1, y0, y1, s0, s1)| {
+            // Revenue grows geometrically; satisfaction and size linearly.
+            let x = x0 * (x1 / x0).powf(t);
+            lumen::Bubble::new(name, x, y0 + (y1 - y0) * t, s0 + (s1 - s0) * t, *g)
+        })
+        .collect()
 }
 
 fn demo_onboarding() -> Vec<lumen::OnboardingStep> {
@@ -3033,6 +3071,91 @@ ui.button("Ship release").primary().icon("rocket");
             let short = ui.screen_size().y < 440.0;
             ui.column().fill_width().max_width(900.0).show(|ui| {
                 ui.dock_area("ide", &panels, &mut s.dock, if short { 280.0 } else { 380.0 }, |ui, pid| demo_dock_body(ui, pid));
+            });
+        }
+        "bubble-chart" => {
+            // Play steps a year every 0.9 s; the bubbles glide between years.
+            let now = ui.time();
+            if s.bubble_play {
+                if now - s.bubble_t > 0.9 {
+                    s.bubble_t = now;
+                    s.bubble_year = if s.bubble_year >= 2026.0 { 2019.0 } else { s.bubble_year + 1.0 };
+                }
+                ui.request_repaint_after(0.9 - (now - s.bubble_t));
+            }
+            let data = demo_bubbles(s.bubble_year as i32);
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.bubble_chart("coffee", &data)
+                    .groups(&["Europe", "Americas", "Asia"])
+                    .axes("Monthly revenue", "Satisfaction %")
+                    .size_label("Customers")
+                    .x_range(20.0, 2000.0)
+                    .log_x(true)
+                    .y_range(50.0, 100.0)
+                    .max_size(90_000.0)
+                    .frame(&format!("{}", s.bubble_year as i32))
+                    .height(if short { 200.0 } else { 300.0 })
+                    .format(|v| if v >= 1000.0 { format!("${:.1}M", v / 1000.0) } else { format!("${v:.0}k") }, |v| format!("{v:.0}"))
+                    .show();
+                ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                    let icon = if s.bubble_play { "pause" } else { "play" };
+                    if ui.icon_button(icon).tooltip(if s.bubble_play { "Pause" } else { "Play" }).show().clicked {
+                        s.bubble_play = !s.bubble_play;
+                        s.bubble_t = now;
+                    }
+                    let readout = format!("{}", s.bubble_year as i32);
+                    ui.slider("Year", &mut s.bubble_year, 2019.0..=2026.0).step(1.0).width(f32::INFINITY).readout(readout).show();
+                });
+            });
+        }
+        "chart-annotations" => {
+            use lumen::{Annotation, Series, Tone};
+            let weeks = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"];
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                    ui.label("Weekly signups").strong();
+                    ui.badge("+38% this quarter", Tone::Success);
+                });
+                ui.line_chart("signups", &weeks, vec![
+                    Series::new("Signups", vec![620.0, 680.0, 710.0, 760.0, 420.0, 480.0, 820.0, 880.0, 940.0, 1180.0, 1240.0, 1310.0]),
+                    Series::new("Trials", vec![210.0, 240.0, 260.0, 250.0, 160.0, 170.0, 300.0, 330.0, 360.0, 470.0, 500.0, 540.0]),
+                ])
+                .smooth(true)
+                .height(if short { 190.0 } else { 260.0 })
+                .annotate(Annotation::target(1200.0, "Goal 1.2k"))
+                .annotate(Annotation::band(4, 5, "Outage", Tone::Danger))
+                .annotate(Annotation::point(9, 0, "Launch"))
+                .annotate(Annotation::point(2, 1, "Pricing page"))
+                .show();
+            });
+        }
+        "dot-matrix" => {
+            let statuses = [["ON TIME", "ON TIME", "DELAYED 5"], ["BOARDING", "ON TIME", "DELAYED 9"], ["DEPARTED", "BOARDING", "DELAYED 9"]];
+            let st = statuses[s.board_step % 3];
+            let narrow = ui.screen_size().x < 600.0;
+            ui.column().fill_width().max_width(640.0).gap(10).show(|ui| {
+                ui.column().gap(6).show(|ui| {
+                    ui.dot_matrix("head", "DEPARTURES").dot(if narrow { 3.0 } else { 4.0 }).show();
+                    for (i, (time, dest)) in [("08:42", "EDINBURGH"), ("08:55", "YORK"), ("09:10", "LEEDS")].into_iter().enumerate() {
+                        ui.row().gap(8).align(Align::Center).show(|ui| {
+                            let d = if narrow { 3.0 } else { 4.0 };
+                            ui.dot_matrix(format!("t{i}"), time).dot(d).show();
+                            ui.dot_matrix(format!("d{i}"), dest).cols(if narrow { 0 } else { 54 }).dot(d).show();
+                            if !narrow {
+                                ui.dot_matrix(format!("s{i}"), st[i]).cols(54).align_right().dot(d).tone(if st[i].starts_with("DELAY") { lumen::Token::Danger } else { lumen::Token::Success }).show();
+                            }
+                        });
+                    }
+                    ui.dot_matrix("ticker", "PLATFORM 4 NOW PLATFORM 6 - MIND THE GAP - QUIET COACH IN CAR C").cols(if narrow { 84 } else { 112 }).dot(3.0).tone(lumen::Token::Info).scroll(true).show();
+                });
+                ui.row().gap(8).align(Align::Center).show(|ui| {
+                    if ui.button("Next update").icon("refresh-cw").small().show().clicked {
+                        s.board_step += 1;
+                    }
+                    ui.label("Statuses flip column by column.").muted().small();
+                });
             });
         }
         "wheel-picker" => {

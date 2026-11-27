@@ -1552,6 +1552,33 @@ if let Some(i) = out.action { run_step(i); }`,
     keys: [["← → on tabs", "Switch tab"], ["Cmd/Ctrl + Shift + arrows", "Move the tab to a zone (↑ is the middle)"]],
   },
   {
+    slug: "bubble-chart", name: "Bubble chart", group: "Charts", demo: "bubble-chart",
+    summary: "Bubbles placed by x and y, sized by area (not radius) and colored by group, with a size legend. Give it the next frame of data and every bubble glides there, so a year slider plays like a timeline. Hover lifts a bubble with a tooltip and dims the rest; arrows and clicks select.",
+    code: `ui.bubble_chart("coffee", &bubbles)
+    .groups(&["Europe", "Americas", "Asia"]).axes("Revenue", "Satisfaction %")
+    .size_label("Customers").log_x(true).x_range(20.0, 2000.0)
+    .frame("2023").show();`,
+    options: [["Bubble { label, x, y, size, group }", "Bubbles are matched across frames by label."], ["x_range / y_range / max_size", "Fix the scales so a timeline doesn't rescale."], ["log_x, frame(label), format(x, y)", "Log axis, the big year behind the plot, value formats."]],
+    keys: [["← →", "Previous / next bubble by x"], ["Escape", "Clear"]],
+  },
+  {
+    slug: "chart-annotations", name: "Chart annotations", group: "Charts", demo: "chart-annotations",
+    summary: "Notes on line, area and bar charts: a dashed target line, a shaded band over a span (an outage, a campaign) and callouts on single points with a leader. They draw in after the data, callouts pop, labels step aside so they don't overlap, and screen readers hear them in the chart's description.",
+    code: `ui.line_chart("signups", &weeks, series)
+    .annotate(Annotation::target(1200.0, "Goal 1.2k"))
+    .annotate(Annotation::band(4, 5, "Outage", Tone::Danger))
+    .annotate(Annotation::point(9, 0, "Launch"))
+    .show();`,
+    options: [["Annotation::target(value, label)", "Also widens the y range to include the target."], ["Annotation::band(from, to, label, tone)", "x indices, inclusive."], ["Annotation::point(index, series, label)", "Above the point when there's room, else below."]],
+  },
+  {
+    slug: "dot-matrix", name: "Dot-matrix display", group: "Motion", demo: "dot-matrix",
+    summary: "Text on a grid of dots in a 5×7 font, like a departure board or an LED sign. New text flips the dots column by column; text that doesn't fit can run as a marquee (still under reduced motion). The panel stays dark in both themes, and screen readers read the text.",
+    code: `ui.dot_matrix("status", "ON TIME").cols(54).align_right().tone(Token::Success).show();
+ui.dot_matrix("ticker", notice).cols(112).scroll(true).show();`,
+    options: [["cols(n) / dot(pitch)", "Width in dots and dot spacing."], ["tone(token)", "The lit color; amber by default."], ["scroll(true) / align_right()", "Marquee for long text; right-align for clocks."]],
+  },
+  {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
     summary: "Month calendars whose days are tinted by a value on an accent ramp. Days fill in on first show, the hovered day lifts, the selection ring glides, and months wrap to fit.",
     code: `let changed = ui.calendar_heatmap("deploys", Date::new(2026, 10, 1), 2, &per_day, "deploys", &mut day);`,

@@ -8,6 +8,7 @@ use std::f32::consts::{PI, TAU};
 
 use lumen_text::TextStyle;
 
+use crate::a11y::{A11y, Role};
 use crate::anim::{Ease, SpringParams};
 use crate::color::Color;
 use crate::input::CursorIcon;
@@ -17,6 +18,41 @@ use crate::theme::{Elevation, TextRole, Token};
 use crate::ui::{PaintCx, Response, Sense, Ui};
 
 use super::show_on_drop;
+
+/// A note drawn on a line, area or bar chart.
+#[derive(Clone, Debug)]
+pub enum Annotation {
+    /// A dashed horizontal line at a value, labelled at the right.
+    Target { value: f32, label: String },
+    /// A shaded span of x positions (inclusive), labelled at the top.
+    Band { from: usize, to: usize, label: String, tone: super::Tone },
+    /// A callout on one point of a series: a ring and a label on a leader.
+    Point { index: usize, series: usize, label: String },
+}
+
+impl Annotation {
+    pub fn target(value: f32, label: &str) -> Self {
+        Annotation::Target { value, label: label.into() }
+    }
+    pub fn band(from: usize, to: usize, label: &str, tone: super::Tone) -> Self {
+        Annotation::Band { from, to, label: label.into(), tone }
+    }
+    pub fn point(index: usize, series: usize, label: &str) -> Self {
+        Annotation::Point { index, series, label: label.into() }
+    }
+}
+
+fn tone_color(ui: &Ui, t: super::Tone) -> Color {
+    use super::Tone::*;
+    ui.color(match t {
+        Neutral => Token::TextSecondary,
+        Accent => Token::Accent,
+        Success => Token::Success,
+        Warning => Token::Warning,
+        Danger => Token::Danger,
+        Info => Token::Info,
+    })
+}
 
 /// A named run of values.
 #[derive(Clone, Debug)]
@@ -230,10 +266,16 @@ pub struct Chart<'u> {
     legend: bool,
     points: bool,
     format: fn(f32) -> String,
+    annotations: Vec<Annotation>,
     shown: bool,
 }
 
 impl Chart<'_> {
+    /// Add a target line, a shaded band or a point callout.
+    pub fn annotate(mut self, a: Annotation) -> Self {
+        self.annotations.push(a);
+        self
+    }
     pub fn height(mut self, h: f32) -> Self {
         self.height = h;
         self
@@ -315,6 +357,12 @@ impl Chart<'_> {
                 }
             }
         }
+        for a in &self.annotations {
+            if let Annotation::Target { value, .. } = a {
+                hi = hi.max(*value);
+                lo = lo.min(*value);
+            }
+        }
         if hi == lo {
             hi = lo + 1.0;
         }
@@ -372,9 +420,35 @@ impl Chart<'_> {
         let tip = Tip::new(ui);
         let labels = self.labels.clone();
         let names: Vec<String> = self.series.iter().map(|s| s.name.clone()).collect();
+        let names_a11y = names.join(", ");
         let targets: Vec<Vec<f32>> = self.series.iter().map(|s| s.values.clone()).collect();
         let (smooth, points) = (self.smooth, self.points);
         let radius = ui.look().control.radius[0].min(4.0);
+
+        // Annotations arrive once the series has drawn in; callouts pop.
+        let anns = self.annotations.clone();
+        let ann_a = ((reveal - 0.6) / 0.4).clamp(0.0, 1.0);
+        let pops: Vec<f32> = (0..anns.len()).map(|k| if ui.reduced_motion() { 1.0 } else if ann_a <= 0.0 { 0.0 } else { ui.anims.spring_from(id, 95_000 + k as u32, 0.0, 1.0, mo.bouncy) }).collect();
+        let ann_cols: Vec<Color> = anns
+            .iter()
+            .map(|a| match a {
+                Annotation::Band { tone, .. } => tone_color(ui, *tone),
+                Annotation::Target { .. } => ui.color(Token::TextSecondary),
+                Annotation::Point { series, .. } => colors.get(*series).copied().unwrap_or(ui.color(Token::Accent)),
+            })
+            .collect();
+        let ann_fg = ui.color(Token::Foreground);
+        let ann_bg = ui.color(Token::SurfaceRaised);
+        let ann_st = cap;
+        let ann_pad = ui.look().control.pad_x[0];
+        let ann_desc: Vec<String> = anns
+            .iter()
+            .map(|a| match a {
+                Annotation::Target { value, label } => format!("{label} at {}", fmt(*value)),
+                Annotation::Band { from, to, label, .. } => format!("{label} from {} to {}", self.labels.get(*from).cloned().unwrap_or_default(), self.labels.get(*to).cloned().unwrap_or_default()),
+                Annotation::Point { index, series, label } => format!("{label}: {} at {}", self.series.get(*series).map(|s| s.name.clone()).unwrap_or_default(), self.labels.get(*index).cloned().unwrap_or_default()),
+            })
+            .collect();
 
         ui.begin(Style { width: Size::FILL, gap: 12.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
         if self.legend && ns > 0 {
@@ -416,6 +490,22 @@ impl Chart<'_> {
                     }
                 }
                 cx.painter.push_clip(r);
+                let slot_half = if matches!(kind, ChartKind::Bar | ChartKind::StackedBar) { plot.width() / n.max(1) as f32 * 0.5 } else { 0.0 };
+                for (k, a) in anns.iter().enumerate() {
+                    if let Annotation::Band { from, to, .. } = a {
+                        if n == 0 {
+                            continue;
+                        }
+                        let (f, t) = ((*from).min(n - 1), (*to).min(n - 1));
+                        let x0 = x_of(plot, f.min(t)) - slot_half;
+                        let x1 = x_of(plot, f.max(t)) + slot_half;
+                        let w = (x1 - x0).max(2.0) * pops[k].clamp(0.0, 1.0);
+                        let c = ann_cols[k];
+                        cx.painter.rect(Rect::from_xywh(x0, plot.min.y, w, plot.height()), c.multiply_alpha(0.12 * ann_a));
+                        cx.painter.rect(Rect::from_xywh(x0, plot.min.y, 1.0, plot.height()), c.multiply_alpha(0.5 * ann_a));
+                        cx.painter.rect(Rect::from_xywh(x0 + w - 1.0, plot.min.y, 1.0, plot.height()), c.multiply_alpha(0.5 * ann_a));
+                    }
+                }
                 match kind {
                     ChartKind::Line | ChartKind::Area => {
                         let base = y_of(0.0f32.clamp(y0, y1));
@@ -499,6 +589,66 @@ impl Chart<'_> {
                     }
                 }
                 cx.painter.pop_clip();
+                // Labels, target lines and callouts, kept apart from each other.
+                let y_of = |v: f32| plot.max.y - (v - y0) / (y1 - y0).max(1e-6) * plot.height();
+                let mut placed: Vec<Rect> = vec![];
+                let pill = |cx: &mut PaintCx, text: &str, at: Vec2, col: Color, a: f32, placed: &mut Vec<Rect>| -> Rect {
+                    let g = cx.galley(text, &ann_st);
+                    let size = vec2(g.width + ann_pad * 2.0, g.height + ann_pad * 0.6);
+                    let mut rr = Rect::from_xywh((at.x - size.x * 0.5).clamp(r.min.x, r.max.x - size.x), at.y - size.y * 0.5, size.x, size.y);
+                    for _ in 0..6 {
+                        match placed.iter().find(|p| p.expand(2.0).intersect(&rr).width() > 0.0 && p.expand(2.0).intersect(&rr).height() > 0.0) {
+                            Some(p) => rr = rr.translate(vec2(0.0, p.max.y + 3.0 - rr.min.y)),
+                            None => break,
+                        }
+                    }
+                    cx.painter.rrect(rr, Corners::all(size.y * 0.5), ann_bg.multiply_alpha(a), 1.0, col.multiply_alpha(a));
+                    cx.painter.text(cx.text, &g, vec2((rr.min.x + ann_pad).round(), (rr.min.y + ann_pad * 0.3).round()), ann_fg.multiply_alpha(a));
+                    placed.push(rr);
+                    rr
+                };
+                for (k, a) in anns.iter().enumerate() {
+                    let p = pops[k].clamp(0.0, 1.2);
+                    if p <= 0.01 {
+                        continue;
+                    }
+                    let c = ann_cols[k];
+                    match a {
+                        Annotation::Target { value, label } => {
+                            let y = y_of(*value);
+                            let x_end = plot.min.x + plot.width() * p.min(1.0);
+                            let mut x = plot.min.x;
+                            while x < x_end {
+                                cx.painter.rect(Rect::from_xywh(x, y.round() - 0.5, 6.0f32.min(x_end - x), 1.5), c.multiply_alpha(ann_a));
+                                x += 10.0;
+                            }
+                            let g = cx.galley(label, &ann_st);
+                            pill(cx, label, vec2(plot.max.x - g.width * 0.5 - ann_pad, y), c, ann_a, &mut placed);
+                        }
+                        Annotation::Band { from, to, label, .. } => {
+                            if n == 0 {
+                                continue;
+                            }
+                            let (f, t) = ((*from).min(n - 1), (*to).min(n - 1));
+                            let xm = (x_of(plot, f.min(t)) + x_of(plot, f.max(t))) * 0.5;
+                            pill(cx, label, vec2(xm, plot.min.y + 12.0), c, ann_a, &mut placed);
+                        }
+                        Annotation::Point { index, series, label } => {
+                            let Some(v) = vals.get(*series).and_then(|v| v.get(*index)) else { continue };
+                            let pt = vec2(x_of(plot, *index), y_of(*v));
+                            cx.painter.circle(pt, 6.0 * p, c.multiply_alpha(0.18 * ann_a), 0.0, Color::TRANSPARENT);
+                            cx.painter.circle(pt, 3.5 * p, surface, 2.0, c);
+                            // Above the point when there's room, else below.
+                            let lift = 34.0;
+                            let up = pt.y - lift > plot.min.y + 8.0;
+                            let at = vec2(pt.x, if up { pt.y - lift } else { pt.y + lift });
+                            let rr = pill(cx, label, at, c, ann_a * p.min(1.0), &mut placed);
+                            let end = if up { vec2(pt.x.clamp(rr.min.x + 6.0, rr.max.x - 6.0), rr.max.y) } else { vec2(pt.x.clamp(rr.min.x + 6.0, rr.max.x - 6.0), rr.min.y) };
+                            let start = pt + vec2(0.0, if up { -6.0 } else { 6.0 });
+                            cx.painter.polyline(&[start, end], 1.0, c.multiply_alpha(ann_a));
+                        }
+                    }
+                }
                 if hov_a > 0.5 {
                     if let Some(i) = hover_idx {
                         let title = labels.get(i).cloned().unwrap_or_else(|| format!("#{}", i + 1));
@@ -517,6 +667,20 @@ impl Chart<'_> {
             })),
         );
         ui.end();
+        let kind_name = match kind {
+            ChartKind::Line => "Line chart",
+            ChartKind::Area => "Area chart",
+            ChartKind::Bar => "Bar chart",
+            ChartKind::StackedBar => "Stacked bar chart",
+        };
+        let label = format!("{kind_name}: {names_a11y}");
+        ui.a11y(id, || {
+            let mut a = A11y::new(Role::Image).label(label);
+            if !ann_desc.is_empty() {
+                a = a.description(ann_desc.join("; "));
+            }
+            a
+        });
         Response { id, rect: ix.rect, hovered: ix.hovered, ..Default::default() }
     }
 }
@@ -551,6 +715,7 @@ impl Ui {
             legend,
             points: false,
             format: compact,
+            annotations: vec![],
             shown: false,
         }
     }

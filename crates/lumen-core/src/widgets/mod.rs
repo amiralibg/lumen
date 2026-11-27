@@ -66,6 +66,7 @@ pub mod avatar_upload;
 pub mod devtools_views;
 pub mod devtools_tools;
 pub mod overlays_pro;
+pub mod charts_batch;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -131,6 +132,8 @@ pub use file_browser::{FileEntry, FileOut};
 pub use signature_pad::{SigPoint, Signature, SignaturePad};
 pub use ruler_slider::RulerSlider;
 pub use time_dial::TimeDial;
+pub use charts_batch::{Bubble, BubbleChart, DotMatrix};
+pub use chart::Annotation;
 pub use overlays_pro::{DockLayout, DockPanel, DockZone, OnboardingOut, OnboardingStep, SwipeAction, SwipeHit};
 pub use devtools_tools::{query_ops, DepNode, FeatureFlag, FieldKind, QueryField, QueryGroup, QueryRule, RegexFlags, RegexMatch};
 pub use devtools_views::{BlameLine, BlameView, CoverLine, Coverage, CoverageView, HexOut, HexViewer, Problem, Severity, StackFrame, TreeTableRow};
