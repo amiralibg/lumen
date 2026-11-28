@@ -75,6 +75,12 @@ pub enum Event {
     /// Clipboard contents for a paste the app performed on Cmd/Ctrl+V.
     Paste(String),
     WindowFocused(bool),
+    /// The window was maximized (zoomed) or restored. Hosts send it when the
+    /// state changes so a custom title bar can show restore instead of
+    /// maximize.
+    WindowMaximized(bool),
+    /// A screen reader asked for an action on a widget (see [`crate::a11y`]).
+    A11y { target: crate::Id, action: crate::a11y::A11yAction },
 }
 
 /// An input-method event for the focused text field.
@@ -124,4 +130,8 @@ pub enum CursorIcon {
     Grabbing,
     /// Left-right arrows: scrubbing a number.
     ResizeHorizontal,
+    /// Drawing: signature pads and canvases.
+    Crosshair,
+    /// Up-down arrows: resizing a horizontal splitter.
+    ResizeVertical,
 }

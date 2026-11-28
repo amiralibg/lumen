@@ -392,3 +392,22 @@ footer nav { margin-left: auto; display: flex; gap: 18px; }
 .dd-menu li svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transform: scale(0.5); transition: opacity var(--d-fast) var(--ease), transform var(--d) var(--spring); }
 .dd-menu li[aria-selected="true"] svg { opacity: 1; transform: none; }
 :root[data-reduced="true"] .dd-menu, :root[data-reduced="true"] .dd-menu li { transform: none !important; }
+
+/* Wardlight */
+.vault .row-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.vault .wl-title { display: flex; align-items: center; gap: 14px; }
+.vault .wl-icon { width: clamp(44px, 4.4vw, 56px); height: auto; flex: none; margin: -6px; filter: drop-shadow(0 6px 18px color-mix(in oklab, var(--accent) 30%, transparent)); transition: transform var(--d) var(--spring); }
+@media (hover: hover) { .vault:hover .wl-icon { transform: rotate(-6deg) scale(1.05); } }
+.vault .wl-sub { font-size: 18px; color: var(--text); margin: 14px 0 0; }
+.vault p b { color: var(--text); font-weight: 600; }
+.vault .wl-acts { margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; }
+.wl-shot { padding: 10px; }
+.wl-shot img { display: block; width: 100%; height: auto; border-radius: 12px; transition: transform var(--d-slow) var(--ease); }
+@media (hover: hover) { .vault:hover .wl-shot img { transform: translateY(-2px); } }
+.wl-fig { margin: 20px 0; }
+.wl-fig img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }
+.wl-fig figcaption { margin-top: 8px; font-size: 13px; color: var(--text-2); text-align: center; }
+.wl-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 700px) { .wl-pair { grid-template-columns: minmax(0, 1fr); } }
+.app .thumb img[src*="app-todo"] { object-position: top center; }
+@media (max-width: 600px) { .vault .wl-sub { font-size: 16px; } }

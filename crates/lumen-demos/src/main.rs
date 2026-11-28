@@ -123,12 +123,36 @@ pub const DEMOS: &[(&str, &str)] = &[
     ("flame-graph", "Flame graph"),
     ("notification-list", "Notification inbox"),
     ("list-view", "List view"),
+    ("virtual-list", "Virtualized list"),
+    ("accessibility", "Accessibility"),
     ("code-editor", "Code editor"),
     ("emoji-picker", "Emoji picker"),
     ("wheel-picker", "Wheel and time picker"),
     ("calendar-heatmap", "Calendar heatmap"),
     ("file-browser", "File browser"),
     ("tour", "Guided tour"),
+    ("signature-pad", "Signature pad"),
+    ("avatar-upload", "Avatar upload"),
+    ("time-dial", "Time dial"),
+    ("aspect-ratio", "Aspect-ratio picker"),
+    ("ruler-slider", "Ruler slider"),
+    ("hex-viewer", "Hex viewer"),
+    ("tree-table", "Tree table"),
+    ("problems-panel", "Problems panel"),
+    ("stack-trace", "Stack trace"),
+    ("blame-view", "Blame view"),
+    ("coverage-view", "Coverage view"),
+    ("query-builder", "Query builder"),
+    ("regex-tester", "Regex tester"),
+    ("feature-flags", "Feature flags"),
+    ("dependency-graph", "Dependency graph"),
+    ("veil", "Veil"),
+    ("onboarding-checklist", "Onboarding checklist"),
+    ("swipe-actions", "Swipe actions"),
+    ("docking-panels", "Docking panels"),
+    ("bubble-chart", "Bubble chart"),
+    ("chart-annotations", "Chart annotations"),
+    ("dot-matrix", "Dot-matrix display"),
     ("spotlight-card", "Spotlight card"),
     ("editable-text", "Editable text"),
     ("money-field", "Money field"),
@@ -312,6 +336,24 @@ struct State {
     audio_prog: f32,
     audio_playing: bool,
     win_look: Platform,
+    win_event: Option<(&'static str, &'static str)>,
+    win_events: u32,
+    /// virtual-list: 100k rows, made on first use.
+    vl_rows: Vec<lumen::ListRow>,
+    vl_sel: Option<usize>,
+    vl_mode: u8,
+    vl_next_key: u64,
+    vl_built: usize,
+    vl_off: f32,
+    /// accessibility: a form a screen reader can drive.
+    ax_name: String,
+    ax_wifi: bool,
+    ax_vol: f32,
+    ax_theme: u8,
+    ax_dialog: bool,
+    ax_log: String,
+    ax_sel: Option<usize>,
+    ax_rows: Vec<lumen::ListRow>,
     split_ratio: f32,
     term_lines: Vec<TermLine>,
     term_in: String,
@@ -325,6 +367,38 @@ struct State {
     emoji: String,
     wheel_size: usize,
     wheel_time: lumen::Time,
+    signature: lumen::Signature,
+    photo: lumen::UploadState,
+    logo: lumen::UploadState,
+    upload_t: f64,
+    dial_time: lumen::Time,
+    crop_ratio: usize,
+    crop_portrait: bool,
+    weight: f32,
+    height_cm: f32,
+    tt_open: BTreeSet<String>,
+    tt_sel: String,
+    problem_open: Option<usize>,
+    frame_open: Option<usize>,
+    blame_pick: Option<usize>,
+    query: lumen::QueryGroup,
+    query_init: bool,
+    re_pattern: String,
+    re_flags: lumen::RegexFlags,
+    re_text: String,
+    flags: Vec<lumen::FeatureFlag>,
+    dep_sel: Option<usize>,
+    veil_key: bool,
+    onboard: Vec<lumen::OnboardingStep>,
+    onboard_open: bool,
+    swipe_init: bool,
+    swipe_rows: Vec<(String, String, String, bool)>,
+    swipe_note: String,
+    dock: lumen::DockLayout,
+    bubble_year: f32,
+    bubble_play: bool,
+    bubble_t: f64,
+    board_step: usize,
     heat_sel: Option<Date>,
     fb_path: Vec<String>,
     fb_sel: Option<usize>,
@@ -489,6 +563,22 @@ impl State {
             audio_prog: 0.38,
             audio_playing: false,
             win_look: Platform::Mac,
+            win_event: None,
+            win_events: 0,
+            vl_rows: vec![],
+            vl_sel: None,
+            vl_mode: 0,
+            vl_next_key: 0,
+            vl_built: 0,
+            vl_off: 0.0,
+            ax_name: String::new(),
+            ax_wifi: false,
+            ax_vol: 4.0,
+            ax_theme: 0,
+            ax_dialog: false,
+            ax_log: "Nothing yet".into(),
+            ax_sel: None,
+            ax_rows: vec![],
             split_ratio: 0.38,
             term_lines: vec![
                 TermLine::cmd("cargo test -p lumen-core --quiet"),
@@ -506,6 +596,38 @@ impl State {
             emoji: "Ship it".into(),
             wheel_size: 3,
             wheel_time: lumen::Time::new(9, 30),
+            signature: demo_signature(),
+            photo: lumen::UploadState::Done,
+            logo: lumen::UploadState::Uploading(0.38),
+            upload_t: -1.0,
+            dial_time: lumen::Time::new(7, 30),
+            crop_ratio: 4,
+            crop_portrait: false,
+            weight: 72.4,
+            height_cm: 178.0,
+            tt_open: ["lumen", "crates"].iter().map(|s| s.to_string()).collect(),
+            tt_sel: "lumen-core".into(),
+            problem_open: None,
+            frame_open: None,
+            blame_pick: None,
+            query: demo_query(),
+            query_init: false,
+            re_pattern: r"(\d{4})-(\d{2})-(\d{2})".into(),
+            re_flags: lumen::RegexFlags::default(),
+            re_text: "Released 2026-11-28, patched 2026-12-03.\nNext review: 2027-01-15 (tentative)".into(),
+            flags: demo_flags(),
+            dep_sel: Some(1),
+            veil_key: false,
+            onboard: demo_onboarding(),
+            onboard_open: true,
+            swipe_init: false,
+            swipe_rows: demo_swipe_rows(),
+            swipe_note: String::new(),
+            dock: demo_dock(),
+            bubble_year: 2023.0,
+            bubble_play: false,
+            bubble_t: 0.0,
+            board_step: 0,
             heat_sel: None,
             fb_path: vec!["lumen".into(), "crates".into()],
             fb_sel: Some(1),
@@ -686,6 +808,366 @@ fn revenue() -> Vec<f32> {
 }
 fn costs() -> Vec<f32> {
     vec![30.0, 33.0, 35.0, 38.0, 41.0, 40.0, 46.0, 49.0, 52.0, 55.0, 58.0, 61.0]
+}
+
+/// Coffee chains over the years: revenue (log), satisfaction, customers.
+fn demo_bubbles(year: i32) -> Vec<lumen::Bubble> {
+    let t = (year - 2019) as f32 / 7.0;
+    let chains: [(&str, usize, f32, f32, f32, f32, f32, f32); 12] = [
+        ("Lisbon", 0, 60.0, 420.0, 72.0, 86.0, 8_000.0, 30_000.0),
+        ("Oslo", 0, 120.0, 380.0, 80.0, 84.0, 6_000.0, 12_000.0),
+        ("Berlin", 0, 300.0, 1400.0, 70.0, 90.0, 20_000.0, 70_000.0),
+        ("Porto", 0, 40.0, 160.0, 76.0, 92.0, 3_000.0, 9_000.0),
+        ("Austin", 1, 200.0, 900.0, 68.0, 78.0, 15_000.0, 45_000.0),
+        ("Bogotá", 1, 30.0, 240.0, 62.0, 88.0, 5_000.0, 40_000.0),
+        ("Toronto", 1, 400.0, 700.0, 82.0, 80.0, 25_000.0, 38_000.0),
+        ("Lima", 1, 25.0, 110.0, 58.0, 74.0, 2_500.0, 18_000.0),
+        ("Seoul", 2, 500.0, 1800.0, 74.0, 93.0, 30_000.0, 90_000.0),
+        ("Hanoi", 2, 22.0, 300.0, 64.0, 85.0, 4_000.0, 60_000.0),
+        ("Osaka", 2, 350.0, 520.0, 88.0, 83.0, 22_000.0, 26_000.0),
+        ("Pune", 2, 35.0, 500.0, 55.0, 81.0, 6_000.0, 75_000.0),
+    ];
+    chains
+        .iter()
+        .map(|(name, g, x0, x1, y0, y1, s0, s1)| {
+            // Revenue grows geometrically; satisfaction and size linearly.
+            let x = x0 * (x1 / x0).powf(t);
+            lumen::Bubble::new(name, x, y0 + (y1 - y0) * t, s0 + (s1 - s0) * t, *g)
+        })
+        .collect()
+}
+
+fn demo_onboarding() -> Vec<lumen::OnboardingStep> {
+    use lumen::OnboardingStep as S;
+    vec![
+        S::new("Create your workspace", "Name it and pick a region.", "Create", true),
+        S::new("Invite your team", "Teammates get an email with a join link.", "Invite", true),
+        S::new("Connect a repository", "We'll build every push to main and preview every pull request.", "Connect GitHub", false),
+        S::new("Ship your first deploy", "Promote a preview to production when it looks right.", "Deploy", false),
+        S::new("Turn on alerts", "Get a message when a deploy fails or latency spikes.", "Set up alerts", false),
+    ]
+}
+
+fn demo_swipe_rows() -> Vec<(String, String, String, bool)> {
+    [
+        ("Grace Hopper", "Compiler review on Thursday", "I left comments on the parser changes; mostly naming.", true),
+        ("Ada Lovelace", "Re: notes on the engine", "Attached the table for the Bernoulli numbers, take a look.", true),
+        ("Linus Pauling", "Lab booking", "The spectrometer is free Friday afternoon if you still need it.", false),
+        ("Katherine Johnson", "Trajectory numbers", "Rechecked the figures by hand; they match the run.", false),
+    ]
+    .iter()
+    .map(|(a, b, c, d)| (a.to_string(), b.to_string(), c.to_string(), *d))
+    .collect()
+}
+
+fn demo_dock_panels() -> Vec<lumen::DockPanel> {
+    use lumen::DockPanel as P;
+    vec![
+        P::new("files", "Explorer", "folder-tree"),
+        P::new("outline", "Outline", "list-tree"),
+        P::new("main", "main.rs", "file-code"),
+        P::new("preview", "Preview", "eye"),
+        P::new("props", "Properties", "sliders-horizontal"),
+        P::new("term", "Terminal", "square-terminal"),
+        P::new("problems", "Problems", "circle-alert"),
+    ]
+}
+
+fn demo_dock() -> lumen::DockLayout {
+    let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    lumen::DockLayout { zones: [v(&["files", "outline"]), v(&["main", "preview"]), v(&["props"]), v(&["term", "problems"])], active: [0; 4], left: 180.0, right: 180.0, bottom: 110.0 }
+}
+
+fn demo_dock_body(ui: &mut Ui, pid: &str) {
+    match pid {
+        "files" => {
+            for (d, f) in [(0, "src"), (1, "main.rs"), (1, "config.rs"), (1, "server.rs"), (0, "Cargo.toml")] {
+                ui.row().gap(6).align(Align::Center).show(|ui| {
+                    ui.column().width(d as f32 * 14.0).show(|_| {});
+                    let c = ui.color(lumen::Token::TextSecondary);
+                    ui.icon_leaf(if d == 0 && f == "src" { "folder" } else { "file" }, 14.0, c);
+                    ui.label(f).small().truncate();
+                });
+            }
+        }
+        "outline" => {
+            for f in ["struct Config", "fn from_env", "fn port", "fn workers"] {
+                ui.label(f).mono().small().truncate();
+            }
+        }
+        "main" => {
+            for l in ["fn main() {", "    let config = Config::from_env();", "    server::run(config);", "}"] {
+                ui.label(l).mono().small().truncate();
+            }
+        }
+        "preview" => {
+            ui.label("Server listening on :8080").small().truncate();
+            ui.label("3 routes · 4 workers").muted().small().truncate();
+        }
+        "props" => {
+            for (k, v) in [("Port", "8080"), ("Workers", "4"), ("Timeout", "30 s")] {
+                ui.row().fill_width().show(|ui| {
+                    ui.label(k).muted().small().truncate();
+                    ui.column().fill_width().show(|_| {});
+                    ui.label(v).small().truncate();
+                });
+            }
+        }
+        "term" => {
+            ui.label("$ cargo run").mono().small().truncate();
+            ui.label("   Compiling app v0.4.0").mono().small().truncate();
+            ui.label("    Finished dev in 3.2s").mono().small().truncate();
+        }
+        _ => {
+            ui.label("2 warnings in config.rs").small().truncate();
+        }
+    }
+}
+
+fn demo_query_fields() -> Vec<lumen::QueryField> {
+    use lumen::QueryField as F;
+    vec![F::choice("Status", &["open", "in progress", "closed"]), F::number("Priority"), F::text("Assignee"), F::choice("Label", &["bug", "feature", "docs"])]
+}
+
+fn demo_query() -> lumen::QueryGroup {
+    use lumen::{QueryGroup, QueryRule};
+    QueryGroup {
+        any: false,
+        rules: vec![QueryRule { field: 0, op: 0, value: "open".into() }, QueryRule { field: 1, op: 4, value: "2".into() }],
+        groups: vec![QueryGroup { any: true, rules: vec![QueryRule { field: 2, op: 0, value: "ada".into() }, QueryRule { field: 3, op: 0, value: "bug".into() }], groups: vec![] }],
+    }
+}
+
+/// The regex tester's engine for the demo: the regex crate, with the flags as
+/// inline options.
+fn run_regex(pattern: &str, flags: lumen::RegexFlags, text: &str) -> Result<Vec<lumen::RegexMatch>, String> {
+    let mut p = String::new();
+    if flags.ignore_case {
+        p.push_str("(?i)");
+    }
+    if flags.multi_line {
+        p.push_str("(?m)");
+    }
+    if flags.dot_all {
+        p.push_str("(?s)");
+    }
+    p.push_str(pattern);
+    let re = regex::Regex::new(&p).map_err(|e| e.to_string().lines().last().unwrap_or("invalid pattern").trim().to_owned())?;
+    Ok(re
+        .captures_iter(text)
+        .take(500)
+        .map(|c| lumen::RegexMatch { range: c.get(0).map_or(0..0, |m| m.range()), groups: (1..c.len()).map(|k| c.get(k).map(|m| m.range())).collect() })
+        .collect())
+}
+
+fn demo_flags() -> Vec<lumen::FeatureFlag> {
+    let f = |key: &str, description: &str, on: [bool; 3], rollout: f32, stale: bool| lumen::FeatureFlag { key: key.into(), description: description.into(), on: on.to_vec(), rollout, stale };
+    vec![
+        f("new-checkout", "One-page checkout with saved cards.", [true, true, true], 25.0, false),
+        f("search-ranking-ml", "Rank results with the learned model.", [true, true, false], 0.0, false),
+        f("dark-mode-v2", "Follow the OS theme and blend on change.", [true, true, true], 100.0, false),
+        f("beta-onboarding", "Guided tour for new workspaces.", [true, false, false], 0.0, false),
+        f("legacy-export", "CSV export from the old reports page.", [false, false, true], 100.0, true),
+    ]
+}
+
+fn demo_deps() -> (Vec<lumen::DepNode>, Vec<(usize, usize)>) {
+    let n = |name: &str, version: &str| lumen::DepNode { name: name.into(), version: version.into() };
+    let nodes = vec![
+        n("app", "0.4.0"),
+        n("axum", "0.8.4"),
+        n("sqlx", "0.8.6"),
+        n("serde_json", "1.0.140"),
+        n("tower", "0.5.2"),
+        n("hyper", "1.6.0"),
+        n("serde", "1.0.219"),
+        n("tokio", "1.45.1"),
+        n("bytes", "1.10.1"),
+        n("mio", "1.0.4"),
+    ];
+    let edges = vec![(0, 1), (0, 2), (0, 3), (1, 4), (1, 5), (1, 6), (2, 7), (2, 6), (3, 6), (4, 7), (5, 7), (5, 8), (7, 9), (7, 8)];
+    (nodes, edges)
+}
+
+/// The first bytes of a PNG: signature, IHDR, a tEXt chunk and some data.
+fn demo_png_bytes() -> Vec<u8> {
+    let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    let chunk = |b: &mut Vec<u8>, kind: &[u8], data: &[u8]| {
+        b.extend((data.len() as u32).to_be_bytes());
+        b.extend(kind);
+        b.extend(data);
+        let crc = data.iter().chain(kind).fold(0x1234_5678u32, |c, x| c.rotate_left(5) ^ *x as u32);
+        b.extend(crc.to_be_bytes());
+    };
+    chunk(&mut b, b"IHDR", &[0, 0, 0, 128, 0, 0, 0, 128, 8, 6, 0, 0, 0]);
+    chunk(&mut b, b"tEXt", b"Software\0lumen 0.1 (wgpu)");
+    chunk(&mut b, b"pHYs", &[0, 0, 0x0B, 0x13, 0, 0, 0x0B, 0x13, 1]);
+    let data: Vec<u8> = (0..300u32).map(|i| ((i * 37 + (i >> 3) * 11) % 251) as u8).collect();
+    chunk(&mut b, b"IDAT", &data);
+    chunk(&mut b, b"IEND", &[]);
+    b
+}
+
+fn demo_tree_rows() -> Vec<lumen::TreeTableRow> {
+    use lumen::TreeTableRow as R;
+    vec![R::new("lumen", &["lumen", "48.2 MB", "1,284", "Today"]).icon("folder").children([
+        R::new("crates", &["crates", "31.7 MB", "642", "Today"]).icon("folder").children([
+            R::new("lumen-core", &["lumen-core", "12.4 MB", "188", "Today"]).icon("folder"),
+            R::new("lumen-text", &["lumen-text", "9.8 MB", "21", "Nov 24"]).icon("folder"),
+            R::new("lumen-wgpu", &["lumen-wgpu", "3.1 MB", "14", "Nov 22"]).icon("folder"),
+            R::new("lumen-gpui", &["lumen-gpui", "2.6 MB", "9", "Today"]).icon("folder"),
+        ]),
+        R::new("site", &["site", "14.9 MB", "611", "Yesterday"]).icon("folder").children([
+            R::new("img", &["img", "13.2 MB", "584", "Yesterday"]).icon("folder"),
+            R::new("index.html", &["index.html", "18 KB", "1", "Nov 25"]).icon("file-code"),
+        ]),
+        R::new("docs", &["docs", "212 KB", "9", "Nov 26"]).icon("folder"),
+        R::new("Cargo.lock", &["Cargo.lock", "96 KB", "1", "Today"]).icon("file-lock"),
+    ])]
+}
+
+fn demo_problems() -> Vec<lumen::Problem> {
+    use lumen::{Problem, Severity::*};
+    let p = |severity, file: &str, line, col, message: &str, source: &str| Problem { severity, file: file.into(), line, col, message: message.into(), source: source.into() };
+    vec![
+        p(Error, "crates/app/src/config.rs", 42, 17, "mismatched types: expected `u16`, found `&str`", "rustc E0308"),
+        p(Warning, "crates/app/src/config.rs", 12, 5, "unused import: `std::env::VarError`", "rustc"),
+        p(Error, "crates/app/src/server.rs", 88, 9, "cannot borrow `self.pool` as mutable more than once", "rustc E0499"),
+        p(Warning, "crates/app/src/server.rs", 131, 13, "this `if` has identical blocks", "clippy"),
+        p(Info, "crates/app/src/server.rs", 7, 1, "consider adding `#[must_use]` to `bind`", "clippy"),
+        p(Warning, "crates/app/src/routes/health.rs", 23, 21, "variable does not need to be mutable", "rustc"),
+        p(Info, "crates/app/src/routes/health.rs", 3, 1, "item documented but not public", "rustdoc"),
+    ]
+}
+
+fn demo_frames() -> Vec<lumen::StackFrame> {
+    use lumen::StackFrame as F;
+    let lib = |f: &str, file: &str, line| F { function: f.into(), file: file.into(), line, in_app: false, context: vec![] };
+    vec![
+        lib("core::num::from_str_radix", "core/src/num/mod.rs", 1528),
+        lib("core::str::parse", "core/src/str/mod.rs", 2367),
+        F {
+            function: "app::config::port".into(),
+            file: "src/config.rs".into(),
+            line: 42,
+            in_app: true,
+            context: vec![
+                (40, "pub fn port() -> u16 {".into()),
+                (41, "    let raw = env::var(\"PORT\").unwrap_or_else(|_| \"8080\".into());".into()),
+                (42, "    raw.parse().unwrap()".into()),
+                (43, "}".into()),
+            ],
+        },
+        F { function: "app::config::Config::from_env".into(), file: "src/config.rs".into(), line: 18, in_app: true, context: vec![(17, "        Config {".into()), (18, "            port: port(),".into()), (19, "            workers: workers(),".into())] },
+        F { function: "app::main".into(), file: "src/main.rs".into(), line: 9, in_app: true, context: vec![(8, "fn main() {".into()), (9, "    let config = Config::from_env();".into()), (10, "    server::run(config);".into())] },
+        lib("std::rt::lang_start::{{closure}}", "std/src/rt.rs", 195),
+        lib("std::rt::lang_start_internal", "std/src/rt.rs", 174),
+        lib("std::rt::lang_start", "std/src/rt.rs", 194),
+    ]
+}
+
+const DEMO_CONFIG: &str = "use std::env;
+use std::time::Duration;
+
+/// Settings read from the environment at startup.
+pub struct Config {
+    pub port: u16,
+    pub workers: usize,
+    pub timeout: Duration,
+}
+
+impl Config {
+    pub fn from_env() -> Config {
+        Config {
+            port: port(),
+            workers: workers(),
+            timeout: timeout(),
+        }
+    }
+}
+
+pub fn port() -> u16 {
+    let raw = env::var(\"PORT\").unwrap_or_else(|_| \"8080\".into());
+    raw.parse().unwrap_or(8080)
+}
+
+fn workers() -> usize {
+    match env::var(\"WORKERS\") {
+        Ok(v) => v.parse().unwrap_or(4),
+        Err(_) => num_cpus(),
+    }
+}
+
+fn timeout() -> Duration {
+    let secs = env::var(\"TIMEOUT\").ok().and_then(|v| v.parse().ok());
+    Duration::from_secs(secs.unwrap_or(30))
+}
+
+fn num_cpus() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get())
+}";
+
+fn demo_blame() -> Vec<lumen::BlameLine> {
+    let commits = [
+        ("3f9c2e1a", "Ada Lovelace", 412, "Read settings from the environment"),
+        ("a81d07be", "Grace Hopper", 96, "Add worker count with a CPU default"),
+        ("c42e9f30", "Linus Pauling", 3, "Fall back to 8080 on a bad PORT"),
+        ("e5b1a6d2", "Ada Lovelace", 21, "Request timeout setting"),
+    ];
+    // Each line goes to the commit that would have written it.
+    let pick = |t: &str| {
+        if t.contains("8080") {
+            2
+        } else if ["workers", "WORKERS", "num_cpus", "available_parallelism", "Ok(v)", "Err(_)"].iter().any(|k| t.contains(k)) {
+            1
+        } else if ["Duration", "timeout", "TIMEOUT", "secs"].iter().any(|k| t.contains(k)) {
+            3
+        } else {
+            0
+        }
+    };
+    DEMO_CONFIG.lines().map(|t| {
+        let c = commits[pick(t)];
+        lumen::BlameLine { commit: c.0.into(), author: c.1.into(), age_days: c.2, summary: c.3.into(), text: t.into() }
+    }).collect()
+}
+
+fn demo_coverage() -> Vec<lumen::CoverLine> {
+    use lumen::Coverage::*;
+    DEMO_CONFIG.lines().enumerate().map(|(i, t)| {
+        let tr = t.trim();
+        let cover = if tr.is_empty() || tr.starts_with("//") || tr.starts_with("use ") || tr == "}" || tr == "{" || tr.starts_with("pub struct") || tr.starts_with("impl") || tr.starts_with("pub port") || tr.starts_with("pub workers") || tr.starts_with("pub timeout") {
+            Skip
+        } else {
+            match i {
+                23 => Partial(12),
+                28 => Miss,
+                34 => Partial(12),
+                37..=39 => Miss,
+                _ => Hit(if i < 20 { 12 } else { 24 }),
+            }
+        };
+        lumen::CoverLine { text: t.into(), cover }
+    }).collect()
+}
+
+/// A signature for the demo: a tall first letter, cursive loops, and an
+/// underline flourish, in pad units.
+fn demo_signature() -> lumen::Signature {
+    use std::f32::consts::PI;
+    let sample = |n: usize, f: &dyn Fn(f32) -> (f32, f32, f32)| -> Vec<lumen::SigPoint> {
+        (0..=n).map(|k| {
+            let (x, y, w) = f(k as f32 / n as f32);
+            lumen::SigPoint { x, y, w }
+        }).collect()
+    };
+    lumen::Signature {
+        strokes: vec![
+            sample(40, &|t| (0.1 + 0.2 * t, 0.68 - 0.46 * (PI * t).sin().powf(0.8), 0.55 + 0.4 * (PI * t).sin())),
+            sample(120, &|t| (0.3 + 0.46 * t + 0.03 * (1.0 - 0.4 * t) * (11.0 * PI * t).cos(), 0.58 - 0.06 * t + 0.08 * (1.0 - 0.45 * t) * (11.0 * PI * t).sin(), 0.5 + 0.3 * (3.0 * PI * t).cos().abs())),
+            sample(50, &|t| (0.16 + 0.68 * t, 0.71 + 0.035 * (2.0 * PI * t + 0.6).sin(), 0.9 - 0.55 * t)),
+        ],
+    }
 }
 
 fn frame(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
@@ -1223,7 +1705,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "badge" => {
-            ui.row().gap(8).show(|ui| {
+            ui.row().fill_width().gap(8).wrap().justify(Justify::Center).show(|ui| {
                 ui.badge("Neutral", Tone::Neutral);
                 ui.badge("Accent", Tone::Accent);
                 ui.badge("Live", Tone::Success);
@@ -1231,7 +1713,7 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                 ui.badge("Down", Tone::Danger);
                 ui.badge("Beta", Tone::Info);
             });
-            ui.row().gap(20).show(|ui| {
+            ui.row().fill_width().gap(20).wrap().justify(Justify::Center).show(|ui| {
                 ui.status("Operational", Tone::Success);
                 ui.status("Partial outage", Tone::Warning);
                 ui.status("Major outage", Tone::Danger);
@@ -1655,14 +2137,16 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             });
         }
         "sparkline" => {
-            ui.row().fill_width().gap(16).show(|ui| {
+            ui.row().fill_width().gap(16).wrap().show(|ui| {
                 for (label, value, delta, trend) in [
                     ("Revenue", "$118k", 12.4, revenue()),
                     ("Active users", "8,214", 4.1, vec![60.0, 62.0, 61.0, 66.0, 70.0, 69.0, 74.0, 78.0]),
                     ("Churn", "2.1%", -0.6, vec![3.0, 2.8, 2.9, 2.6, 2.5, 2.3, 2.2, 2.1]),
                 ] {
-                    ui.card().show(|ui| {
-                        ui.stat(label, value, Some(delta), Some(&trend));
+                    ui.column().fill_width().min_width(130.0).show(|ui| {
+                        ui.card().show(|ui| {
+                            ui.stat(label, value, Some(delta), Some(&trend));
+                        });
                     });
                 }
             });
@@ -2076,7 +2560,10 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
             ui.column().fill_width().max_width(520.0).align(Align::Center).gap(14).show(|ui| {
                 let opts: Vec<(Platform, &str)> = Platform::ALL.iter().map(|p| (*p, p.name())).collect();
                 ui.segmented(&mut s.win_look, &opts);
-                ui.window_chrome("preview_win", "lumen — workspace")
+                let ev = s.win_event;
+                let n = s.win_events;
+                let shown = ui
+                    .window_chrome("preview_win", "lumen — workspace")
                     .subtitle("ethereal")
                     .show(|ui| {
                         ui.row().fill_width().align(Align::Center).show(|ui| {
@@ -2084,8 +2571,38 @@ fn component(ui: &mut Ui, s: &mut State, demo: &str) {
                             ui.spacer();
                             ui.badge(s.win_look.name(), Tone::Accent);
                         });
-                        ui.label("Traffic lights on macOS, caption buttons on Windows 11, headerbar pill on GNOME, and frosted chrome on Lumen.").secondary();
+                        match ev {
+                            Some((icon, what)) => {
+                                // Each new event rises in and fades up.
+                                let eid = ui.make_id(("win_ev", n));
+                                let t = ui.fade(eid, 0, true, 0.22, 0.1, lumen::Ease::Out);
+                                let c = ui.color(lumen::Token::AccentStrong);
+                                ui.row().gap(8).align(Align::Center).layer(t, lumen::vec2(0.0, (1.0 - t) * 6.0)).show(|ui| {
+                                    ui.icon_leaf(icon, 14.0, c);
+                                    ui.label(what).secondary();
+                                });
+                            }
+                            None => {
+                                ui.label("Try the buttons, drag the title bar or double-click it. In a real window (App::custom_chrome) they move, minimize, zoom and close it.").secondary();
+                            }
+                        }
                     });
+                let r = shown.response;
+                let e = if r.close {
+                    Some(("x", "Close clicked: a real window would close (or ask first)."))
+                } else if r.minimize {
+                    Some(("minus", "Minimize clicked."))
+                } else if r.zoom || r.double_clicked {
+                    Some(if r.maximized { ("maximize-2", "Zoomed: the button now shows restore.") } else { ("minimize-2", "Restored to the previous size.") })
+                } else if r.drag_started {
+                    Some(("move", "Title bar pressed: a real window starts moving here."))
+                } else {
+                    None
+                };
+                if e.is_some() {
+                    s.win_event = e;
+                    s.win_events += 1;
+                }
             });
         }
         "split-pane" => {
@@ -2263,6 +2780,384 @@ ui.button("Ship release").primary().icon("rocket");
                 });
             }
         }
+        "signature-pad" => {
+            ui.column().fill_width().max_width(520.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(12).show(|ui| {
+                    ui.column().gap(4).show(|ui| {
+                        ui.label("Lease agreement · 14 Elm Street").strong();
+                        ui.label("By signing you agree to the terms above, starting 1 December 2026.").muted().small();
+                    });
+                    let short = ui.screen_size().y < 440.0;
+                    let pad = ui.signature_pad("Signature", &mut s.signature);
+                    if short { pad.height(110.0).show() } else { pad.show() };
+                    let empty = s.signature.is_empty();
+                    ui.row().fill_width().justify(Justify::End).show(|ui| {
+                        ui.button("Agree and sign").primary().disabled(empty).show();
+                    });
+                });
+            }));
+        }
+        "avatar-upload" => {
+            // Uploads advance on the demo clock; Upload and Retry restart one.
+            let now = ui.time();
+            let dt = if s.upload_t < 0.0 { 0.0 } else { (now - s.upload_t) as f32 };
+            s.upload_t = now;
+            for st in [&mut s.photo, &mut s.logo] {
+                if let lumen::UploadState::Uploading(p) = st {
+                    *p += dt * 0.12;
+                    if *p >= 1.0 {
+                        *st = lumen::UploadState::Done;
+                    }
+                }
+            }
+            if matches!(s.photo, lumen::UploadState::Uploading(_)) || matches!(s.logo, lumen::UploadState::Uploading(_)) {
+                ui.request_repaint_after(1.0 / 30.0);
+            }
+            ui.column().fill_width().max_width(520.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(18).show(|ui| {
+                    let photo = s.photo.clone();
+                    let o = ui.avatar_upload("photo", &photo).initials("AL").tone(2).title("Profile photo").hint("PNG or JPG, at least 256 × 256 px.").show();
+                    if o.choose || o.retry {
+                        s.photo = lumen::UploadState::Uploading(0.0);
+                    }
+                    if o.remove {
+                        s.photo = lumen::UploadState::Empty;
+                    }
+                    ui.divider();
+                    let logo = s.logo.clone();
+                    let o = ui.avatar_upload("logo", &logo).initials("NS").tone(0).title("Team logo").hint("Shown in invites and the sidebar.").show();
+                    if o.choose || o.retry {
+                        s.logo = lumen::UploadState::Uploading(0.0);
+                    }
+                    if o.remove {
+                        s.logo = lumen::UploadState::Failed("Upload cancelled. The old logo is kept.".into());
+                    }
+                });
+            }));
+        }
+        "time-dial" => {
+            // Short screens (site cards, phones in landscape) get a smaller
+            // face and lose the title and caption.
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(360.0).show(|ui| ui.card().show(|ui| {
+                ui.column().gap(12).align(Align::Center).show(|ui| {
+                    if !short {
+                        ui.label("Wake-up alarm").strong();
+                    }
+                    let mut dial = ui.time_dial("alarm", &mut s.dial_time).step(5);
+                    if short {
+                        dial = dial.diameter(168.0);
+                    }
+                    dial.show();
+                    if !short {
+                        ui.label(format!("Rings at {} on weekdays", s.dial_time.format_12())).muted().small();
+                    }
+                });
+            }));
+        }
+        "aspect-ratio" => {
+            ui.column().fill_width().max_width(560.0).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(10).show(|ui| {
+                    ui.label("Crop cover photo").strong();
+                    ui.aspect_ratio_picker("crop", &mut s.crop_ratio, &mut s.crop_portrait, &[("Free", 0.0), ("1:1", 1.0), ("4:5", 0.8), ("3:2", 1.5), ("16:9", 16.0 / 9.0)]);
+                });
+            }));
+        }
+        "ruler-slider" => {
+            ui.column().fill_width().max_width(480.0).show(|ui| ui.card().show(|ui| {
+                let short = ui.screen_size().y < 440.0;
+                ui.column().fill_width().gap(if short { 12 } else { 20 }).show(|ui| {
+                    ui.ruler_slider("Weight", &mut s.weight, 30.0..=200.0).step(0.1).major(10).unit("kg").show();
+                    ui.ruler_slider("Height", &mut s.height_cm, 100.0..=220.0).step(1.0).major(10).unit("cm").show();
+                    if !short {
+                        ui.label(format!("BMI {:.1}", s.weight / (s.height_cm / 100.0).powi(2))).muted().small();
+                    }
+                });
+            }));
+        }
+        "hex-viewer" => {
+            let bytes = demo_png_bytes();
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                    ui.icon_leaf("file-image", 16.0, ui.color(lumen::Token::TextSecondary));
+                    ui.label("logo-mark.png").strong();
+                    ui.label(format!("{} bytes", bytes.len())).muted().small();
+                });
+                let short = ui.screen_size().y < 440.0;
+                ui.hex_viewer("logo-mark.png", &bytes).height(if short { 150.0 } else { 250.0 }).show();
+            });
+        }
+        "tree-table" => {
+            let rows = demo_tree_rows();
+            let narrow = ui.screen_size().x < 600.0;
+            let cols: Vec<(&str, f32)> = if narrow { vec![("Name", 0.0), ("Size", 72.0)] } else { vec![("Name", 0.0), ("Size", 80.0), ("Files", 56.0), ("Modified", 96.0)] };
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.tree_table("disk", &cols, &rows, &mut s.tt_open, &mut s.tt_sel);
+            });
+        }
+        "problems-panel" => {
+            let mut problems = demo_problems();
+            if ui.screen_size().y < 440.0 {
+                problems.truncate(4);
+            }
+            ui.column().fill_width().max_width(640.0).gap(8).show(|ui| {
+                if let Some(i) = ui.problems_panel("build", &problems) {
+                    s.problem_open = Some(i);
+                }
+                if let Some(i) = s.problem_open {
+                    let p = &problems[i];
+                    ui.label(format!("Opened {}:{}:{}", p.file, p.line, p.col)).muted().small();
+                }
+            });
+        }
+        "stack-trace" => {
+            let mut frames = demo_frames();
+            if ui.screen_size().y < 440.0 {
+                // A short card: the panic site and its callers only.
+                frames.truncate(4);
+            }
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                if let Some(i) = ui.stack_trace("panic", "ParseIntError", "invalid digit found in string: \"80a0\" (PORT)", &frames, "rust") {
+                    s.frame_open = Some(i);
+                }
+            });
+        }
+        "blame-view" => {
+            let lines = demo_blame();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(760.0).gap(8).show(|ui| {
+                if let Some(i) = ui.blame_view("config.rs", &lines).height(if short { 200.0 } else { 300.0 }).show() {
+                    s.blame_pick = Some(i);
+                }
+                let pick = s.blame_pick.map(|i| &lines[i]);
+                let text = match pick {
+                    Some(l) => format!("{} · {} · {}", &l.commit[..7], l.author, l.summary),
+                    None => "Click a line to see its commit.".to_owned(),
+                };
+                ui.label(text).muted().small();
+            });
+        }
+        "coverage-view" => {
+            let lines = demo_coverage();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).show(|ui| {
+                ui.coverage_view("cov", "src/config.rs", &lines).height(if short { 200.0 } else { 300.0 }).show();
+            });
+        }
+        "query-builder" => {
+            let fields = demo_query_fields();
+            // A short card starts without the nested group (set once, so
+            // edits stay).
+            if !s.query_init {
+                s.query_init = true;
+                if ui.screen_size().y < 440.0 {
+                    s.query.groups.clear();
+                }
+            }
+            ui.column().fill_width().max_width(680.0).show(|ui| {
+                ui.query_builder("issues", &fields, &mut s.query);
+            });
+        }
+        "regex-tester" => {
+            ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.regex_tester("dates", &mut s.re_pattern, &mut s.re_flags, &mut s.re_text, run_regex);
+            });
+        }
+        "feature-flags" => {
+            ui.column().fill_width().max_width(760.0).show(|ui| {
+                ui.feature_flags("flags", &["Dev", "Staging", "Production"], &mut s.flags);
+            });
+        }
+        "dependency-graph" => {
+            let (nodes, edges) = demo_deps();
+            ui.column().fill_width().max_width(760.0).show(|ui| {
+                ui.dependency_graph("deps", &nodes, &edges, &mut s.dep_sel);
+            });
+        }
+        "veil" => {
+            ui.column().fill_width().max_width(560.0).gap(12).show(|ui| ui.card().show(|ui| {
+                ui.column().fill_width().gap(12).show(|ui| {
+                    ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                        ui.label("Production API key").strong();
+                        ui.badge("Live", lumen::Tone::Success);
+                    });
+                    ui.veil("key", &mut s.veil_key, "Secret key", |ui| {
+                        ui.column().fill_width().pad(12).bg(lumen::Token::SurfaceMuted).radius(10.0).show(|ui| {
+                            ui.label("nsk_demo_0000-not-a-real-key-4hG6").mono();
+                            ui.label("Created Nov 3 by Ada Lovelace · last used 2 hours ago").muted().small();
+                        });
+                    });
+                    ui.row().fill_width().gap(8).justify(Justify::End).show(|ui| {
+                        if s.veil_key && ui.button("Hide").icon("eye-off").ghost().small().show().clicked {
+                            s.veil_key = false;
+                        }
+                        ui.copy_button("Copy", "nsk_demo_0000-not-a-real-key-4hG6");
+                    });
+                });
+            }));
+        }
+        "onboarding-checklist" => {
+            let short = ui.screen_size().y < 440.0;
+            let out = ui.column().fill_width().max_width(640.0).show(|ui| {
+                ui.column().fill_width().pad(if short { 8 } else { 16 }).bg(lumen::Token::SurfaceMuted).radius(14.0).gap(10).show(|ui| {
+                    if !short {
+                        ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                            ui.label("Northstar workspace").strong();
+                            ui.badge("Trial · 12 days left", lumen::Tone::Accent);
+                        });
+                    }
+                    ui.row().fill_width().justify(Justify::End).show(|ui| {
+                        // A short card shows the first four steps.
+                        let n = if short { 4.min(s.onboard.len()) } else { s.onboard.len() };
+                        ui.onboarding_checklist("setup", "Get started", &s.onboard[..n], &mut s.onboard_open)
+                    })
+                }).inner
+            }).inner;
+            if let Some(i) = out.inner.action {
+                s.onboard[i].done = true;
+            }
+            if out.inner.dismissed {
+                s.onboard = demo_onboarding();
+            }
+        }
+        "swipe-actions" => {
+            use lumen::{SwipeAction, Tone};
+            if !s.swipe_init {
+                s.swipe_init = true;
+                ui.scope("inbox", |ui| ui.swipe_row_reveal(1usize, Some(true)));
+            }
+            let leading = [SwipeAction::new("Unread", "mail", Tone::Accent)];
+            let trailing = [SwipeAction::new("Archive", "archive", Tone::Success), SwipeAction::new("Delete", "trash-2", Tone::Danger)];
+            ui.column().fill_width().max_width(480.0).gap(8).show(|ui| {
+                ui.column().fill_width().radius(14.0).border(lumen::Token::BorderSubtle).clip().show(|ui| {
+                    ui.scope("inbox", |ui| {
+                        let mut hit = None;
+                        for (i, (from, subject, preview, unread)) in s.swipe_rows.iter().enumerate() {
+                            if let Some(h) = ui.swipe_row(i, &format!("{from}: {subject}"), &leading, &trailing, |ui| {
+                                ui.row().fill_width().pad(12).gap(10).align(Align::Start).show(|ui| {
+                                    ui.avatar(&from[..1], i, 32.0, None);
+                                    ui.column().fill_width().gap(2).show(|ui| {
+                                        if *unread {
+                                            ui.label(from.as_str()).strong();
+                                        } else {
+                                            ui.label(from.as_str());
+                                        }
+                                        ui.label(subject.as_str()).small();
+                                        ui.label(preview.as_str()).muted().small();
+                                    });
+                                });
+                            }) {
+                                hit = Some((i, h));
+                            }
+                            if i + 1 < s.swipe_rows.len() {
+                                ui.divider();
+                            }
+                        }
+                        if let Some((i, h)) = hit {
+                            let name = if h.trailing { trailing[h.index].label.clone() } else { leading[h.index].label.clone() };
+                            s.swipe_note = format!("{name}: {}", s.swipe_rows[i].1);
+                            if !h.trailing {
+                                s.swipe_rows[i].3 = !s.swipe_rows[i].3;
+                            }
+                        }
+                    });
+                });
+                let note = if s.swipe_note.is_empty() { "Swipe a message, or focus it and use ← →.".to_owned() } else { s.swipe_note.clone() };
+                ui.label(note).muted().small();
+            });
+        }
+        "docking-panels" => {
+            let panels = demo_dock_panels();
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(900.0).show(|ui| {
+                ui.dock_area("ide", &panels, &mut s.dock, if short { 280.0 } else { 380.0 }, |ui, pid| demo_dock_body(ui, pid));
+            });
+        }
+        "bubble-chart" => {
+            // Play steps a year every 0.9 s; the bubbles glide between years.
+            let now = ui.time();
+            if s.bubble_play {
+                if now - s.bubble_t > 0.9 {
+                    s.bubble_t = now;
+                    s.bubble_year = if s.bubble_year >= 2026.0 { 2019.0 } else { s.bubble_year + 1.0 };
+                }
+                ui.request_repaint_after(0.9 - (now - s.bubble_t));
+            }
+            let data = demo_bubbles(s.bubble_year as i32);
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.bubble_chart("coffee", &data)
+                    .groups(&["Europe", "Americas", "Asia"])
+                    .axes("Monthly revenue", "Satisfaction %")
+                    .size_label("Customers")
+                    .x_range(20.0, 2000.0)
+                    .log_x(true)
+                    .y_range(50.0, 100.0)
+                    .max_size(90_000.0)
+                    .frame(&format!("{}", s.bubble_year as i32))
+                    .height(if short { 200.0 } else { 300.0 })
+                    .format(|v| if v >= 1000.0 { format!("${:.1}M", v / 1000.0) } else { format!("${v:.0}k") }, |v| format!("{v:.0}"))
+                    .show();
+                ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                    let icon = if s.bubble_play { "pause" } else { "play" };
+                    if ui.icon_button(icon).tooltip(if s.bubble_play { "Pause" } else { "Play" }).show().clicked {
+                        s.bubble_play = !s.bubble_play;
+                        s.bubble_t = now;
+                    }
+                    let readout = format!("{}", s.bubble_year as i32);
+                    ui.slider("Year", &mut s.bubble_year, 2019.0..=2026.0).step(1.0).width(f32::INFINITY).readout(readout).show();
+                });
+            });
+        }
+        "chart-annotations" => {
+            use lumen::{Annotation, Series, Tone};
+            let weeks = ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10", "W11", "W12"];
+            let short = ui.screen_size().y < 440.0;
+            ui.column().fill_width().max_width(720.0).gap(8).show(|ui| {
+                ui.row().fill_width().gap(8).align(Align::Center).show(|ui| {
+                    ui.label("Weekly signups").strong();
+                    ui.badge("+38% this quarter", Tone::Success);
+                });
+                ui.line_chart("signups", &weeks, vec![
+                    Series::new("Signups", vec![620.0, 680.0, 710.0, 760.0, 420.0, 480.0, 820.0, 880.0, 940.0, 1180.0, 1240.0, 1310.0]),
+                    Series::new("Trials", vec![210.0, 240.0, 260.0, 250.0, 160.0, 170.0, 300.0, 330.0, 360.0, 470.0, 500.0, 540.0]),
+                ])
+                .smooth(true)
+                .height(if short { 190.0 } else { 260.0 })
+                .annotate(Annotation::target(1200.0, "Goal 1.2k"))
+                .annotate(Annotation::band(4, 5, "Outage", Tone::Danger))
+                .annotate(Annotation::point(9, 0, "Launch"))
+                .annotate(Annotation::point(2, 1, "Pricing page"))
+                .show();
+            });
+        }
+        "dot-matrix" => {
+            let statuses = [["ON TIME", "ON TIME", "DELAYED 5"], ["BOARDING", "ON TIME", "DELAYED 9"], ["DEPARTED", "BOARDING", "DELAYED 9"]];
+            let st = statuses[s.board_step % 3];
+            let narrow = ui.screen_size().x < 600.0;
+            ui.column().fill_width().max_width(640.0).gap(10).show(|ui| {
+                ui.column().gap(6).show(|ui| {
+                    ui.dot_matrix("head", "DEPARTURES").dot(if narrow { 3.0 } else { 4.0 }).show();
+                    for (i, (time, dest)) in [("08:42", "EDINBURGH"), ("08:55", "YORK"), ("09:10", "LEEDS")].into_iter().enumerate() {
+                        ui.row().gap(8).align(Align::Center).show(|ui| {
+                            let d = if narrow { 3.0 } else { 4.0 };
+                            ui.dot_matrix(format!("t{i}"), time).dot(d).show();
+                            ui.dot_matrix(format!("d{i}"), dest).cols(if narrow { 0 } else { 54 }).dot(d).show();
+                            if !narrow {
+                                ui.dot_matrix(format!("s{i}"), st[i]).cols(54).align_right().dot(d).tone(if st[i].starts_with("DELAY") { lumen::Token::Danger } else { lumen::Token::Success }).show();
+                            }
+                        });
+                    }
+                    ui.dot_matrix("ticker", "PLATFORM 4 NOW PLATFORM 6 - MIND THE GAP - QUIET COACH IN CAR C").cols(if narrow { 84 } else { 112 }).dot(3.0).tone(lumen::Token::Info).scroll(true).show();
+                });
+                ui.row().gap(8).align(Align::Center).show(|ui| {
+                    if ui.button("Next update").icon("refresh-cw").small().show().clicked {
+                        s.board_step += 1;
+                    }
+                    ui.label("Statuses flip column by column.").muted().small();
+                });
+            });
+        }
         "wheel-picker" => {
             ui.row().gap(40).align(Align::Center).show(|ui| {
                 ui.column().gap(8).align(Align::Center).show(|ui| {
@@ -2363,6 +3258,122 @@ ui.button("Ship release").primary().icon("rocket");
                 }
                 let pick = s.list_sel.map(|i| s.list_rows[i].title.clone()).unwrap_or_else(|| "nothing".into());
                 ui.label(format!("Selected: {pick}. Use ↑ ↓ to move, Enter to open.")).muted().small();
+            });
+        }
+        "accessibility" => {
+            if s.ax_rows.is_empty() {
+                s.ax_rows = (0..1000u64).map(|k| lumen::ListRow::new(format!("Message {}", k + 1)).subtitle(["Ada", "Grace", "Linus", "Barbara"][(k % 4) as usize])).collect();
+            }
+            ui.row().fill_width().gap(24).align(Align::Start).wrap().show(|ui| {
+                ui.column().width(320.0).gap(12).show(|ui| {
+                    ui.heading("Profile").level(2);
+                    ui.text_input(&mut s.ax_name).label("Name").placeholder("Your name").show();
+                    ui.switch("Wi-Fi", &mut s.ax_wifi).show();
+                    ui.slider("Volume", &mut s.ax_vol, 0.0..=10.0).step(1.0).show();
+                    ui.select(&mut s.ax_theme, &[(0, "System"), (1, "Light"), (2, "Dark")]).label("Theme").show();
+                    ui.row().gap(8).show(|ui| {
+                        if ui.button("Save").primary().show().clicked() {
+                            s.ax_log = format!("Saved {}", if s.ax_name.is_empty() { "(no name)" } else { s.ax_name.as_str() });
+                        }
+                        let more = ui.button("More").icon("chevron-down").show();
+                        ui.menu(&more, |ui| {
+                            if ui.menu_item("copy", "Duplicate").shortcut("⌘D").show().clicked() {
+                                s.ax_log = "Duplicated".into();
+                            }
+                            if ui.menu_item("trash", "Delete…").danger().show().clicked() {
+                                s.ax_dialog = true;
+                            }
+                        });
+                    });
+                    ui.label(format!("Last action: {}", s.ax_log)).muted();
+                });
+                ui.column().fill_width().min_width(260.0).gap(8).show(|ui| {
+                    ui.heading("Inbox").level(2);
+                    ui.scroll("ax-inbox").height(300.0).show(|ui| {
+                        ui.list_view("ax-inbox", &s.ax_rows, &mut s.ax_sel);
+                    });
+                });
+            });
+            let mut deleted = false;
+            ui.dialog("ax-confirm", &mut s.ax_dialog).title("Delete profile?").description("This can't be undone.").show(|ui| {
+                ui.row().gap(8).show(|ui| {
+                    if ui.button("Cancel").show().clicked() {
+                        ui.close_layer();
+                    }
+                    if ui.button("Delete").variant(lumen::Variant::Danger).show().clicked() {
+                        deleted = true;
+                        ui.close_layer();
+                    }
+                });
+            });
+            if deleted {
+                s.ax_log = "Deleted".into();
+            }
+        }
+        "virtual-list" => {
+            if s.vl_rows.is_empty() {
+                s.vl_rows = (0..100_000u64).map(virtual_row).collect();
+                s.vl_next_key = 100_000;
+                if std::env::var_os("LUMEN_VL_TABLE").is_some() {
+                    s.vl_mode = 1;
+                }
+            }
+            let n = s.vl_rows.len();
+            let avail = (ui.screen_size().y - if s.embed { 150.0 } else { 190.0 }).max(200.0);
+            ui.column().fill_width().max_width(720.0).gap(12).show(|ui| {
+                ui.row().fill_width().gap(10).align(Align::Center).show(|ui| {
+                    ui.segmented(&mut s.vl_mode, &[(0u8, "List"), (1u8, "Table")]);
+                    ui.spacer();
+                    // History arriving above: what you're reading stays put.
+                    if ui.button("Load 25 earlier").icon("history").show().clicked {
+                        let base = s.vl_next_key;
+                        s.vl_next_key += 25;
+                        let mut older: Vec<lumen::ListRow> = (0..25).map(|k| virtual_row(base + k)).collect();
+                        older.append(&mut s.vl_rows);
+                        s.vl_rows = older;
+                        s.vl_sel = s.vl_sel.map(|i| i + 25);
+                    }
+                });
+                let sid = if s.vl_mode == 0 { ui.peek_id(("scroll", "vl")) } else { ui.peek_id(("scroll", ("tbody", "vl_table"))) };
+                if std::env::var_os("LUMEN_AUTOSCROLL").is_some() {
+                    // Benchmark: scroll continuously through all rows.
+                    s.vl_off += 37.0;
+                    ui.scroll_set(sid, s.vl_off);
+                    ui.request_repaint_after(0.0);
+                }
+                if s.vl_mode == 0 {
+                    let rad = ui.look().card.radius;
+                    ui.column().fill_width().bg(lumen::Token::Surface).border(lumen::Token::BorderSubtle).radius(rad).pad(6).show(|ui| {
+                        ui.scroll("vl").height(avail).show(|ui| {
+                            let out = ui.list_view("vl_list", &s.vl_rows, &mut s.vl_sel);
+                            s.vl_built = out.built;
+                            if let Some(i) = out.starred {
+                                s.vl_rows[i].starred = !s.vl_rows[i].starred;
+                            }
+                        });
+                    });
+                } else {
+                    let rows = &s.vl_rows;
+                    let clicked = ui
+                        .table("vl_table")
+                        .columns([TableCol::new("Event").fill(2.0), TableCol::new("Service"), TableCol::new("Time").width(64.0).right()])
+                        .lazy_rows(
+                            n,
+                            |i| rows[i].key.unwrap_or(i as u64) as usize,
+                            |i| {
+                                let r = &rows[i];
+                                vec![TableCell::strong(r.title.clone()), TableCell::muted(r.subtitle.clone().unwrap_or_default()), TableCell::mono(r.meta.clone().unwrap_or_default())]
+                            },
+                        )
+                        .height(avail)
+                        .show();
+                    if let Some(c) = clicked {
+                        s.vl_sel = rows.iter().position(|r| r.key == Some(c as u64));
+                    }
+                    s.vl_built = 0;
+                }
+                let shown = if s.vl_mode == 0 { format!(" · {} rows built", s.vl_built) } else { String::new() };
+                ui.label(format!("{} rows{shown}. ↑ ↓ Page Up/Down Home End move; type to jump.", group_digits(n))).muted().small();
             });
         }
         "notification-list" => {
@@ -3505,6 +4516,7 @@ fn parse_look(s: &str) -> Platform {
         "mac" | "macos" => Platform::Mac,
         "windows" | "win" => Platform::Windows,
         "gnome" | "linux" => Platform::Gnome,
+        "native" => Platform::current(),
         _ => Platform::Lumen,
     }
 }
@@ -3534,10 +4546,12 @@ struct Params {
     check: bool,
     /// `--click X,Y` (repeatable): clicks before the screenshot.
     clicks: Vec<lumen::Vec2>,
+    chrome: bool,
+    a11y: bool,
 }
 
 fn params() -> Params {
-    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![] };
+    let mut p = Params { demo: "hero".into(), dark: false, look: Platform::Lumen, accent: Accent::Blue, screenshot: None, size: (960, 600), scale: 2.0, embed: false, open: false, speed: 1.0, reduced: false, check: false, clicks: vec![], chrome: false, a11y: false };
     #[cfg(target_arch = "wasm32")]
     {
         let q = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
@@ -3584,6 +4598,8 @@ fn params() -> Params {
                 "--embed" => p.embed = true,
                 "--open" => p.open = true,
                 "--check" => p.check = true,
+                "--chrome" => p.chrome = true,
+                "--a11y" => p.a11y = true,
                 "--click" => {
                     i += 1;
                     if let Some((x, y)) = args.get(i).and_then(|v| v.split_once(',')) {
@@ -3620,6 +4636,10 @@ fn main() {
     state.embed = p.embed;
     state.force_open = p.open;
     state.look = p.look;
+    if p.look != Platform::Lumen {
+        // The window-chrome demo shows that look's title bar first.
+        state.win_look = p.look;
+    }
     let mode = if p.dark { Mode::Dark } else { Mode::Light };
     let mut look: Look = p.look.look();
     if p.speed > 0.0 && p.speed != 1.0 {
@@ -3635,8 +4655,14 @@ fn main() {
             steps.push(lumen::ShotStep::Click(c));
             steps.push(lumen::ShotStep::Wait(0.6));
         }
-        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, ..Default::default() };
-        match lumen::screenshot(out, &shot, &mut state, view) {
+        let shot = lumen::Shot { size: p.size, scale: p.scale, mode, accent: p.accent, look, steps, check_layout: p.check, a11y: p.a11y, ..Default::default() };
+        let res = if p.chrome {
+            let t = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen").to_string();
+            lumen::screenshot(out, &shot, &mut state, move |ui, s| chrome_view(ui, s, &t))
+        } else {
+            lumen::screenshot(out, &shot, &mut state, view)
+        };
+        match res {
             Ok(()) => println!("wrote {out}"),
             Err(e) => {
                 eprintln!("screenshot failed: {e}");
@@ -3646,5 +4672,49 @@ fn main() {
         return;
     }
     let title = DEMOS.iter().find(|d| d.0 == p.demo).map(|d| d.1).unwrap_or("lumen");
-    lumen::App::new(format!("lumen — {title}")).size(p.size.0, p.size.1).mode(mode).accent(p.accent).look(look).canvas("lumen").run(state, view);
+    let app = lumen::App::new(format!("lumen — {title}")).size(p.size.0, p.size.1).mode(mode).accent(p.accent).look(look).canvas("lumen");
+    if p.chrome {
+        app.custom_chrome().run(state, move |ui, s| chrome_view(ui, s, title));
+    } else {
+        app.run(state, view);
+    }
+}
+
+/// One row of the virtual-list demo: a deploy event, some with a preview
+/// line, so rows have different heights.
+fn virtual_row(k: u64) -> lumen::ListRow {
+    const SERVICES: [&str; 6] = ["edge-proxy", "renderer", "glyph-atlas", "auth", "billing", "search"];
+    const REGIONS: [&str; 4] = ["eu-central", "us-east", "ap-south", "sa-east"];
+    const VERBS: [&str; 5] = ["Deployed", "Rolled back", "Scaled", "Restarted", "Promoted"];
+    let h = k.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32;
+    let svc = SERVICES[(h % 6) as usize];
+    let mut r = lumen::ListRow::new(format!("{} {svc} #{k}", VERBS[(h / 7 % 5) as usize]))
+        .key(k)
+        .subtitle(REGIONS[(h / 3 % 4) as usize])
+        .meta(format!("{:02}:{:02}", (h / 11) % 24, (h / 13) % 60))
+        .icon(["rocket", "rotate-ccw", "layers", "refresh-cw", "arrow-up-circle"][(h / 7 % 5) as usize]);
+    if h % 3 == 0 {
+        r = r.preview(format!("{} replicas healthy · p95 {} ms · build {:x}", 2 + h % 9, 40 + h % 160, h & 0xFFFF));
+    }
+    if h % 11 == 0 {
+        r = r.badge("canary", Tone::Warning);
+    }
+    r.unread(h % 5 == 0)
+}
+
+fn group_digits(n: usize) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// `--chrome`: the demo inside lumen's own title bar instead of the OS's.
+fn chrome_view(ui: &mut Ui, s: &mut State, title: &str) {
+    ui.window_chrome("app_chrome", title).window().show(|ui| view(ui, s));
 }

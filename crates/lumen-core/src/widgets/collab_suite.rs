@@ -5,6 +5,7 @@
 use std::ops::RangeInclusive;
 
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -668,6 +669,8 @@ impl Ui {
         for si in 0..n {
             let sid = id.with(("seg", si));
             let ix = self.interact(sid, Sense::CLICK, false);
+            let cur = *current == si;
+            self.a11y(sid, || A11y::new(Role::Tab).label(steps.get(si).map_or("", |s| s.0)).selected(cur).position(si, n));
             if ix.clicked && *current != si {
                 *current = si;
                 changed = true;
@@ -971,6 +974,13 @@ impl Ui {
 
         let ix = self.interact(id, Sense::DRAG, false);
         let mut changed = false;
+        let (a_st, a_set) = self.a11y_step(id);
+        if a_st != 0 || a_set.is_some() {
+            *value = (a_set.map(|v| v as f32).unwrap_or(*value) + a_st as f32 * (hi - lo) / 100.0).clamp(lo, hi);
+            changed = true;
+        }
+        let v_now = *value;
+        self.a11y(id, || A11y::new(Role::Slider).label(label).numeric(v_now as f64, lo as f64, hi as f64, None).value(format!("{v_now:.2}{unit}")));
         if ix.held {
             if let (Some(ptr), Some(r)) = (ix.pointer, self.rect_of(id)) {
                 let pad_x = 10.0;

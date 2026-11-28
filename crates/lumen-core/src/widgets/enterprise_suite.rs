@@ -700,7 +700,12 @@ impl Ui {
             for ri in 0..roles.len() {
                 self.begin(Style { width: Size::FILL, justify: Justify::Center, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
                 if let Some(val) = granted.get_mut(ci).and_then(|r| r.get_mut(ri)) {
-                    if self.scope(("pm", ci, ri), |ui| ui.checkbox("", val).changed()) {
+                    let role = roles.get(ri).copied().unwrap_or_default();
+                    if self.scope(("pm", ci, ri), |ui| {
+                        let r = ui.checkbox("", val).show();
+                        ui.a11y_update(r.id, |a| a.label = Some(format!("{role}: {cap}")));
+                        r.changed
+                    }) {
                         changed = true;
                     }
                 }
@@ -783,7 +788,11 @@ impl Ui {
     /// automatically into balanced columns.
     pub fn masonry_grid(&mut self, key: impl std::hash::Hash, columns: usize, cards: &[MasonryCard]) -> Response {
         let id = self.make_id(("masonry_grid", key));
-        let n_cols = columns.clamp(2, 4);
+        // `columns` is the most it shows; narrow widths (last frame's) drop
+        // columns rather than squeeze cards below a readable width.
+        let min_col = self.look().control.text_size[1] * 11.0;
+        let fit = self.rect_of(id).map(|r| ((r.width() + 12.0) / (min_col + 12.0)).floor() as usize).unwrap_or(columns);
+        let n_cols = columns.clamp(1, 4).min(fit.max(1));
 
         // Estimate each card's relative height from body length + optional metric so columns balance naturally!
         let mut col_heights = vec![0usize; n_cols];
@@ -834,7 +843,7 @@ impl Ui {
                 }
                 self.end();
 
-                self.text_leaf(card.title.clone(), self.text_style(TextRole::BodyStrong), self.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
+                self.text_leaf(card.title.clone(), self.text_style(TextRole::BodyStrong), self.color(Token::Foreground), true, false, Style { width: Size::FILL, ..Default::default() });
                 self.text_leaf(card.body.clone(), self.text_style(TextRole::Caption), self.color(Token::TextSecondary), true, false, Style { width: Size::FILL, ..Default::default() });
                 self.end();
             }

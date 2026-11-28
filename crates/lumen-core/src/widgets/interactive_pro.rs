@@ -9,6 +9,7 @@ use std::ops::RangeInclusive;
 use super::field::EditOpts;
 use super::show_on_drop;
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -161,6 +162,13 @@ impl<'u> RotaryKnob<'u> {
             }
         }
 
+        let (st, set) = ui.a11y_step(dial_id);
+        if st != 0 || set.is_some() {
+            *self.value = (set.map(|v| v as f32).unwrap_or(*self.value) + st as f32 * span * 0.05).clamp(lo, hi);
+            changed = true;
+        }
+        let v_now = *self.value;
+        ui.a11y(dial_id, || A11y::new(Role::Slider).label(self.label.as_str()).numeric(v_now as f64, lo as f64, hi as f64, Some(span as f64 * 0.05)));
         let norm_target = ((*self.value - lo) / span).clamp(0.0, 1.0);
         let norm = ui.spring(id, 0, norm_target, mo.snappy).clamp(0.0, 1.0);
         let press = ui.spring(id, 1, if ix.held { 1.0 } else { 0.0 }, mo.snappy);
@@ -1119,7 +1127,13 @@ impl Ui {
                     }
                 })),
             );
-            let cb_ch = self.scope(("scb", si), |ui| ui.checkbox("", &mut st.done).changed());
+            let done_now = st.done;
+            self.a11y(rid, || A11y::new(Role::CheckBox).toggled(done_now));
+            let cb_ch = self.scope(("scb", si), |ui| {
+                let r = ui.checkbox("", &mut st.done).show();
+                ui.a11y_update(r.id, |a| a.hidden = true);
+                r.changed
+            });
             if r_ix.clicked && !cb_ch {
                 st.done = !st.done;
                 changed = true;

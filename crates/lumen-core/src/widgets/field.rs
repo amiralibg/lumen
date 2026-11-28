@@ -10,6 +10,7 @@ use lumen_text::{Galley, TextAlign, TextStyle};
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::edit::TextEdit;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key, Modifiers};
@@ -244,7 +245,10 @@ impl Ui {
         }
         let lc = if disabled { self.color(Token::TextDisabled) } else { self.color(Token::Foreground) };
         let st = self.text_style(TextRole::Label);
-        self.text_leaf(label, st, lc, false, true, Style::default());
+        let n = self.text_leaf(label, st, lc, false, true, Style::default());
+        if self.accessibility() {
+            self.a11y_field_label = Some((label.to_owned(), n));
+        }
     }
 
     /// Helper, animated error, and optional right-hand counter under a field.
@@ -296,6 +300,7 @@ impl Ui {
     pub(crate) fn field_icon_button(&mut self, id: Id, icon: &str, shown: f32, focusable: bool) -> bool {
         let sense = Sense { click: true, drag: false, focusable, scroll: false };
         let ix = self.interact(id, sense, shown < 0.5);
+        self.a11y(id, || A11y::new(Role::Button).label(super::button::humanize(icon)).disabled(shown < 0.5));
         let mo = self.motion();
         let (key_act, held) = super::key_activate(self, &ix, true);
         let h = self.fade(id, 1, ix.hovered, mo.hover_in, mo.hover_out, Ease::Linear);
@@ -334,6 +339,33 @@ impl Ui {
     pub(crate) fn inline_edit(&mut self, id: Id, value: &mut String, o: EditOpts) -> EditOut {
         let sense = Sense { click: true, drag: true, focusable: true, scroll: false };
         let ix = self.interact(id, sense, o.disabled);
+        if !o.disabled {
+            for a in self.a11y_actions(id) {
+                if let crate::a11y::A11yAction::SetValue(v) = a {
+                    let v: String = v.chars().filter(|c| o.accept.is_none_or(|f| f(*c)) && (o.multiline || *c != '\n')).collect();
+                    *value = match o.max_chars {
+                        Some(m) => v.chars().take(m).collect(),
+                        None => v,
+                    };
+                    self.inline_edit_caret_end(id, value);
+                }
+            }
+        }
+        if self.accessibility() {
+            let label = self.a11y_field_label.take().map(|(l, n)| {
+                self.a11y_hide(n);
+                l
+            });
+            let role = if o.mask {
+                Role::PasswordInput
+            } else if o.multiline {
+                Role::MultilineTextInput
+            } else {
+                Role::TextInput
+            };
+            let shown = if o.mask { String::new() } else { value.clone() };
+            self.a11y(id, || A11y::new(role).label(label.unwrap_or_default()).value(shown).placeholder(o.placeholder.as_str()).disabled(o.disabled));
+        }
         let now = self.time();
         let style = o.style;
         let line_h = style.line_height;

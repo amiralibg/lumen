@@ -674,8 +674,12 @@ impl Ui {
         let bd_c = self.color(Token::BorderSubtle);
         let div_c = self.color(Token::BorderSubtle);
 
+        // Metrics wrap onto more lines rather than truncate their values;
+        // a metric starting a line gets a top divider instead of a left one.
+        let min_w = self.look().control.text_size[1] * 10.0;
+        let left = self.rect_of(id).map(|r| r.min.x);
         self.begin(
-            Style { dir: Dir::Row, width: Size::FILL, align: Align::Stretch, ..Default::default() },
+            Style { dir: Dir::Row, width: Size::FILL, align: Align::Stretch, wrap: true, ..Default::default() },
             Some(id),
             Sense::NONE,
             CursorIcon::Default,
@@ -686,13 +690,19 @@ impl Ui {
         for (i, m) in metrics.iter().enumerate() {
             let is_first = i == 0;
             self.begin(
-                Style { dir: Dir::Column, width: Size::FILL, pad: Sides::all(16.0), gap: 8.0, ..Default::default() },
+                Style { dir: Dir::Column, width: Size::FILL, min: vec2(min_w, 0.0), pad: Sides::all(16.0), gap: 8.0, ..Default::default() },
                 None,
                 Sense::NONE,
                 CursorIcon::Default,
                 false,
                 if !is_first {
-                    Some(Box::new(move |cx, r| cx.painter.rect(Rect::from_xywh(r.min.x, r.min.y + 12.0, 1.0, (r.height() - 24.0).max(0.0)), div_c)))
+                    Some(Box::new(move |cx, r| {
+                        if left.is_some_and(|l| r.min.x <= l + 1.0) {
+                            cx.painter.rect(Rect::from_xywh(r.min.x + 12.0, r.min.y, (r.width() - 24.0).max(0.0), 1.0), div_c)
+                        } else {
+                            cx.painter.rect(Rect::from_xywh(r.min.x, r.min.y + 12.0, 1.0, (r.height() - 24.0).max(0.0)), div_c)
+                        }
+                    }))
                 } else {
                     None
                 },
@@ -706,7 +716,7 @@ impl Ui {
 
             let mut st_v = self.text_style(TextRole::Heading2);
             st_v.tabular = true;
-            self.text_leaf(m.value.clone(), st_v, self.color(Token::Foreground), false, true, Style { width: Size::FILL, ..Default::default() });
+            self.text_leaf(m.value.clone(), st_v, self.color(Token::Foreground), false, false, Style::default());
 
             if m.trend.len() >= 2 {
                 let col = self.color(if m.delta_pct >= 0.0 { Token::Success } else { Token::Danger });

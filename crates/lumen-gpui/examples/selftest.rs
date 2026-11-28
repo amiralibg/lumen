@@ -33,7 +33,7 @@ mod mac {
         div, point, prelude::*, px, rgb, size, App, AsyncWindowContext, Bounds, Context, Entity, Pixels,
         Point, Window, WindowBounds, WindowOptions,
     };
-    use lumen_gpui::lumen_core::{Align, Rect, Ui};
+    use lumen_gpui::lumen_core::{Align, Rect, Ui, WindowRegion};
     use lumen_gpui::LumenView;
     use objc::runtime::Object;
     use objc::{class, msg_send, sel, sel_impl, Encode, Encoding};
@@ -55,13 +55,33 @@ mod mac {
         ui.column().fill().pad(16).gap(12).show(|ui| {
             s.input = ui.text_input(&mut s.text).placeholder("Type here").id("name").fill_width().show().rect;
             ui.row().fill_width().gap(12).align(Align::Center).show(|ui| {
-                s.select = ui.select(&mut s.region, &[(0, REGIONS[0]), (1, REGIONS[1]), (2, REGIONS[2]), (3, REGIONS[3])]).show().rect;
+                s.select = ui.select(&mut s.region, &[(0, REGIONS[0]), (1, REGIONS[1]), (2, REGIONS[2]), (3, REGIONS[3])]).label("Region").show().rect;
                 if s.spin {
                     ui.spinner(20.0);
                     ui.progress(None);
                 }
             });
         });
+    }
+
+    /// lumen's own title bar, in a view of its own above everything.
+    const BAR_H: f32 = 38.0;
+
+    #[derive(Default)]
+    struct Bar {
+        zooms: u32,
+        minimizes: u32,
+    }
+
+    fn bar(ui: &mut Ui, s: &mut Bar) {
+        // Report the clicks but let the test decide what to do with them,
+        // except minimize, which the view performs.
+        let r = ui.window_chrome("bar", "lumen-gpui self-test").window().handle_buttons(false).show(|_| {}).response;
+        s.zooms += r.zoom as u32;
+        s.minimizes += r.minimize as u32;
+        if r.minimize {
+            ui.request_window(lumen_gpui::lumen_core::WindowRequest::Minimize);
+        }
     }
 
     /// SELFTEST_PANEL_H=676 matches the 1352 px-tall panel used for timing.
@@ -73,23 +93,22 @@ mod mac {
     /// where they're relative to the panel (right of the 180 pt sidebar).
     fn panel_origin() -> lumen_gpui::lumen_core::Vec2 {
         if std::env::var_os("SELFTEST_CONTAIN").is_some() {
-            lumen_gpui::lumen_core::vec2(180.0, 0.0)
+            lumen_gpui::lumen_core::vec2(180.0, BAR_H)
         } else {
             lumen_gpui::lumen_core::Vec2::ZERO
         }
     }
 
     struct Shell {
+        bar: Entity<LumenView<Bar>>,
         panel: Entity<LumenView<Panel>>,
     }
 
     impl Render for Shell {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div()
-                .size_full()
+            let row = div()
+                .flex_1()
                 .flex()
-                .bg(rgb(0x0b0d12))
-                .text_color(rgb(0xe6e9ef))
                 .child(div().w(px(180.)).h_full().p_3().bg(rgb(0x12151c)).child("GPUI sidebar"))
                 .child(
                     div()
@@ -99,7 +118,15 @@ mod mac {
                         // A short lumen panel: its select menu has to overflow it.
                         .child(div().h(px(panel_height())).child(self.panel.clone()))
                         .child(div().flex_1().p_4().bg(rgb(0x1a2030)).child("GPUI content below the lumen panel")),
-                )
+                );
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .bg(rgb(0x0b0d12))
+                .text_color(rgb(0xe6e9ef))
+                .child(div().h(px(BAR_H)).child(self.bar.clone()))
+                .child(row)
         }
     }
 
@@ -153,10 +180,9 @@ mod mac {
     struct Script {
         cx: AsyncWindowContext,
         panel: Entity<LumenView<Panel>>,
+        bar: Entity<LumenView<Bar>>,
         view: usize,
         out: PathBuf,
-        /// Content height in points, to flip y for AppKit.
-        height: f64,
         results: Rc<RefCell<Vec<(String, bool)>>>,
     }
 
@@ -179,12 +205,15 @@ mod mac {
                     unsafe { Encoding::from_str("{CGPoint=dd}") }
                 }
             }
+            // Content height in points, to flip y for AppKit. Read per event:
+            // the window can still be settling its size when the script starts.
+            let height = self.cx.clone().update(|w, _| f32::from(w.viewport_size().height) as f64).unwrap();
             unsafe {
                 let view = self.view as *mut Object;
                 let window: *mut Object = msg_send![view, window];
                 let num: i64 = msg_send![window, windowNumber];
                 // Window coordinates have their origin at the bottom left.
-                let loc = NSPoint { x: f32::from(p.x) as f64, y: self.height - f32::from(p.y) as f64 };
+                let loc = NSPoint { x: f32::from(p.x) as f64, y: height - f32::from(p.y) as f64 };
                 let e: *mut Object = msg_send![class!(NSEvent), mouseEventWithType: kind location: loc modifierFlags: 0u64 timestamp: 0.0f64 windowNumber: num context: std::ptr::null_mut::<Object>() eventNumber: 0i64 clickCount: 1i64 pressure: 1.0f32];
                 let _: () = msg_send![window, sendEvent: e];
             }
@@ -236,7 +265,16 @@ mod mac {
             if !visible || !key {
                 println!("note: the window is {}; GPUI draws it only around input, so the script moves the pointer while it waits", if visible { "not key" } else { "occluded" });
             }
-            self.height = self.cx.update(|w, _| f32::from(w.viewport_size().height) as f64).unwrap();
+            // A cold first launch (new GPU device, uncompiled pipelines, font
+            // loading) can take longer than the wait above; click only once
+            // lumen has laid out the panel.
+            for _ in 0..100 {
+                if self.read(|p| p.state().input.width() > 0.0) {
+                    break;
+                }
+                self.send_mouse(5, pt(450.0, 400.0));
+                self.wait(100).await;
+            }
             let input = self.read(|p| p.state().input).translate(panel_origin());
             self.click(pt(input.center().x, input.center().y)).await;
 
@@ -308,6 +346,37 @@ mod mac {
             let _ = self.cx.update(|_, cx| panel.update(cx, |p, cx| p.update(cx, |s| s.spin = false)));
             self.wait(200).await;
 
+            // lumen's title bar: regions for GPUI, and its buttons.
+            let bar = self.bar.clone();
+            let (mut cx, b) = (self.cx.clone(), bar.clone());
+            let regions = cx.update(|_, cx| b.read(cx).window_control_regions()).unwrap();
+            let kinds: Vec<WindowRegion> = regions.iter().map(|r| r.0).collect();
+            self.check(
+                "window chrome exposes three buttons and a drag region",
+                kinds.len() == 4 && kinds[3] == WindowRegion::Drag && f32::from(regions[3].1.size.width) > 800.0,
+                format!("{regions:?}"),
+            );
+            let at = |k: WindowRegion| regions.iter().find(|r| r.0 == k).map(|r| r.1.center());
+            if let Some(z) = at(WindowRegion::Maximize) {
+                self.click(z).await;
+                self.wait(300).await;
+                let (mut cx, b) = (self.cx.clone(), bar.clone());
+                let zooms = cx.update(|_, cx| b.read(cx).state().zooms).unwrap();
+                self.check("zoom button click reaches the app", zooms == 1, format!("zooms {zooms}"));
+            }
+            if let Some(m) = at(WindowRegion::Minimize) {
+                self.click(m).await;
+                self.wait(900).await;
+                let mini = unsafe {
+                    let w: *mut Object = msg_send![self.view as *mut Object, window];
+                    let m: objc::runtime::BOOL = msg_send![w, isMiniaturized];
+                    let _: () = msg_send![w, deminiaturize: std::ptr::null_mut::<Object>()];
+                    m == objc::runtime::YES
+                };
+                self.check("minimize button miniaturizes the GPUI window", mini, "still on screen".into());
+                self.wait(900).await;
+            }
+
             let failed = self.results.borrow().iter().filter(|r| !r.1).count();
             println!("{} checks, {failed} failed", self.results.borrow().len());
             std::process::exit(if failed == 0 { 0 } else { 1 });
@@ -317,20 +386,27 @@ mod mac {
     pub fn run() {
         let out = PathBuf::from(std::env::args().nth(1).unwrap_or_else(|| "target/selftest".into()));
         std::fs::create_dir_all(&out).unwrap();
-        lumen_gpui::application().run(move |cx: &mut App| {
+        lumen_gpui::run(lumen_gpui::application(), move |cx: &mut App| {
             let bounds = Bounds::centered(None, size(px(900.), px(WINDOW_H as f32)), cx);
+            // SELFTEST_BACKGROUND=1 leaves the app inactive and the window
+            // unfocused, so it doesn't take over the screen while you work.
+            let background = std::env::var_os("SELFTEST_BACKGROUND").is_some();
+            let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), focus: !background, ..Default::default() };
             let window = cx
-                .open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |window, cx| {
+                .open_window(options, |window, cx| {
                     // SELFTEST_CONTAIN=1 keeps menus inside the panel.
                     let contain = std::env::var_os("SELFTEST_CONTAIN").is_some();
                     let panel = cx.new(|cx| {
                         let v = LumenView::new(Panel::default(), panel, window, cx);
                         if contain { v.contain_overlays() } else { v }
                     });
-                    cx.new(|_| Shell { panel })
+                    let bar = cx.new(|cx| LumenView::new(Bar::default(), bar, window, cx).contain_overlays());
+                    cx.new(|_| Shell { bar, panel })
                 })
                 .unwrap();
-            cx.activate(true);
+            if !background {
+                cx.activate(true);
+            }
             window
                 .update(cx, |shell, window, cx| {
                     let view = match window.window_handle().unwrap().as_raw() {
@@ -338,9 +414,10 @@ mod mac {
                         _ => unreachable!(),
                     };
                     let panel = shell.panel.clone();
+                    let bar = shell.bar.clone();
                     window
                         .spawn(cx, async move |cx| {
-                            Script { cx: cx.clone(), panel, view, out, height: 0.0, results: Rc::default() }.run().await;
+                            Script { cx: cx.clone(), panel, bar, view, out, results: Rc::default() }.run().await;
                         })
                         .detach();
                 })

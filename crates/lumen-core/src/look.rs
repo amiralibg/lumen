@@ -775,9 +775,11 @@ impl Look {
             accent: [h(0x3584E4), h(0x3584E4)],
             dark_accent_min_lightness: 0.0,
             fonts: Fonts {
-                sans: &["Adwaita Sans", "Cantarell", "Noto Sans", "DejaVu Sans"],
-                display: &["Adwaita Sans", "Cantarell", "Noto Sans", "DejaVu Sans"],
-                mono: &["Adwaita Mono", "Source Code Pro", "DejaVu Sans Mono"],
+                // GNOME 48+, older GNOME, Ubuntu's GNOME, then what most
+                // distributions ship.
+                sans: &["Adwaita Sans", "Cantarell", "Ubuntu Sans", "Ubuntu", "Noto Sans", "DejaVu Sans"],
+                display: &["Adwaita Sans", "Cantarell", "Ubuntu Sans", "Ubuntu", "Noto Sans", "DejaVu Sans"],
+                mono: &["Adwaita Mono", "Ubuntu Sans Mono", "Ubuntu Mono", "Source Code Pro", "DejaVu Sans Mono"],
             },
             text_scale: 14.0 / 13.0,
             control: ControlLook {

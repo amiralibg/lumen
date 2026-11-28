@@ -515,13 +515,18 @@ pub mod offscreen {
     /// Create a headless device.
     pub fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-            ..Default::default()
-        }))
-        .ok()?;
+        // A real GPU first; then a software one (WARP on Windows, lavapipe
+        // or llvmpipe on Linux), as on CI runners and VMs.
+        let pick = |fallback: bool| {
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: None,
+                force_fallback_adapter: fallback,
+                ..Default::default()
+            }))
+            .ok()
+        };
+        let adapter = pick(false).or_else(|| pick(true))?;
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
     }
 }

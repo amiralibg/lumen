@@ -1,5 +1,6 @@
 //! Modal dialog over a scrim.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Justify, Size, Style};
@@ -74,6 +75,8 @@ impl<'a> Dialog<'_, 'a> {
         let shadows = Elevation::Level3.shadows(ui.theme.darkness(), ui.color(Token::ShadowInk));
         let radius = ui.look().card.radius + 2.0;
         let pad = ui.look().card.pad + 4.0;
+        ui.a11y(scrim_id, || A11y::new(Role::Group));
+        ui.a11y(id.with("panel"), || A11y::new(Role::Dialog).label(title.clone().unwrap_or_default()).description(description.clone().unwrap_or_default()).modal(true));
         let out = ui.layer(LayerPlace::Screen, vec2(0.0, 0.0), t, Some(scrim_id), |ui| {
             if let Some(r) = ui.layer_root_building() {
                 let narrow = ui.screen_size().x < 480.0;
@@ -101,7 +104,8 @@ impl<'a> Dialog<'_, 'a> {
                 if let Some(t) = title {
                     let st = ui.text_style(TextRole::Heading3);
                     let c = ui.color(Token::Foreground);
-                    ui.text_leaf(t, st, c, true, false, Style::default());
+                    let n = ui.text_leaf(t, st, c, true, false, Style::default());
+                    ui.a11y_node(n, || A11y::new(Role::Heading).level(2));
                 }
                 if let Some(d) = description {
                     let st = ui.text_style(TextRole::Body);

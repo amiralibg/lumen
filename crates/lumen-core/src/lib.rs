@@ -4,6 +4,7 @@
 //! [`paint::DrawData`] (triangles plus clip commands). It never touches a
 //! window or GPU.
 
+pub mod a11y;
 pub mod anim;
 pub mod color;
 pub mod date;
@@ -28,20 +29,21 @@ pub type FastMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherD
 pub mod ui;
 pub mod widgets;
 
+pub use a11y::{A11y, A11yAction, A11yNode, A11yTree, Role, Toggled};
 pub use anim::{Ease, SpringParams};
 pub use input::{CursorIcon, Event, Ime, Key, Modifiers, PointerButton, RawInput};
 pub use layout::{Align, Justify, Size};
 pub use theme::{springs, ControlSize, TextRole};
-pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, ScrollX, Shown, SystemPrefs, TextFieldState, Ui};
+pub use ui::{FrameOutput, LayerAlign, LayerPlace, Placement, Response, ScrollInfo, ScrollX, Shown, SystemPrefs, TextFieldState, Ui, WindowRegion, WindowRequest};
 pub use widgets::{
     password_strength, ActionBarOut, AiModelSpec, ArenaSlab, AttachmentItem, BarListItem, BulletMetric, Candle,
-    CarouselSlide, ChartKind, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
+    CarouselSlide, ChartKind, ChromeResponse, ChromeShown, ChatMessage, ChatRole, ChecklistStep, CitationSource, Command, CommentEntry, CommitRow,
     ComposerOut, ContextSlice, Currency, DateStripDay, DescPair, DimensionUnit, DivergingBar, DockItem, EditorTab,
     EditorTabsOut, FilterFacet, FlameSpan, GanttTask, GraphNode, GraphWire, GridColumn, HistogramMarker, HttpMethod,
-    ImageStatus, KanbanCard, KanbanCol, KpiMetric, KvPair, ListOut, ListRow, TourStep, FileEntry, FileOut, LogEntry, LogLevel, MasonryCard, MentionCandidate,
+    ImageStatus, SigPoint, Signature, SignaturePad, RulerSlider, TimeDial, Annotation, Bubble, BubbleChart, DotMatrix, DockLayout, DockPanel, DockZone, OnboardingOut, OnboardingStep, SwipeAction, SwipeHit, query_ops, DepNode, FeatureFlag, FieldKind, QueryField, QueryGroup, QueryRule, RegexFlags, RegexMatch, BlameLine, BlameView, CoverLine, Coverage, CoverageView, HexOut, HexViewer, Problem, Severity, StackFrame, TreeTableRow, AvatarOut, AvatarUpload, UploadState, KanbanCard, KanbanCol, KpiMetric, KvPair, ListOut, ListRow, TourStep, FileEntry, FileOut, LogEntry, LogLevel, MasonryCard, MentionCandidate,
     MeterSegment, MetricRow, NavBarItem, NotificationItem, PlanSpec, PresencePeer, PromptTemplate, ReactionChip,
     ReorderItem, RingSpec, SankeyLink, ScatterPoint, ScatterSeries, ScheduleEvent, ScheduleRule, SchemaField, Series,
     ShortcutHint, SortDir, SpeedDialItem, SuggestionDecision, TableCell, TableCol, TermLine, TermTone, TestCase,
     TestState, TimelineItem, Toast, TocItem, Tone, ToolCall, ToolStatus, TraceSpan, TreeNode, TreemapItem, UndoBarOut,
-    UptimeStatus, Variant, ViewMode, WaffleSlice, WorldClock,
+    UptimeStatus, Variant, ViewMode, VirtualOut, VirtualRows, WaffleSlice, WorldClock,
 };

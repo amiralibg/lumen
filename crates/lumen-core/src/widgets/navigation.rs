@@ -3,6 +3,7 @@
 //! wizards with spring-filled connectors.
 
 use super::{key_activate, show_on_drop};
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::id::Id;
 use crate::input::{CursorIcon, Key};
@@ -345,6 +346,9 @@ impl<'u> Pagination<'u> {
         let prev_dis = *self.page == 0;
         let next_dis = *self.page + 1 >= total;
         let prev_ix = ui.interact(prev_id, Sense::CLICK, prev_dis);
+        ui.a11y(prev_id, || A11y::new(Role::Button).label("Previous page").disabled(prev_dis));
+        ui.a11y(next_id, || A11y::new(Role::Button).label("Next page").disabled(next_dis));
+        ui.a11y(strip_id, || A11y::new(Role::Navigation).label("Pagination"));
         let (pk_act, pk_held) = key_activate(ui, &prev_ix, true);
 
         let mut next_page = *self.page;
@@ -414,6 +418,8 @@ impl<'u> Pagination<'u> {
                     let pid = id.with(("p", p));
                     focus_ring_ids.push(pid);
                     page_ixs.push((p, ui.interact(pid, Sense::CLICK, false)));
+                    let cur = p == *self.page;
+                    ui.a11y(pid, || A11y::new(Role::Button).label(format!("Page {}", p + 1)).selected(cur).position(p, total));
                 }
             }
             let next_ix = ui.interact(next_id, Sense::CLICK, next_dis);

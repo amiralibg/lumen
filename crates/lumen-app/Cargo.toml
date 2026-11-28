@@ -17,11 +17,18 @@ png.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster.workspace = true
+# Screen readers: VoiceOver, Narrator/NVDA (UIA), Orca (AT-SPI).
+accesskit_winit = "0.33.2"
+lumen-core = { workspace = true, features = ["accesskit"] }
 env_logger.workspace = true
 arboard.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSColor", "NSColorSpace", "NSWorkspace", "NSAccessibility", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSColor", "NSColorSpace", "NSWorkspace", "NSAccessibility", "objc2-core-foundation", "NSView", "NSWindow", "NSResponder"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSUserDefaults", "NSString"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true
@@ -29,3 +36,8 @@ wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = ["Window", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "CssStyleDeclaration", "MediaQueryList"] }
 console_error_panic_hook.workspace = true
 console_log.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSEvent", "NSWindow", "NSApplication", "NSResponder", "NSGraphicsContext", "NSView", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSGeometry", "NSArray", "NSString", "NSProcessInfo", "NSRunLoop", "NSDate", "NSObjCRuntime"] }

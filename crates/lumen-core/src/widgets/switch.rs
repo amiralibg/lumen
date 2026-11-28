@@ -1,5 +1,6 @@
 //! Switch (spec section 4).
 
+use crate::a11y::{A11y, Role};
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Style};
 use crate::math::{lerp, vec2, Corners, Rect};
@@ -35,6 +36,8 @@ impl<'u> Switch<'u> {
             changed = true;
         }
         let on = *self.value;
+        let disabled = self.disabled;
+        ui.a11y(id, || A11y::new(Role::Switch).label(self.label.as_str()).toggled(on).disabled(disabled));
         let lk = ui.look().switch;
         let mo = ui.motion();
         let t = ui.spring(id, 0, if on { 1.0 } else { 0.0 }, mo.snappy);

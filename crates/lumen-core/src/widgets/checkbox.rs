@@ -1,5 +1,6 @@
 //! Checkbox (spec section 5).
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::CursorIcon;
 use crate::layout::{Align, Dir, Style};
@@ -49,6 +50,11 @@ impl<'u> Checkbox<'u> {
         let indet = self.indeterminate && !changed;
         let checked = *self.value && !indet;
         let filled = checked || indet;
+        let disabled = self.disabled;
+        ui.a11y(id, || {
+            let t = if indet { crate::a11y::Toggled::Mixed } else { checked.into() };
+            A11y::new(Role::CheckBox).label(self.label.as_str()).toggled(t).disabled(disabled).description(self.description.clone().unwrap_or_default())
+        });
         let (h, p) = ui.state_weights(&ix, key_held);
         let mo = ui.motion();
         let lk = ui.look().checkbox;

@@ -1,5 +1,6 @@
 //! Tabs with a sliding underline.
 
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::input::{CursorIcon, Key};
 use crate::layout::{Align, Dir, Size, Style};
@@ -39,6 +40,12 @@ impl Ui {
             ixs.push(ix);
         }
         let sel = tabs.iter().position(|t| t.0 == *value);
+        if self.accessibility() {
+            self.a11y(group, || A11y::new(Role::TabList));
+            for (i, t) in tabs.iter().enumerate() {
+                self.a11y(ids[i], || A11y::new(Role::Tab).label(t.1).selected(sel == Some(i)).position(i, tabs.len()));
+            }
+        }
         let sel_id = sel.map(|i| ids[i]);
         let mo = self.motion();
         let smooth = mo.smooth;

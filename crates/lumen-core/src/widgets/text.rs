@@ -1,5 +1,6 @@
 //! Label and heading (spec sections 1 and 2).
 
+use crate::a11y::{A11y, Role};
 use crate::layout::Style;
 use crate::theme::{TextRole, Token};
 use crate::ui::{Response, Ui};
@@ -113,7 +114,9 @@ impl<'u> Heading<'u> {
         let c = self.ui.color(Token::Foreground);
         let text = std::mem::take(&mut self.text);
         let st = self.ui.text_style(role);
-        self.ui.text_leaf(text, st, c, true, false, Style { margin_top: above, ..Default::default() });
+        let level = self.level.max(1);
+        let n = self.ui.text_leaf(text, st, c, true, false, Style { margin_top: above, ..Default::default() });
+        self.ui.a11y_node(n, || A11y::new(Role::Heading).level(level));
         Response::default()
     }
 }

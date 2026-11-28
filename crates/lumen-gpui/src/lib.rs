@@ -25,7 +25,7 @@
 //!     }
 //! }
 //!
-//! lumen_gpui::application().run(|cx: &mut App| {
+//! lumen_gpui::run(lumen_gpui::application(), |cx: &mut App| {
 //!     let bounds = Bounds::centered(None, size(px(720.), px(480.)), cx);
 //!     cx.open_window(WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() }, |window, cx| {
 //!         let panel = LumenView::build(Settings::default(), |ui, s| {
@@ -84,11 +84,11 @@ use gpui::{
     canvas, deferred, div, point, prelude::*, size, App, Bounds, ClipboardItem, Context, Corners, CursorStyle,
     DispatchPhase, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Global, Hitbox, HitboxBehavior,
     KeyDownEvent, KeyUpEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, RenderImage,
-    ScrollDelta, ScrollWheelEvent, Subscription, Task, UTF16Selection, Window, WindowAppearance,
+    ScrollDelta, ScrollWheelEvent, Subscription, Task, UTF16Selection, Window, WindowAppearance, WindowControlArea,
 };
 use lumen_core::input::{CursorIcon, Event, Ime, Key, Modifiers, PointerButton, RawInput};
 use lumen_core::theme::Theme;
-use lumen_core::{vec2, Accent, Look, Mode, Rect, TextFieldState, Ui};
+use lumen_core::{vec2, Accent, Look, Mode, Rect, TextFieldState, Ui, WindowRegion, WindowRequest};
 use lumen_wgpu::offscreen::{self, AsyncReadback};
 use lumen_wgpu::Renderer;
 use web_time::Instant;
@@ -190,6 +190,17 @@ pub struct LumenView<S: 'static> {
     escape: bool,
     started: bool,
     _appearance: Subscription,
+    _activation: Subscription,
+    _bounds: Subscription,
+    /// Custom title bar regions from `window_chrome(..).window()`, in window
+    /// coordinates.
+    window_regions: Vec<(WindowRegion, Rect)>,
+    window_active: bool,
+    window_maximized: bool,
+    /// gpui-ce: lumen's accessibility tree from the last frame, with the
+    /// window position of lumen's origin and the scale it was built at.
+    #[cfg(feature = "ce")]
+    a11y: Option<(lumen_core::A11yTree, lumen_core::Vec2, f32)>,
 }
 
 impl<S: 'static> LumenView<S> {
@@ -200,6 +211,16 @@ impl<S: 'static> LumenView<S> {
         ui.text.set_system_fallback(true);
         ui.theme = Theme::with_look(Mode::Light, Accent::Blue, Look::lumen());
         let appearance = cx.observe_window_appearance(window, |this, _, cx| {
+            this.dirty = true;
+            cx.notify();
+        });
+        // A custom title bar dims when the window is inactive and shows
+        // restore when it's maximized.
+        let activation = cx.observe_window_activation(window, |this, _, cx| {
+            this.dirty = true;
+            cx.notify();
+        });
+        let bounds = cx.observe_window_bounds(window, |this, _, cx| {
             this.dirty = true;
             cx.notify();
         });
@@ -231,6 +252,13 @@ impl<S: 'static> LumenView<S> {
             escape: true,
             started: false,
             _appearance: appearance,
+            _activation: activation,
+            _bounds: bounds,
+            window_regions: vec![],
+            window_active: true,
+            window_maximized: false,
+            #[cfg(feature = "ce")]
+            a11y: None,
         }
     }
 
@@ -318,6 +346,17 @@ impl<S: 'static> LumenView<S> {
         self.shown.as_ref().is_some_and(|s| s.overflow)
     }
 
+    /// Title bar regions of a `ui.window_chrome(..).window()` in this view,
+    /// in window coordinates: buttons first, then the drag region. The view
+    /// already maps them to GPUI's [`WindowControlArea`]s (used for hit
+    /// testing on Windows) and handles presses itself: dragging moves the
+    /// window, a double-click follows the OS setting, and the buttons
+    /// minimize, zoom and close. Use these to keep your own GPUI elements
+    /// out of them.
+    pub fn window_control_regions(&self) -> Vec<(WindowRegion, Bounds<Pixels>)> {
+        self.window_regions.iter().map(|(k, r)| (*k, bounds_of(*r))).collect()
+    }
+
     fn push(&mut self, e: Event, cx: &mut Context<Self>) {
         self.events.push(e);
         self.dirty = true;
@@ -353,8 +392,24 @@ impl<S: 'static> LumenView<S> {
             let focus = self.focus.clone();
             focus_view(window, &focus, cx);
         }
-        self.pressed |= bit(button);
         let pos = self.local(e.position);
+        if inside && button == PointerButton::Primary && self.ui.window_region_at(pos) == Some(WindowRegion::Drag) {
+            // A custom title bar: the platform moves the window (on macOS
+            // AppKit does it natively from a transparent title bar). The
+            // move eats the release, so lumen gets the whole click now.
+            if e.click_count == 2 {
+                window.titlebar_double_click();
+                #[cfg(not(target_os = "macos"))]
+                window.zoom_window();
+            } else {
+                window.start_window_move();
+            }
+            self.events.push(Event::PointerMoved(pos));
+            self.events.push(Event::PointerButton { pos, button, pressed: true });
+            self.push(Event::PointerButton { pos, button, pressed: false }, cx);
+            return;
+        }
+        self.pressed |= bit(button);
         self.events.push(Event::PointerMoved(pos));
         self.push(Event::PointerButton { pos, button, pressed: true }, cx);
     }
@@ -463,6 +518,15 @@ impl<S: 'static> LumenView<S> {
             };
             self.ui.set_content_rect(content);
             self.ui.paint_background = !self.transparent;
+            let (active, maximized) = (window.is_window_active(), window.is_maximized());
+            if active != self.window_active {
+                self.window_active = active;
+                self.events.push(Event::WindowFocused(active));
+            }
+            if maximized != self.window_maximized {
+                self.window_maximized = maximized;
+                self.events.push(Event::WindowMaximized(maximized));
+            }
             let input = RawInput {
                 screen_size: screen,
                 scale,
@@ -470,9 +534,22 @@ impl<S: 'static> LumenView<S> {
                 events: std::mem::take(&mut self.events),
                 modifiers: self.modifiers,
             };
+            #[cfg(feature = "ce")]
+            self.ui.set_accessibility(window.is_a11y_active());
             self.ui.begin_frame(input);
             (self.view)(&mut self.ui, &mut self.state);
             let mut out = self.ui.end_frame();
+            #[cfg(feature = "ce")]
+            {
+                let o = vec2(f32::from(self.origin.x), f32::from(self.origin.y));
+                let next = out.a11y.take().map(|t| (t, o, scale));
+                if next != self.a11y {
+                    // GPUI gathers the tree while it lays out, before lumen
+                    // runs: show the new one on the next frame.
+                    self.a11y = next;
+                    cx.notify();
+                }
+            }
 
             // The image covers the view, plus any menu that sticks out of it.
             let window_rect = Rect::from_min_size(lumen_core::Vec2::ZERO, screen);
@@ -525,6 +602,14 @@ impl<S: 'static> LumenView<S> {
 
             if let Some(text) = out.copied_text {
                 cx.write_to_clipboard(ClipboardItem::new_string(text));
+            }
+            self.window_regions = out.window_regions.iter().map(|(k, r)| (*k, r.translate(origin))).collect();
+            for req in &out.window_requests {
+                match req {
+                    WindowRequest::Close => window.remove_window(),
+                    WindowRequest::Minimize => window.minimize_window(),
+                    WindowRequest::ToggleMaximize => window.zoom_window(),
+                }
             }
             self.cursor = out.cursor;
             self.text_field = out.text_field;
@@ -610,6 +695,31 @@ pub fn application() -> gpui::Application {
     return gpui_ce_platform::application();
     #[cfg(not(feature = "ce"))]
     gpui::Application::new()
+}
+
+/// Runs `app` and calls `launch` once it has finished launching, where you
+/// open your windows. Use this instead of `app.run(launch)`: with gpui-ce
+/// 0.3.0 on macOS, the launch callback runs while the platform lock is
+/// held, so an `open_window` inside it deadlocks (gpui-ce discussion #433,
+/// fixed on their main branch). Here `launch` runs from a foreground task
+/// on the next turn of the main loop, after the lock is released. With
+/// Zed's GPUI it's called directly.
+///
+/// ```no_run
+/// lumen_gpui::run(lumen_gpui::application(), |_cx| {
+///     // cx.open_window(...)
+/// });
+/// ```
+pub fn run(app: gpui::Application, launch: impl FnOnce(&mut App) + 'static) {
+    app.run(move |cx: &mut App| {
+        #[cfg(feature = "ce")]
+        cx.spawn(async move |cx| {
+            let _ = cx.update(launch);
+        })
+        .detach();
+        #[cfg(not(feature = "ce"))]
+        launch(cx);
+    });
 }
 
 // The few calls that differ between gpui 0.2 and gpui-ce 0.3.
@@ -751,8 +861,33 @@ impl<S: 'static> Render for LumenView<S> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         let overlay = entity.clone();
-        div()
+        // Custom title bar areas, for platforms that hit-test them (Windows).
+        let origin = self.bounds.origin;
+        let controls = self.window_regions.iter().map(move |(k, r)| {
+            let area = match k {
+                WindowRegion::Drag => WindowControlArea::Drag,
+                WindowRegion::Close => WindowControlArea::Close,
+                WindowRegion::Minimize => WindowControlArea::Min,
+                WindowRegion::Maximize => WindowControlArea::Max,
+            };
+            let b = bounds_of(*r);
+            div().absolute().left(b.origin.x - origin.x).top(b.origin.y - origin.y).w(b.size.width).h(b.size.height).window_control_area(area)
+        });
+        let root = div().id("lumen-view");
+        #[cfg(feature = "ce")]
+        let root = {
+            let tree = self.a11y.clone();
+            let view = cx.entity_id().as_u64();
+            root.role(gpui::Role::Group).a11y_synthetic_children(move |b| {
+                if let Some((t, o, scale)) = &tree {
+                    a11y_children(b, t, view, *o, *scale);
+                }
+            })
+        };
+        root
             .size_full()
+            .relative()
+            .children(controls)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
             .on_key_up(cx.listener(Self::on_key_up))
@@ -793,6 +928,8 @@ impl<S: 'static> Render for LumenView<S> {
 
 fn paint<S: 'static>(entity: Entity<LumenView<S>>, bounds: Bounds<Pixels>, hitbox: Hitbox, window: &mut Window, cx: &mut App) {
     entity.update(cx, |this, cx| this.frame(bounds, window, cx));
+    #[cfg(feature = "ce")]
+    a11y_listeners(&entity, window, cx);
     let this = entity.read(cx);
     if let Some(s) = this.shown.as_ref().filter(|s| !s.overflow) {
         paint_frame(window, bounds_of(s.region), s.image.clone());
@@ -892,6 +1029,8 @@ fn map_cursor(c: CursorIcon) -> CursorStyle {
         CursorIcon::Grab => CursorStyle::OpenHand,
         CursorIcon::Grabbing => CursorStyle::ClosedHand,
         CursorIcon::ResizeHorizontal => CursorStyle::ResizeLeftRight,
+        CursorIcon::Crosshair => CursorStyle::Crosshair,
+        CursorIcon::ResizeVertical => CursorStyle::ResizeUpDown,
     }
 }
 
@@ -918,5 +1057,75 @@ mod tests {
         assert_eq!(utf16_at(s, 8), 4);
         assert_eq!(utf16(s, &(1..8)), 1..4);
         assert_eq!(bytes(s, &(2..4)), 4..8);
+    }
+}
+
+/// gpui-ce: lumen's nodes as synthetic children of the view's element.
+/// Every node is pushed under the view (that's how the builder adds
+/// them), then the view's children are cut back to lumen's top level; the
+/// nested nodes keep their own child lists, so the tree keeps its shape.
+#[cfg(feature = "ce")]
+fn a11y_children(b: &mut gpui::A11ySubtreeBuilder, t: &lumen_core::A11yTree, view: u64, origin: lumen_core::Vec2, scale: f32) {
+    use gpui::accesskit::Rect as AkRect;
+    let Some(root) = t.get(t.root) else { return };
+    let s = scale as f64;
+    let ids = |c: &[u64]| c.iter().map(|c| ak_id(view, *c)).collect::<Vec<_>>();
+    for n in t.nodes.iter().filter(|n| n.id != t.root) {
+        let mut node = n.to_accesskit(scale);
+        if !n.children.is_empty() {
+            node.set_children(ids(&n.children));
+        }
+        let r = n.rect.translate(origin);
+        node.set_bounds(AkRect { x0: r.min.x as f64 * s, y0: r.min.y as f64 * s, x1: r.max.x as f64 * s, y1: r.max.y as f64 * s });
+        b.push_child(ak_id(view, n.id), node);
+    }
+    b.parent_node().set_children(ids(&root.children));
+}
+
+/// lumen's node ids are only unique within one view (they derive from the
+/// same root id), so each view's nodes are scoped by its entity id in the
+/// window's tree.
+#[cfg(feature = "ce")]
+fn ak_id(view: u64, id: u64) -> gpui::accesskit::NodeId {
+    gpui::accesskit::NodeId(lumen_core::Id(view).with(id).0)
+}
+
+/// gpui-ce: route screen reader actions on lumen's nodes back into lumen.
+#[cfg(feature = "ce")]
+fn a11y_listeners<S: 'static>(entity: &Entity<LumenView<S>>, window: &mut Window, cx: &mut App) {
+    use gpui::accesskit::{Action, ActionData, ActionRequest, NodeId, TreeId};
+    let Some((tree, _, _)) = entity.read(cx).a11y.clone() else { return };
+    let view = entity.entity_id().as_u64();
+    for n in &tree.nodes {
+        let a = n.actions;
+        let mut kinds = vec![Action::ScrollIntoView];
+        if a.click {
+            kinds.push(Action::Click);
+        }
+        if a.focus {
+            kinds.push(Action::Focus);
+        }
+        if a.increment {
+            kinds.extend([Action::Increment, Action::Decrement]);
+        }
+        if a.set_value {
+            kinds.push(Action::SetValue);
+        }
+        if a.expand {
+            kinds.extend([Action::Expand, Action::Collapse]);
+        }
+        for action in kinds {
+            let e = entity.clone();
+            let id = n.id;
+            window.on_a11y_action(ak_id(view, id), action, move |data: Option<&ActionData>, _, cx| {
+                let req = ActionRequest { action, target_tree: TreeId::ROOT, target_node: NodeId(id), data: data.cloned() };
+                if let Some((target, act)) = lumen_core::A11yAction::from_accesskit(&req) {
+                    e.update(cx, |this, cx| {
+                        this.events.push(Event::A11y { target, action: act });
+                        this.refresh(cx);
+                    });
+                }
+            });
+        }
     }
 }

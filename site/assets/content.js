@@ -870,8 +870,10 @@ ui.avatar_group(&["JB", "PN", "TR", "LF", "SW"], 4, 32.0);`,
       ["TableCol::new(label)", ".fill(weight), .width(px), .sortable(), .right()"],
       ["TableCell", "::text, ::strong, ::muted, ::mono, ::badge(label, Tone)"],
       [".sort_by(&mut Option<(usize, SortDir)>) .selection(&mut Vec<bool>)", "Optional column sorting and per-row selection."],
+      [".lazy_rows(count, id_of, cells_of)", "Rows made on demand: cells are asked for only for rows in view, so 100k rows cost what a screenful does."],
+      [".height(px)", "Scroll the body under a sticky header. Only visible rows are built either way."],
     ],
-    keys: [["↑ ↓", "Move row focus"], ["Space / Enter", "Toggle focused header sort or row selection"]],
+    keys: [["↑ ↓", "Move row focus"], ["Page Up / Page Down", "Move a page"], ["Home / End", "First / last row"], ["Space / Enter", "Toggle focused header sort or row selection"]],
   },
   {
     slug: "tree", name: "Tree view", group: "Data", demo: "tree",
@@ -1186,14 +1188,23 @@ if let Some(i) = ui.dock("app_dock", &items) {
   },
   {
     slug: "window-chrome", name: "Window chrome", group: "Layout and surfaces", demo: "window-chrome",
-    summary: "Native-feel window header bar that morphs between macOS traffic lights, Windows 11 caption buttons, GNOME Adwaita and Lumen.",
-    code: `ui.window_chrome("main_win", "lumen — workspace")
-    .subtitle("ethereal")
-    .show(|ui| {
-        ui.label("Window body");
-    });`,
+    summary: "A title bar that follows the look: macOS traffic lights, Windows 11 caption buttons, GNOME headerbar buttons or Lumen pills. As a preview card it reports clicks; with .window() it is your app's real title bar and moves, zooms, minimizes and closes the window.",
+    code: `// Your app's own title bar (the OS one is hidden):
+lumen::App::new("Notes").custom_chrome().run(state, |ui, s| {
+    ui.window_chrome("main", "Notes").window().show(|ui| {
+        notes_view(ui, s);
+    });
+});
+
+// Or ask before closing:
+let r = ui.window_chrome("main", "Notes").window().handle_buttons(false).show(body).response;
+if r.close && confirm_quit(ui) { ui.request_window(WindowRequest::Close); }`,
     options: [
-      [".subtitle(text) .show(|ui| ..)", "Follows ui.look() automatically and morphs when switching looks."],
+      [".window()", "Be the real title bar: fills the window, registers drag and button regions for the host, sends window requests."],
+      [".handle_buttons(false)", "Report clicks in ChromeResponse (close, minimize, zoom, drag_started, double_clicked) without acting on them."],
+      [".closable(b) .minimizable(b) .maximizable(b)", "Choose the buttons. Maximize shows restore while the window is maximized."],
+      [".subtitle(text)", "A muted caption after the title. Inactive windows dim the title and, on macOS, gray the lights."],
+      ["App::custom_chrome()", "lumen-app: hides the OS title bar (transparent on macOS, so corners and shadow stay), moves on drag, follows the OS double-click setting, and resizes from the edges on Windows and Linux."],
     ],
     keys: [],
   },
@@ -1314,9 +1325,28 @@ let out = ui.list_view("files", &rows, &mut selected); // selected: Option<usize
 if let Some(i) = out.activated { open(i) }            // double click or Enter`,
     options: [
       ["ListRow::new(title) .subtitle .preview .meta .icon .avatar(initials, tone) .unread .starred .badge(text, tone)", "Every field but the title is optional."],
-      ["ListOut { changed, activated, starred }", "activated fires on double click or Enter; starred when a row's star is clicked."],
+      ["ListOut { changed, activated, starred, built }", "activated fires on double click or Enter; starred when a row's star is clicked; built is how many rows were built this frame."],
+      ["ListRow::key(id)", "A stable id: rows inserted above the viewport don't move what you're reading."],
+      ["Inside ui.scroll(..)", "Only the rows in view are built (Ui::virtual_rows), so 100k rows scroll at 60 fps."],
     ],
-    keys: [["↑ ↓", "Move the selection"], ["Home / End", "First / last row"], ["Enter", "Open the selected row"]],
+    keys: [["↑ ↓", "Move the selection"], ["Page Up / Page Down", "Move a page"], ["Home / End", "First / last row"], ["Type", "Jump to the next title that starts with it"], ["Enter", "Open the selected row"]],
+  },
+  {
+    slug: "virtual-list", name: "Virtualized rows", group: "Data", demo: "virtual-list",
+    summary: "100,000 rows of different heights, of which only the twenty or so in view are built. Heights are measured as rows appear, the scrollbar is right from the start, and loading history above keeps your place.",
+    code: `ui.scroll("log").show(|ui| {
+    let key = |i: usize| lines[i].id;
+    ui.virtual_rows("lines", lines.len()).keys(&key).estimate(28.0).show(|ui, i| {
+        log_line(ui, &lines[i]);
+    });
+});`,
+    options: [
+      [".estimate(px) .gap(px)", "Height of a row before it's measured (unseen rows follow the measured average), and space between rows."],
+      [".keys(&|i| id)", "Stable row ids: measured heights and the scroll position follow rows across inserts, removals and sorts."],
+      [".pin(Some(i)) .reveal(Some(i))", "Always build a row (the focused one), and scroll a row into view (keyboard navigation)."],
+      ["VirtualOut { first, end, built, total_height }", "What was built this frame. list_view and table use this underneath."],
+    ],
+    keys: [],
   },
   {
     slug: "code-editor", name: "Code editor", group: "Developer tools", demo: "code-editor",
@@ -1360,6 +1390,193 @@ if let Some(k) = ui.path_bar("crumbs", &["lumen", "crates", "lumen-core"]) { go_
 ui.time_wheel("alarm", &mut time, 5); // Time { hour, minute }, 5-minute steps`,
     options: [["time_wheel(key, &mut Time, minute_step)", "24-hour; returns true when the time changed."]],
     keys: [["↑ ↓", "Previous / next"], ["PageUp / PageDown", "Five at a time"], ["Home / End", "First / last"]],
+  },
+  {
+    slug: "signature-pad", name: "Signature pad", group: "Inputs", demo: "signature-pad",
+    summary: "Sign with a mouse, pen or finger. Strokes are smoothed, thin out as the pen speeds up, and land in accent ink that dries to the foreground. Undo and Clear fade strokes away, and a check pops in once it's signed. Points are stored in pad units, so a signature survives a resize.",
+    code: `let mut sig = Signature::default();
+ui.signature_pad("Signature", &mut sig).show();
+let can_submit = !sig.is_empty();`,
+    options: [["height(px)", "Height of the drawing area."], ["hint(text)", "Shown under the line while empty."], ["Signature { strokes }", "Vec of strokes of SigPoint { x, y, w } in 0..1 pad units; undo(), clear(), is_empty()."]],
+    keys: [["Backspace", "Undo the last stroke"], ["Cmd/Ctrl + Backspace", "Clear"], ["Cmd/Ctrl + Z", "Undo"]],
+  },
+  {
+    slug: "avatar-upload", name: "Avatar upload", group: "Inputs", demo: "avatar-upload",
+    summary: "A round photo slot with its actions beside it. Empty, a dashed ring and camera turn toward the accent on hover; uploading, the photo shrinks inside a progress ring; done, a check pops in; failed, the ring turns red and Retry appears. Your app owns the file dialog and the upload: the widget reports choose, retry and remove.",
+    code: `let out = ui.avatar_upload("photo", &state).initials("AL").title("Profile photo").hint("PNG or JPG").show();
+if out.choose { open_file_dialog(); }
+if out.remove { state = UploadState::Empty; }`,
+    options: [["UploadState", "Empty, Uploading(0..1), Done or Failed(reason)."], ["AvatarOut", "choose, remove (also cancels an upload) and retry."], ["initials / tone / size", "What the photo shows and how big it is."]],
+    keys: [["Enter / Space on the photo", "Choose, change or retry"]],
+  },
+  {
+    slug: "time-dial", name: "Time dial", group: "Dates", demo: "time-dial",
+    summary: "A clock face: drag or tap the hand to an hour, and the face turns into minutes. The hand springs the short way round, numerals crossfade between hours and minutes, and the chosen number sits inside the accent knob. Hour and minute tiles switch back and forth, with AM and PM beside them.",
+    code: `ui.time_dial("alarm", &mut time).step(5).show(); // Time { hour, minute }`,
+    options: [["step(minutes)", "Minutes snap to this step (1 to 30, default 5)."], ["diameter(px)", "Size of the face; defaults to seven control heights."], ["→ Response", "changed is true when the time changed."]],
+    keys: [["↑ → / ↓ ←", "Next / previous hour or minute"], ["PageUp / PageDown", "Five at a time"], ["Enter / Space on the dial", "Switch between hours and minutes"]],
+  },
+  {
+    slug: "aspect-ratio", name: "Aspect-ratio picker", group: "Selection", demo: "aspect-ratio",
+    summary: "A crop preview over a sample photo and a row of ratio chips, each drawn in its own shape. The crop frame springs to the new shape, rule-of-thirds guides flash in while it moves, the selection pill glides between chips, and the orientation toggle turns every shape on its side.",
+    code: `let ratios = [("Free", 0.0), ("1:1", 1.0), ("4:5", 0.8), ("16:9", 16.0 / 9.0)];
+ui.aspect_ratio_picker("crop", &mut selected, &mut portrait, &ratios);`,
+    options: [["ratios: &[(&str, f32)]", "Label and width / height; 0.0 is free."], ["portrait: &mut bool", "Turns fixed ratios on their side; the toggle is off for Free and 1:1."]],
+    keys: [["← →", "Previous / next ratio"], ["Enter / Space", "Choose"]],
+  },
+  {
+    slug: "ruler-slider", name: "Ruler slider", group: "Selection", demo: "ruler-slider",
+    summary: "A tick ruler that slides under a fixed needle, the way camera and scale apps pick a value. Drag it 1:1 or throw it and it springs onto a tick; ticks near the needle grow, the edges fade, the needle stretches while held, and the readout rolls the way the value moved.",
+    code: `ui.ruler_slider("Weight", &mut kg, 30.0..=200.0).step(0.1).major(10).unit("kg").show();`,
+    options: [["step(v)", "Value between ticks."], ["major(n)", "A labelled long tick every n steps."], ["unit(text) / decimals(n)", "Readout formatting."]],
+    keys: [["← → / ↓ ↑", "One tick"], ["Shift + arrows, PageUp / PageDown", "One major tick"], ["Home / End", "Ends of the range"]],
+  },
+  {
+    slug: "hex-viewer", name: "Hex viewer", group: "Developer tools", demo: "hex-viewer",
+    summary: "Offsets, bytes in two groups and an ASCII column, colored by kind (zero, printable, whitespace, control, high). Hovering a byte lights it in both columns, the cursor glides between cells, and Shift extends a selection. It shows 16 columns when they fit and 8 when they don't, and paints only the rows in view.",
+    code: `let out = ui.hex_viewer("logo.png", &bytes).height(260.0).show();
+status(format!("{} bytes selected", out.selection.len()));`,
+    options: [["height(px)", "Height of the scrolling area."], ["→ HexOut", "cursor and selection (a byte range)."]],
+    keys: [["Arrows", "Move by byte or row"], ["Shift + arrows", "Extend the selection"], ["Home / End", "Row start / end (Cmd: file)"], ["PageUp / PageDown", "Eight rows"]],
+  },
+  {
+    slug: "tree-table", name: "Tree table", group: "Data", demo: "tree-table",
+    summary: "A tree with columns: names indent under folders, numbers line up on the right. Chevrons turn, rows that appear rise in, and the selection pill glides between rows. Arrow keys walk and fold it like a file tree.",
+    code: `let rows = vec![TreeTableRow::new("src", &["src", "12 KB"]).icon("folder").children([...])];
+ui.tree_table("disk", &[("Name", 0.0), ("Size", 80.0)], &rows, &mut expanded, &mut selected);`,
+    options: [["columns: &[(title, width)]", "Width 0 fills; the first column holds the tree."], ["TreeTableRow", "id, cells, icon and children."]],
+    keys: [["↑ ↓", "Move"], ["→", "Expand, then into the first child"], ["←", "Collapse, then to the parent"], ["Enter / Space", "Toggle a folder"]],
+  },
+  {
+    slug: "problems-panel", name: "Problems panel", group: "Developer tools", demo: "problems-panel",
+    summary: "Diagnostics grouped by file, with Error, Warning and Info filters that show their counts. File groups fold, rows rise in one after another, and a click (or Enter) opens a problem at its line and column.",
+    code: `if let Some(i) = ui.problems_panel("build", &problems) {
+    open(&problems[i].file, problems[i].line);
+}`,
+    options: [["Problem", "severity, file, line, col, message and source (\"rustc E0308\")."], ["→ Option<usize>", "The problem opened this frame."]],
+    keys: [["↑ ↓ in the list", "Move"], ["Enter", "Open"], ["Enter / Space on a file", "Fold it"]],
+  },
+  {
+    slug: "stack-trace", name: "Stack trace", group: "Developer tools", demo: "stack-trace",
+    summary: "An error and its stack. Your frames show; runs of library frames fold into one row you can open. The first frame with source opens to show the lines around it, the failing one marked, and Copy puts the whole trace on the clipboard.",
+    code: `ui.stack_trace("panic", "ParseIntError", "invalid digit found in string", &frames, "rust");`,
+    options: [["StackFrame", "function, file, line, in_app and context: (line, text) pairs."], ["→ Option<usize>", "The frame clicked; one frame is open at a time."]],
+    keys: [["Tab", "Frame to frame"], ["Enter / Space", "Open a frame or a library group"]],
+  },
+  {
+    slug: "blame-view", name: "Blame view", group: "Developer tools", demo: "blame-view",
+    summary: "Code with who last changed each line. Each commit's chunk shows its author, summary and age, with a bar down the side that's brighter the newer the change. Hovering a line lights every line of the same commit; clicking pins it.",
+    code: `if let Some(i) = ui.blame_view("config.rs", &lines).height(300.0).show() {
+    show_commit(&lines[i].commit);
+}`,
+    options: [["BlameLine", "commit, author, age_days, summary and text."], ["lang(name) / height(px)", "Syntax colors and the scrolling height."]],
+    keys: [["↑ ↓, PageUp / PageDown", "Move by line"], ["Enter", "Pick the line's commit"]],
+  },
+  {
+    slug: "coverage-view", name: "Coverage view", group: "Developer tools", demo: "coverage-view",
+    summary: "Code with line coverage: hit counts in the gutter, missed lines and partly covered branches tinted, and a summary meter that fills in. Next uncovered (or N) scrolls to the next miss and pulses it.",
+    code: `ui.coverage_view("cov", "src/config.rs", &lines).height(300.0).show();`,
+    options: [["CoverLine { text, cover }", "Coverage::Skip, Hit(n), Miss or Partial(n)."], ["lang(name) / height(px)", "Syntax colors and the scrolling height."]],
+    keys: [["N", "Next uncovered line"]],
+  },
+  {
+    slug: "query-builder", name: "Query builder", group: "Developer tools", demo: "query-builder",
+    summary: "Build a filter from rules and nested groups: pick a field, an operator that suits it and a value (a list for choice fields, checked for numbers). Each group joins its rules with All or Any, new rows rise in, and the query it makes sits underneath, ready to copy.",
+    code: `let fields = [QueryField::choice("Status", &["open", "closed"]), QueryField::number("Priority")];
+ui.query_builder("issues", &fields, &mut query);
+let sql_where = query.to_query(&fields);`,
+    options: [["QueryField", "text, number or choice; decides the operators and the value input."], ["QueryGroup { any, rules, groups }", "to_query(&fields) writes status = \"open\" AND (...)."]],
+    keys: [["Tab", "Through each rule's field, operator and value"], ["Space / Enter", "Open a list, pick"]],
+  },
+  {
+    slug: "regex-tester", name: "Regex tester", group: "Developer tools", demo: "regex-tester",
+    summary: "A pattern with i, m and s toggles, test text, and the text again with every match boxed and each capture group underlined in its own color, plus a list of matches with their groups. A bad pattern shakes and says why. Bring your regex engine: the widget calls it only when something changes.",
+    code: `ui.regex_tester("dates", &mut pattern, &mut flags, &mut text, |p, f, t| {
+    let re = regex::Regex::new(p).map_err(|e| e.to_string())?;
+    Ok(re.captures_iter(t).map(to_match).collect())
+});`,
+    options: [["run(pattern, RegexFlags, text)", "→ Result<Vec<RegexMatch>, String>; byte ranges for the match and each group."], ["RegexFlags", "ignore_case, multi_line, dot_all."]],
+    keys: [["Tab", "Pattern, flags, test text"]],
+  },
+  {
+    slug: "feature-flags", name: "Feature flags", group: "Developer tools", demo: "feature-flags",
+    summary: "Flags with a switch per environment and a rollout slider for the last one, which wakes up when the flag is live there. Filter by name, see how many are live, spot stale flags; a row flashes when it changes. On narrow screens the switches move under the name.",
+    code: `if let Some(i) = ui.feature_flags("flags", &["Dev", "Staging", "Production"], &mut flags) {
+    save(&flags[i]);
+}`,
+    options: [["FeatureFlag", "key, description, on (per environment), rollout (0 to 100) and stale."], ["→ Option<usize>", "The flag that changed this frame."]],
+    keys: [["Space on a switch", "Toggle"], ["← → on a rollout", "5% steps"]],
+  },
+  {
+    slug: "dependency-graph", name: "Dependency graph", group: "Developer tools", demo: "dependency-graph",
+    summary: "Packages in layers, each one past everything that depends on it, joined by curved arrows. Selecting (or hovering) a package lights what it pulls in and what pulls it in, in two colors, and dims the rest. Layers arrive in turn and edges draw in; on narrow widths the layers stack top to bottom.",
+    code: `let edges = [(0, 1), (0, 2), (1, 3)]; // (dependent, dependency)
+ui.dependency_graph("deps", &nodes, &edges, &mut selected);`,
+    options: [["DepNode { name, version }", "One package."], ["edges", "(dependent, dependency) index pairs; layers come from the longest path."]],
+    keys: [["← → (↑ ↓ when stacked)", "Previous / next layer"], ["↑ ↓ (← → when stacked)", "Within a layer"], ["Escape", "Clear"]],
+  },
+  {
+    slug: "veil", name: "Veil", group: "Overlays", demo: "veil",
+    summary: "Frost over something sensitive (an API key, a spoiler, an image) until it's revealed. A click dissolves the frost outward from where you clicked; setting revealed back to false brings it back. While veiled, the content isn't drawn, can't be clicked, and is hidden from screen readers.",
+    code: `ui.veil("key", &mut revealed, "Secret key", |ui| {
+    ui.label(api_key).mono();
+});`,
+    options: [["revealed: &mut bool", "Set false to veil again."], ["label", "Shown on the veil and read as \"Reveal …\"."]],
+    keys: [["Enter / Space on the veil", "Reveal"]],
+  },
+  {
+    slug: "onboarding-checklist", name: "Onboarding checklist", group: "Overlays", demo: "onboarding-checklist",
+    summary: "A getting-started checklist that lives in a corner: a pill with a progress ring opens into the list. The next step shows its detail and button, finished steps check off with a pop, and when everything is done it celebrates with a burst and offers Dismiss.",
+    code: `let out = ui.onboarding_checklist("setup", "Get started", &steps, &mut open);
+if let Some(i) = out.action { run_step(i); }`,
+    options: [["OnboardingStep", "title, detail, action label and done."], ["→ OnboardingOut", "action (a step's button) and dismissed."]],
+    keys: [["Enter / Space on the pill", "Open or close"]],
+  },
+  {
+    slug: "swipe-actions", name: "Swipe actions", group: "Overlays", demo: "swipe-actions",
+    summary: "Rows you swipe sideways to reveal actions, like a mail app: drag or scroll sideways with a trackpad and the row snaps open; swipe far enough and the outermost action fires as the row flies out. Past the actions it rubber-bands. While open, a tap closes it or hits an action.",
+    code: `if let Some(hit) = ui.swipe_row(i, "Message from Ada", &leading, &trailing, |ui| row(ui)) {
+    if hit.trailing && hit.index == 1 { delete(i); }
+}`,
+    options: [["SwipeAction { label, icon, tone }", "Leading on the left, trailing on the right."], ["swipe_row_reveal(key, Some(true))", "Open a row from code."]],
+    keys: [["← / →", "Open the trailing / leading actions"], ["Enter", "Fire the outermost"], ["Escape", "Close"]],
+  },
+  {
+    slug: "docking-panels", name: "Docking panels", group: "Layout and surfaces", demo: "docking-panels",
+    summary: "Panels docked left, right, bottom and in the middle, each zone with tabs. Drag a tab and a preview springs to the zone it'll land in; drop it there. Splitters resize the docks, empty docks fold away, and the active tab's underline glides. Cmd/Ctrl+Shift+arrows move the focused tab.",
+    code: `ui.dock_area("ide", &panels, &mut layout, 380.0, |ui, id| match id {
+    "files" => file_tree(ui),
+    _ => editor(ui, id),
+});`,
+    options: [["DockLayout", "zones (panel ids per zone), active tabs, and left / right / bottom sizes."], ["DockPanel { id, title, icon }", "A panel; content draws its body by id."]],
+    keys: [["← → on tabs", "Switch tab"], ["Cmd/Ctrl + Shift + arrows", "Move the tab to a zone (↑ is the middle)"]],
+  },
+  {
+    slug: "bubble-chart", name: "Bubble chart", group: "Charts", demo: "bubble-chart",
+    summary: "Bubbles placed by x and y, sized by area (not radius) and colored by group, with a size legend. Give it the next frame of data and every bubble glides there, so a year slider plays like a timeline. Hover lifts a bubble with a tooltip and dims the rest; arrows and clicks select.",
+    code: `ui.bubble_chart("coffee", &bubbles)
+    .groups(&["Europe", "Americas", "Asia"]).axes("Revenue", "Satisfaction %")
+    .size_label("Customers").log_x(true).x_range(20.0, 2000.0)
+    .frame("2023").show();`,
+    options: [["Bubble { label, x, y, size, group }", "Bubbles are matched across frames by label."], ["x_range / y_range / max_size", "Fix the scales so a timeline doesn't rescale."], ["log_x, frame(label), format(x, y)", "Log axis, the big year behind the plot, value formats."]],
+    keys: [["← →", "Previous / next bubble by x"], ["Escape", "Clear"]],
+  },
+  {
+    slug: "chart-annotations", name: "Chart annotations", group: "Charts", demo: "chart-annotations",
+    summary: "Notes on line, area and bar charts: a dashed target line, a shaded band over a span (an outage, a campaign) and callouts on single points with a leader. They draw in after the data, callouts pop, labels step aside so they don't overlap, and screen readers hear them in the chart's description.",
+    code: `ui.line_chart("signups", &weeks, series)
+    .annotate(Annotation::target(1200.0, "Goal 1.2k"))
+    .annotate(Annotation::band(4, 5, "Outage", Tone::Danger))
+    .annotate(Annotation::point(9, 0, "Launch"))
+    .show();`,
+    options: [["Annotation::target(value, label)", "Also widens the y range to include the target."], ["Annotation::band(from, to, label, tone)", "x indices, inclusive."], ["Annotation::point(index, series, label)", "Above the point when there's room, else below."]],
+  },
+  {
+    slug: "dot-matrix", name: "Dot-matrix display", group: "Motion", demo: "dot-matrix",
+    summary: "Text on a grid of dots in a 5×7 font, like a departure board or an LED sign. New text flips the dots column by column; text that doesn't fit can run as a marquee (still under reduced motion). The panel stays dark in both themes, and screen readers read the text.",
+    code: `ui.dot_matrix("status", "ON TIME").cols(54).align_right().tone(Token::Success).show();
+ui.dot_matrix("ticker", notice).cols(112).scroll(true).show();`,
+    options: [["cols(n) / dot(pitch)", "Width in dots and dot spacing."], ["tone(token)", "The lit color; amber by default."], ["scroll(true) / align_right()", "Marquee for long text; right-align for clocks."]],
   },
   {
     slug: "calendar-heatmap", name: "Calendar heatmap", group: "Charts", demo: "calendar-heatmap",
@@ -2395,10 +2612,10 @@ ${code(`cx.new(|cx| LumenView::new(state, view, window, cx)
 <h2>Text input</h2>
 <p>A focused lumen text field registers a GPUI input handler, so input methods work: CJK composition shows underlined in the field and commits on confirm, macOS press-and-hold accents and dead keys work, and the candidate window sits under the caret. Scripts the bundled Geist lacks load the system fonts as fallbacks the first time they appear.</p>
 <h2>gpui-ce</h2>
-<p>The community fork <code>gpui-ce</code> 0.3 is supported with <code>default-features = false, features = ["ce"]</code>. Start the app with <code>lumen_gpui::application()</code>, which works with either GPUI. The <code>ce</code> build compiles and passes its tests, but isn't verified in a window yet: on macOS 27, gpui-ce 0.3.0 deadlocks in its own <code>open_window</code>.</p>
+<p>The community fork <code>gpui-ce</code> 0.3 is supported with <code>default-features = false, features = ["ce"]</code>. Start the app with <code>lumen_gpui::application()</code>, which works with either GPUI. Open windows from <code>lumen_gpui::run(app, |cx| ...)</code>: gpui-ce 0.3.0 on macOS deadlocks if a window opens inside its launch callback, and <code>run</code> defers it to the next main-loop turn (with Zed's GPUI it calls straight through). The <code>ce</code> build passes the real-window selftest.</p>
 <h2>Limits today</h2>
 <ul>
-<li>Accessibility trees aren't bridged to GPUI.</li>
+<li>Accessibility is bridged with gpui-ce only: lumen's nodes join the window's AccessKit tree. Zed's GPUI has no tree to join yet.</li>
 </ul>
 <p>Run the example: <code>cd crates/lumen-gpui && cargo run --example dashboard</code>, or <code>cargo run --example selftest</code> for a scripted check in a real window. It shows a GPUI sidebar driving a lumen dashboard, and a lumen Deploy button updating the GPUI header.</p>`,
   },
@@ -2428,14 +2645,22 @@ lumen-gpui   optional: hosts lumen views inside a GPUI app (separate workspace)<
 <h2>Platforms?</h2>
 <p>macOS, Windows, Linux (X11 and Wayland through winit), and browsers with WebGPU or WebGL2.</p>
 <h2>Accessibility?</h2>
-<p>Everything is keyboard reachable with visible focus. Screen reader support through AccessKit is on the roadmap.</p>
+<p>Everything is keyboard reachable with visible focus, and widgets describe themselves to screen readers through AccessKit: VoiceOver on macOS, Narrator and NVDA on Windows, Orca on Linux. Inside GPUI the tree is bridged with gpui-ce; Zed's GPUI has no accessibility tree to join yet. Screen readers have been checked on macOS so far.</p>
 <h2>What's next?</h2>
-<p>Combobox, command palette, number and tag inputs, a data table and virtualized grid, tree, code editor, and docking panels. And a password manager built with lumen.</p>`,
+<p>Voice widgets (a recorder, voice notes and a live session view), a small toy app, and running the platform checklist on real Windows and Linux machines. <a href="#/apps">Wardlight</a>, the password and SSH manager built with GPUI and lumen, is out as an early preview.</p>`,
   },
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-24", items: [
+  { v: "Next round", date: "2026-11-28", items: [
+    "Wardlight, a password and SSH manager built with GPUI and lumen, is out as an early preview. GPUI runs the window; every screen is a lumen view. It replaces the Vault preview on the home page.",
+    "Accessibility: widgets describe themselves (role, name, value, state) and lumen-app exposes them through AccessKit to VoiceOver, Narrator, NVDA and Orca. Screen reader actions click, focus, step and set values. With gpui-ce, lumen views join the GPUI window's tree.",
+    "Virtualized lists: Ui::virtual_rows, list_view and table build only the visible rows, rows of any height, with Page Up/Down and type-ahead.",
+    "Interactive window chrome: lumen-drawn title bars move, maximize and close the window, with regions for drag and caption buttons; App::custom_chrome turns it on.",
+    "CI builds and renders demos on Linux, Windows and macOS. gpui-ce is verified in a real window, and lumen_gpui::run avoids gpui-ce 0.3.0's launch deadlock.",
+    "Twenty-two new components: signature pad, avatar upload, time dial, aspect-ratio picker, ruler slider, hex viewer, tree table, problems panel, stack trace, blame and coverage views, query builder, regex tester, feature flags, dependency graph, veil, onboarding checklist, swipe actions, docking panels, bubble chart, chart annotations and dot-matrix display.",
+  ] },
+  { v: "Earlier", date: "2026-11-24", items: [
     "Every app fits a phone: under 1000 px the sidebar collapses to icons, and under 640 px each app shows one pane at a time with a back button (a tap opens a note, message or issue; music gets a mini player).",
     "Horizontal scrolling: Ui::scroll_row keeps its children at natural width and scrolls sideways with a trackpad or Shift + wheel, while a plain wheel still scrolls the page. Editor tabs, pricing cards and the phone board use it.",
     "Narrow cards: one-line labels keep their width instead of drawing over each other, icons and keycaps never shrink, chart labels thin out by measured width, and world clocks, quarter picker, countdown, shortcut bar, settings rows and model picker reflow. --check also reports text spilling out of squeezed widgets.",

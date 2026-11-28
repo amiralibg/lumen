@@ -18,7 +18,9 @@ default = ["zed"]
 zed = ["dep:gpui"]
 # The community fork, gpui-ce (needs Rust 1.95). Build with
 # `--no-default-features --features ce`.
-ce = ["dep:gpui-ce", "dep:gpui_ce_platform"]
+ce = ["dep:gpui-ce", "dep:gpui_ce_platform", "lumen-core/accesskit"]
+# gpui-ce with its test platform, for `tests/a11y_ce.rs`.
+ce-test = ["ce", "gpui-ce/test-support"]
 
 [dependencies]
 lumen-core = { path = "../lumen-core" }
@@ -36,3 +38,7 @@ web-time = "1.1"
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 objc = "0.2"
 raw-window-handle = "0.6"
+
+[[test]]
+name = "a11y_ce"
+required-features = ["ce-test"]

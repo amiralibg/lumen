@@ -3,6 +3,7 @@
 //! dots pop in and out, and the arrow keys walk the selection.
 
 use super::toast::Tone;
+use crate::a11y::{A11y, Role};
 use crate::anim::Ease;
 use crate::color::Color;
 use crate::input::{CursorIcon, Key};
@@ -28,11 +29,19 @@ pub struct ListRow {
     pub unread: bool,
     pub starred: bool,
     pub badge: Option<(String, Tone)>,
+    /// A stable id from your data. With keys, rows inserted or removed
+    /// above the viewport don't move what you're looking at.
+    pub key: Option<u64>,
 }
 
 impl ListRow {
     pub fn new(title: impl Into<String>) -> Self {
         ListRow { title: title.into(), ..Default::default() }
+    }
+    /// A stable id for the row (see [`ListRow::key`](ListRow#structfield.key)).
+    pub fn key(mut self, k: u64) -> Self {
+        self.key = Some(k);
+        self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {
         self.subtitle = Some(s.into());
@@ -80,18 +89,28 @@ pub struct ListOut {
     pub clicked: Option<usize>,
     /// A row's star was toggled.
     pub starred: Option<usize>,
+    /// Rows built this frame (only those in view; see [`Ui::virtual_rows`]).
+    pub built: usize,
 }
 
 #[derive(Default)]
 struct ListMem {
     born: Option<f64>,
     count: usize,
+    /// Row that had keyboard focus last frame.
+    focus: Option<usize>,
+    /// Rows per page for Page Up / Page Down.
+    page: usize,
+    /// Type-ahead buffer and when it was last typed into.
+    typed: String,
+    typed_at: f64,
 }
 
 impl Ui {
     /// A selectable list. `selected` is the chosen row (if any); click a
-    /// row or use ↑ ↓ Home End to move it. Put it inside [`Ui::scroll`] for
-    /// long lists.
+    /// row, or use ↑ ↓ Page Up/Down Home End, or type the start of a title,
+    /// to move it. Inside a [`Ui::scroll`] only the rows in view are built
+    /// (see [`Ui::virtual_rows`]), so it handles 100k rows.
     pub fn list_view(&mut self, key: impl std::hash::Hash, rows: &[ListRow], selected: &mut Option<usize>) -> ListOut {
         let id = self.make_id(("list_view", key));
         let mo = self.motion();
@@ -111,16 +130,89 @@ impl Ui {
         };
 
         let mut out = ListOut::default();
+        let n = rows.len();
+        let row_id = |i: usize| id.with(("row", i));
+
+        // Keyboard, on the row focused last frame, before the rows are
+        // built: the row it moves to is scrolled into view and built now.
+        let focused_i = self.mem::<ListMem>(id).focus.filter(|&i| i < n && self.focused() == Some(row_id(i)));
+        let mut reveal = None;
+        if let Some(i) = focused_i {
+            let rid = row_id(i);
+            let page = self.mem::<ListMem>(id).page.max(1);
+            let mut go = None;
+            if self.key_pressed_for(rid, Key::ArrowDown) && i + 1 < n {
+                go = Some(i + 1);
+            }
+            if self.key_pressed_for(rid, Key::ArrowUp) && i > 0 {
+                go = Some(i - 1);
+            }
+            if self.key_pressed_for(rid, Key::PageDown) {
+                go = Some((i + page).min(n - 1));
+            }
+            if self.key_pressed_for(rid, Key::PageUp) {
+                go = Some(i.saturating_sub(page));
+            }
+            if self.key_pressed_for(rid, Key::Home) {
+                go = Some(0);
+            }
+            if self.key_pressed_for(rid, Key::End) {
+                go = Some(n - 1);
+            }
+            // Type-ahead: jump to the next title starting with what was
+            // typed (a pause of 0.8 s starts a new search).
+            let typed: String = self.take_text_input(rid).concat().to_lowercase();
+            if !typed.trim().is_empty() {
+                let m = self.mem::<ListMem>(id);
+                if now - m.typed_at > 0.8 {
+                    m.typed.clear();
+                }
+                m.typed.push_str(&typed);
+                m.typed_at = now;
+                let q = m.typed.clone();
+                let repeat = q.chars().all(|c| q.starts_with(c));
+                let probe: String = if repeat { q.chars().take(1).collect() } else { q.clone() };
+                let start = if repeat { i + 1 } else { i };
+                go = (0..n).map(|k| (start + k) % n).find(|&j| rows[j].title.to_lowercase().starts_with(&probe)).or(go);
+            }
+            if let Some(g) = go {
+                self.request_focus(row_id(g));
+                if *selected != Some(g) {
+                    out.changed = true;
+                }
+                *selected = Some(g);
+                reveal = Some(g);
+            }
+            if self.key_pressed_for(rid, Key::Enter) {
+                *selected = Some(i);
+                out.activated = Some(i);
+            }
+        }
+
+        // A guess at a row's height until rows are measured.
+        let est = rows.first().map_or(36.0, |r| {
+            let lines = 20.0 + if r.subtitle.is_some() { 22.0 } else { 0.0 } + if r.preview.is_some() { 18.0 } else { 0.0 };
+            let lead: f32 = if r.avatar.is_some() { 32.0 } else { 18.0 };
+            lead.max(lines) + 16.0
+        });
+
+        self.a11y(id, || A11y::new(Role::ListBox));
+        let node = self.begin(Style { dir: Dir::Column, width: Size::FILL, ..Default::default() }, Some(id), Sense::NONE, CursorIcon::Default, false, None);
+
         let mut focus_within = false;
-        let row_ids: Vec<_> = (0..rows.len()).map(|i| id.with(("row", i))).collect();
-
-        let node = self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 2.0, ..Default::default() }, Some(id), Sense::NONE, CursorIcon::Default, false, None);
-
+        let mut focus_row = None;
         let mut stagger_pending = false;
-        for (i, row) in rows.iter().enumerate() {
-            let rid = row_ids[i];
-            let ix = self.interact(rid, Sense::CLICK, false);
+        let mut built = 0usize;
+        let pin = selected.or(focused_i);
+        let key_of = |i: usize| rows[i].key.unwrap_or(i as u64);
+        let vout = self.virtual_rows("rows", n).keys(&key_of).gap(2.0).estimate(est).pin(pin).reveal(reveal).show(|ui, i| {
+            let row = &rows[i];
+            let rid = row_id(i);
+            let ix = ui.interact(rid, Sense::CLICK, false);
             focus_within |= ix.focused;
+            if ix.focused {
+                focus_row = Some(i);
+            }
             if ix.clicked {
                 if *selected != Some(i) {
                     out.changed = true;
@@ -131,59 +223,35 @@ impl Ui {
                     out.activated = Some(i);
                 }
             }
-            if ix.focused {
-                let mut go = None;
-                if self.key_pressed_for(rid, Key::ArrowDown) && i + 1 < rows.len() {
-                    go = Some(i + 1);
-                }
-                if self.key_pressed_for(rid, Key::ArrowUp) && i > 0 {
-                    go = Some(i - 1);
-                }
-                if self.key_pressed_for(rid, Key::Home) && !rows.is_empty() {
-                    go = Some(0);
-                }
-                if self.key_pressed_for(rid, Key::End) && !rows.is_empty() {
-                    go = Some(rows.len() - 1);
-                }
-                if let Some(g) = go {
-                    self.request_focus(row_ids[g]);
-                    if *selected != Some(g) {
-                        out.changed = true;
-                    }
-                    *selected = Some(g);
-                }
-                if self.key_pressed_for(rid, Key::Enter) {
-                    *selected = Some(i);
-                    out.activated = Some(i);
-                }
-            }
 
             // Entrance: fade and rise, 35 ms apart, capped so long lists
             // don't make you wait.
             let enter = if reduced {
                 1.0
             } else {
-                let delay = (i.min(12) as f64) * 0.035;
+                let delay = (built.min(12) as f64) * 0.035;
                 let t = ((now - born - delay) / 0.28).clamp(0.0, 1.0) as f32;
                 if t < 1.0 {
                     stagger_pending = true;
                 }
                 Ease::Out.apply(t)
             };
+            built += 1;
 
             let is_sel = *selected == Some(i);
-            let hov = self.fade(rid, 0, ix.hovered && !is_sel, mo.hover_in, mo.hover_out, Ease::Linear);
-            let press = self.fade(rid, 1, ix.pressed, 0.0, mo.press_out, Ease::Out);
-            let dot = self.spring(rid, 2, if row.unread { 1.0 } else { 0.0 }, mo.bouncy).max(0.0);
-            let (ring_a, ring_gap) = self.focus_anim(&ix);
+            ui.a11y(rid, || A11y::new(Role::ListBoxOption).selected(is_sel).position(i, n));
+            let hov = ui.fade(rid, 0, ix.hovered && !is_sel, mo.hover_in, mo.hover_out, Ease::Linear);
+            let press = ui.fade(rid, 1, ix.pressed, 0.0, mo.press_out, Ease::Out);
+            let dot = ui.spring(rid, 2, if row.unread { 1.0 } else { 0.0 }, mo.bouncy).max(0.0);
+            let (ring_a, ring_gap) = ui.focus_anim(&ix);
 
-            let hover_c = self.color(Token::Hover).multiply_alpha(hov);
-            let press_c = self.color(Token::Pressed).multiply_alpha(press * 0.8);
-            let ring_c = self.color(Token::FocusRing);
+            let hover_c = ui.color(Token::Hover).multiply_alpha(hov);
+            let press_c = ui.color(Token::Pressed).multiply_alpha(press * 0.8);
+            let ring_c = ui.color(Token::FocusRing);
             let radius = nl.radius;
             let rise = (1.0 - enter) * 8.0;
 
-            let row_node = self.begin(
+            let row_node = ui.begin(
                 Style { dir: Dir::Row, width: Size::FILL, pad: Sides::xy(10.0, 8.0), gap: 10.0, align: Align::Start, ..Default::default() },
                 Some(rid),
                 Sense::CLICK,
@@ -202,15 +270,15 @@ impl Ui {
                     cx.painter.push_layer(enter, vec2(0.0, rise));
                 })),
             );
-            self.set_paint_after(row_node, Box::new(|cx, _| cx.painter.pop_layer()));
+            ui.set_paint_after(row_node, Box::new(|cx, _| cx.painter.pop_layer()));
 
-            let fg = self.color(Token::Foreground);
-            let sec = self.color(Token::TextSecondary);
-            let muted = self.color(Token::TextMuted);
-            let accent = self.color(Token::Accent);
+            let fg = ui.color(Token::Foreground);
+            let sec = ui.color(Token::TextSecondary);
+            let muted = ui.color(Token::TextMuted);
+            let accent = ui.color(Token::Accent);
 
             // Unread dot gutter: keeps titles aligned whether or not a row is unread.
-            self.leaf(
+            ui.leaf(
                 Style::default(),
                 vec2(6.0, 18.0),
                 None,
@@ -224,52 +292,53 @@ impl Ui {
             );
 
             if let Some((ini, tone)) = &row.avatar {
-                self.avatar(ini, *tone, 32.0, None);
+                ui.avatar(ini, *tone, 32.0, None);
             } else if let Some(icon) = &row.icon {
-                let ic = if is_sel { self.color(Token::AccentStrong) } else { self.color(Token::TextSecondary) };
-                self.begin(Style { pad: Sides::xy(0.0, 1.0), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-                self.icon_leaf(icon, 16.0, ic);
-                self.end();
+                let ic = if is_sel { ui.color(Token::AccentStrong) } else { ui.color(Token::TextSecondary) };
+                ui.begin(Style { pad: Sides::xy(0.0, 1.0), ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+                ui.icon_leaf(icon, 16.0, ic);
+                ui.end();
             }
 
-            self.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 2.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
-            self.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            ui.begin(Style { dir: Dir::Column, width: Size::FILL, gap: 2.0, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
+            ui.begin(Style { dir: Dir::Row, width: Size::FILL, gap: 6.0, align: Align::Center, ..Default::default() }, None, Sense::NONE, CursorIcon::Default, false, None);
             let title_role = if row.unread { TextRole::BodyStrong } else { TextRole::Body };
-            let st = self.text_style(title_role);
-            self.text_leaf(row.title.clone(), st, fg, false, true, Style { width: Size::FILL, ..Default::default() });
+            let st = ui.text_style(title_role);
+            ui.text_leaf(row.title.clone(), st, fg, false, true, Style { width: Size::FILL, ..Default::default() });
             if let Some((b, tone)) = &row.badge {
-                self.badge(b.clone(), *tone);
+                ui.badge(b.clone(), *tone);
             }
             if let Some(m) = &row.meta {
-                let st = self.text_style(TextRole::Caption);
-                let c = if row.unread { self.color(Token::AccentStrong) } else { muted };
-                self.text_leaf(m.clone(), st, c, false, false, Style::default());
+                let st = ui.text_style(TextRole::Caption);
+                let c = if row.unread { ui.color(Token::AccentStrong) } else { muted };
+                ui.text_leaf(m.clone(), st, c, false, false, Style::default());
             }
-            self.end();
+            ui.end();
             if let Some(s) = &row.subtitle {
                 let role = if row.unread { TextRole::BodyStrong } else { TextRole::Body };
-                let st = self.text_style(role);
+                let st = ui.text_style(role);
                 let c = if row.unread { fg } else { sec };
-                self.text_leaf(s.clone(), st, c, false, true, Style { width: Size::FILL, ..Default::default() });
+                ui.text_leaf(s.clone(), st, c, false, true, Style { width: Size::FILL, ..Default::default() });
             }
             if let Some(p) = &row.preview {
-                let st = self.text_style(TextRole::Caption);
-                self.text_leaf(p.clone(), st, muted, false, true, Style { width: Size::FILL, ..Default::default() });
+                let st = ui.text_style(TextRole::Caption);
+                ui.text_leaf(p.clone(), st, muted, false, true, Style { width: Size::FILL, ..Default::default() });
             }
-            self.end();
+            ui.end();
 
             if row.starred || ix.hovered || is_sel {
                 let sid = rid.with("star");
-                let six = self.interact(sid, Sense::CLICK, false);
-                let pop = self.spring(sid, 0, if row.starred { 1.0 } else { 0.0 }, mo.bouncy);
-                let sh = self.fade(sid, 1, six.hovered, mo.hover_in, mo.hover_out, Ease::Linear);
-                let on_c = self.color(Token::Warning);
-                let off_c = self.color(Token::TextMuted).mix(self.color(Token::Foreground), sh);
+                let six = ui.interact(sid, Sense::CLICK, false);
+                let pop = ui.spring(sid, 0, if row.starred { 1.0 } else { 0.0 }, mo.bouncy);
+                let sh = ui.fade(sid, 1, six.hovered, mo.hover_in, mo.hover_out, Ease::Linear);
+                let on_c = ui.color(Token::Warning);
+                let off_c = ui.color(Token::TextMuted).mix(ui.color(Token::Foreground), sh);
                 let starred = row.starred;
+                ui.a11y(sid, || A11y::new(Role::Button).label("Star").toggled(starred));
                 if six.clicked {
                     out.starred = Some(i);
                 }
-                self.leaf(
+                ui.leaf(
                     Style::default(),
                     vec2(18.0, 18.0),
                     Some(sid),
@@ -286,9 +355,17 @@ impl Ui {
                     })),
                 );
             }
-            self.end();
-        }
+            ui.end();
+        });
         self.end();
+        out.built = vout.built;
+        {
+            let m = self.mem::<ListMem>(id);
+            m.focus = focus_row;
+            if n > 0 && vout.total_height > 0.0 {
+                m.page = ((vout.viewport / (vout.total_height / n as f32)).floor() as usize).saturating_sub(1).max(1);
+            }
+        }
 
         if stagger_pending {
             self.anims.keep_alive();
@@ -301,7 +378,7 @@ impl Ui {
         let accent_sel = self.color(Token::AccentSubtle);
         let sel_fill = if focus_within || nl.accent_selection > 0.5 { accent_sel } else { neutral.mix(accent_sel, 0.35) };
         let bar = self.color(Token::Accent).multiply_alpha(nl.indicator.max(0.0));
-        let sel_id = selected.and_then(|s| row_ids.get(s).copied());
+        let sel_id = selected.filter(|&s| s < n).map(row_id);
         let anim_key = id.with("pill");
         let smooth = mo.smooth;
         let radius = nl.radius;

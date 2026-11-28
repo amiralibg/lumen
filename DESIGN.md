@@ -1,6 +1,8 @@
 # lumen design tokens
 
-This is the single source of truth for how lumen looks. Widgets read tokens only; no widget may contain a literal color, radius, duration or spring constant. Per-widget geometry lives in `docs/widgets-batch1.md`.
+This is the single source of truth for how lumen looks. Widgets read tokens and the current look only; no widget may contain a literal color, radius, duration or spring constant. Colors come from `Token::*`, geometry from `ui.look()`, motion from `ui.motion()`. The original per-widget specs for the first batch live in `docs/widgets-batch1.md`; sections 10 and 11 hold the rules every later component follows.
+
+Values in sections 2 to 7 are for the default **Lumen** look. Section 9 lists what the other looks change.
 
 All sizes are logical pixels. Hex is the canonical value; the OKLCH triple (`L C H`) is derived from the hex and is there for tuning and for the OKLab blend.
 
@@ -191,15 +193,19 @@ Every text pair above is AA or better. Two known non-text gaps, both accepted:
 
 ### 3.1 Radius
 
-| Token | px | Use |
+| Look field | Lumen px | Use |
 |---|---|---|
-| `radius_xs` | 4 | checkbox, selection rects, kbd chips |
-| `radius_control_sm` | 6 | sm controls, tooltip |
-| `radius_control` | 8 | md controls, inputs, nav items |
-| `radius_control_lg` | 10 | lg controls |
-| `radius_panel` | 12 | cards, menus, popovers |
-| `radius_surface` | 16 | dialogs, sheets |
-| `radius_full` | height / 2 | switch, slider, badges, swatches |
+| `checkbox.radius` | 4 | checkbox, selection rects, kbd chips |
+| `control.radius[0]` | 8 | sm controls, tooltip, menu rows (minus 1) |
+| `control.radius[1]` | 10 | md controls, inputs |
+| `control.radius[2]` | 12 | lg controls |
+| `nav.radius` | 8 | nav items |
+| `card.radius × 0.75` (at least `control.radius[1]`) | 12 | menus, popovers, select lists |
+| `card.radius` | 16 | cards, wells, the site's frames |
+| `card.radius + 2` | 18 | dialogs, sheets, command palette |
+| height / 2 | | switch, slider, badges, chips, swatches |
+
+Radii scale together with `Look::rounded(f)`. Pills stay pills.
 
 Nested corners are concentric: inner radius = outer radius - gap between the two edges, minimum 2. A focus ring at offset 2 around an 8px control has outer radius 12.
 
@@ -220,11 +226,11 @@ Usage: 2 between stacked nav items; 4 between title and description; 6 between a
 
 | Size | Height | Horizontal padding | Icon | Icon-text gap | Radius | Text |
 |---|---|---|---|---|---|---|
-| `sm` | 28 | 10 | 14 | 6 | 6 | Geist 500, 12/16 |
-| `md` (default) | 32 | 12 | 16 | 6 | 8 | Geist 500, 13/20 |
-| `lg` | 40 | 16 | 18 | 8 | 10 | Geist 500, 14/20 |
+| `sm` | 30 | 10 | 14 | 6 | 8 | Geist 500, 12/16 |
+| `md` (default) | 36 | 12 | 16 | 6 | 10 | Geist 500, 13/20 |
+| `lg` | 42 | 16 | 18 | 8 | 12 | Geist 500, 14/20 |
 
-Padding is measured from the outer edge and includes the border. Icon-only controls are square (width = height). Pointer hit targets extend to at least 28x28 even when the drawn control is smaller (checkbox, swatch). Standalone icon size outside controls is 16; 20 is allowed in empty states only.
+Heights move by ±4 with `Look::density(..)`. Padding is measured from the outer edge and includes the border. Icon-only controls are square (width = height). Pointer hit targets extend to at least 28x28 even when the drawn control is smaller (checkbox, swatch). Standalone icon size outside controls is 16; 20 is allowed in empty states only.
 
 ### 3.4 Border widths
 
@@ -260,7 +266,7 @@ Rules:
 - Numbers that change in place (slider readout, counts) use tabular figures (`tnum`). If the shaper cannot enable features, reserve the width of the widest possible string and right-align.
 - Text is vertically centered by line box: baseline = top + (line height - (ascent + descent)) / 2 + ascent, rounded to the nearest physical pixel. Do not center by glyph bounds.
 - Secondary text is `TEXT_SECONDARY`, tertiary is `TEXT_MUTED`. Never lower opacity to dim text.
-- Single-line text that overflows is truncated with an ellipsis character, never clipped mid-glyph.
+- Single-line text that overflows is truncated with an ellipsis character, never clipped mid-glyph. Values (numbers, prices, counts) are never truncated: the layout around them wraps or drops columns instead (section 11).
 
 ## 5. Elevation
 
@@ -380,7 +386,7 @@ Everything above describes the **Lumen** look, which is the default. A look (`lu
 | | Lumen | macOS | Windows | GNOME |
 |---|---|---|---|---|
 | Control height sm/md/lg | 30/36/42 | 20/24/30 | 24/32/40 | 28/34/42 |
-| Control radius md | 8 | 6 | 4 | 6 |
+| Control radius md | 10 | 6 | 4 | 6 |
 | Card | r16, border, glass top edge, pointer glow | r10, faint border | r8, border | r12, soft shadow |
 | Secondary button | raised + border | white, hairline shadow, bevel on filled | bottom edge | flat filled |
 | Switch | 40×24 | 38×22, white knob | 40×20, outlined when off | 46×26, white knob |
@@ -399,3 +405,25 @@ Rules:
 - **New tokens.** `CONTROL`, `CONTROL_BORDER` and `CONTROL_EDGE` are the resting fill, outline and bottom edge of neutral controls. On Lumen they equal `SURFACE_RAISED` and `BORDER`.
 - **Native.** `Look::native()` picks macOS, Windows or GNOME from the build target (Lumen on the web). The app layer reports the OS accent, the reduce-motion setting and live dark-mode changes.
 - **Customizing.** `rounded(f)` scales radii (pills stay pills, checkbox radius is capped at half its size). `density(..)` adds ±4 to control heights. `text_scale(s)` scales text and control labels. `motion(..)` swaps springs and durations, and `Motion::slower(f)` scales them all while keeping each spring's damping ratio. `Ui::override_color(mode, token, color)` replaces a single token.
+
+## 10. Every component
+
+The bar each widget clears before it ships.
+
+- **States.** Rest, hover, pressed, focus-visible and disabled are all drawn, plus loading, empty and error where they apply.
+- **Micro-motion.** Every component moves a little: press squash of about 0.96 on `bouncy`, values that roll in, staggered entrances for rows, check marks that grow, end dots that pop. Motion is a spring or a named ease from `ui.motion()`, never linear except fades, and every movement has the reduced-motion fallback from 7.3.
+- **Looks and themes.** It reads geometry from `ui.look()` and colors from tokens, and it's checked in all four looks in both modes.
+- **Keyboard first.** Roving focus inside composites (lists, grids, toolbars, tabs), Escape closes overlays, and focus returns to the trigger.
+- **Named for screen readers.** Each control calls `ui.a11y(id, || A11y::new(Role::…))` with its name, value and state (toggled, selected, expanded, numeric range). Text inside a control names it, any other text is read as a label, and a field's visible label names its input instead of being read twice. Value controls take `ui.a11y_step(id)` for increment and decrement. `lumen-demos <demo> --screenshot out.png --a11y` prints the tree and lists anything a screen reader couldn't name.
+- **No native popups.** Selects, menus and pickers open lumen's own popover, with the spring entrance, a check on the chosen row and full keyboard support.
+- **A real demo.** The demo page shows the component in a real use ("Add a runner", not a lone "Button") and has a poster rendered by `scripts/screenshots.sh`.
+- **Idle at rest.** A settled component requests no frames.
+
+## 11. Narrow widths
+
+Site cards are about 380 px wide and phones are narrower, so components are checked there as well as at full size.
+
+- **Wrap, drop or scroll; don't squeeze.** When a row runs out of room, it wraps (`Style::wrap`, with `min` widths on `Fill` children), drops columns (masonry, stat grids), or scrolls sideways (`Ui::scroll_row`: editor tabs, pricing cards, kanban). Words never break mid-word, and values are never truncated.
+- **Collapse, then hide.** Toolbars and action bars collapse labelled buttons to icon buttons with tooltips before anything is hidden.
+- **Apps** use three widths: wide (1000 and up) shows everything, medium (640 to 999) collapses the sidebar to an icon rail, and narrow (under 640) shows one pane at a time with a back button.
+- **Verify** with `lumen-demos <demo> --screenshot out.png --check`, which reports clipped, overlapping and squeezed text. `scripts/sweep.sh out/` runs it for every demo in four looks and two modes at poster size, at card width (`--size 380x360 --embed`), and for the apps at 1200x760, 760x780 and 380x720. Clips inside scroll regions and canvases are expected.

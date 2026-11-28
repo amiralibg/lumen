@@ -40,6 +40,7 @@ pub mod charts_extra;
 pub mod planning;
 pub mod ai_devtools;
 pub mod motion_chrome;
+pub mod virtual_rows;
 pub mod workspace_pro;
 pub mod rich_views;
 pub mod inputs_pro;
@@ -57,6 +58,15 @@ pub mod wheel_picker;
 pub mod calendar_heatmap;
 pub mod tour;
 pub mod file_browser;
+pub mod signature_pad;
+pub mod ruler_slider;
+pub mod time_dial;
+pub mod aspect_ratio;
+pub mod avatar_upload;
+pub mod devtools_views;
+pub mod devtools_tools;
+pub mod overlays_pro;
+pub mod charts_batch;
 
 pub use button::{Button, Variant};
 pub use card::Card;
@@ -89,7 +99,8 @@ pub use code_data::{CodeBlock, JsonViewer, KeyValueEditor, KvPair, LogEntry, Log
 pub use charts_extra::{BarListItem, Candle, CandlestickChart, FunnelChart, Heatmap, ProgressRing, RadarChart, RingSpec, ScatterChart, ScatterPoint, ScatterSeries};
 pub use planning::{KanbanCard, KanbanCol};
 pub use ai_devtools::{ChatMessage, ChatRole, ComposerOut, DiffViewer, PromptComposer, ToolCall, ToolStatus, TraceSpan, UptimeStatus};
-pub use motion_chrome::{DockItem, RollingNumber, Waveform, WindowChrome};
+pub use virtual_rows::{VirtualOut, VirtualRows};
+pub use motion_chrome::{ChromeResponse, ChromeShown, DockItem, RollingNumber, Waveform, WindowChrome};
 pub use workspace_pro::{FlameSpan, MenuBarScope, PropertyInspector, SplitPane, TermLine, TermTone, Terminal};
 pub use rich_views::{GanttTask, NotificationItem, SpotlightCard, Treemap, TreemapItem};
 pub use inputs_pro::{
@@ -118,6 +129,15 @@ pub use collab_suite::{
 pub use list_view::{ListOut, ListRow};
 pub use tour::TourStep;
 pub use file_browser::{FileEntry, FileOut};
+pub use signature_pad::{SigPoint, Signature, SignaturePad};
+pub use ruler_slider::RulerSlider;
+pub use time_dial::TimeDial;
+pub use charts_batch::{Bubble, BubbleChart, DotMatrix};
+pub use chart::Annotation;
+pub use overlays_pro::{DockLayout, DockPanel, DockZone, OnboardingOut, OnboardingStep, SwipeAction, SwipeHit};
+pub use devtools_tools::{query_ops, DepNode, FeatureFlag, FieldKind, QueryField, QueryGroup, QueryRule, RegexFlags, RegexMatch};
+pub use devtools_views::{BlameLine, BlameView, CoverLine, Coverage, CoverageView, HexOut, HexViewer, Problem, Severity, StackFrame, TreeTableRow};
+pub use avatar_upload::{AvatarOut, AvatarUpload, UploadState};
 pub use studio_suite::{
     ArenaSlab, DivergingBar, PlanSpec, PromptTemplate, SchemaField, SuggestionDecision, WaffleSlice,
 };
