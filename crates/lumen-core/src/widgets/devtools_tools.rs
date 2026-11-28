@@ -608,13 +608,29 @@ impl Ui {
         let _ = show;
         let char_w = self.galley("0", &mono).width;
         let row_h = mono.line_height;
+        let pad = gap;
+        // Soft-wrap at spaces to the width the preview had last frame (the
+        // font is monospace, so columns are exact). Rows keep their byte
+        // offsets, so matches spanning a break are marked on both rows.
+        let pid = id.with("preview");
+        let cols = self.rect_of(pid).map(|r| ((r.width() - pad * 2.0) / char_w).floor().max(8.0) as usize).unwrap_or(usize::MAX);
         let lines: Vec<(usize, String)> = {
+            let mut rows = Vec::new();
             let mut at = 0;
-            text.split('\n').map(|l| {
-                let s = at;
+            for l in text.split('\n') {
+                let mut s = at;
+                let mut rest = l;
+                while rest.chars().count() > cols {
+                    let cut = rest.char_indices().nth(cols).map(|x| x.0).unwrap_or(rest.len());
+                    let brk = rest[..cut].rfind(' ').map(|i| i + 1).filter(|i| *i > 0).unwrap_or(cut);
+                    rows.push((s, rest[..brk].to_owned()));
+                    s += brk;
+                    rest = &rest[brk..];
+                }
+                rows.push((s, rest.to_owned()));
                 at += l.len() + 1;
-                (s, l.to_owned())
-            }).collect()
+            }
+            rows
         };
         let mark = self.color(Token::AccentSubtle);
         let mark_bd = accent.multiply_alpha(0.5);
@@ -622,7 +638,6 @@ impl Ui {
         let hi = accent.multiply_alpha(0.25);
         let code_bg = self.color(Token::SurfaceMuted);
         let rr = lk.control.radius[1];
-        let pad = gap;
         let h = lines.len() as f32 * row_h + pad * 2.0;
         let ms = matches.clone();
         let txt = text.clone();
@@ -630,7 +645,7 @@ impl Ui {
         let preview = self.leaf(
             Style { width: Size::FILL, ..Default::default() },
             vec2(200.0, h),
-            None,
+            Some(pid),
             Sense::NONE,
             CursorIcon::Default,
             Some(Box::new(move |cx, r| {

@@ -449,12 +449,13 @@ lumen::App::new("Settings").run(State::default(), |ui, s| {
   <section class="band wrap reveal">
     <div class="vault glass">
       <div>
-        <span class="chip acc">In progress</span>
-        <h2>Vault, a password manager built with lumen.</h2>
-        <p>The first full app on lumen: a local-first vault with one-time codes, password health and native looks on every platform.</p>
-        <p style="margin-top:28px;display:flex;gap:10px;flex-wrap:wrap"><a class="btn main" href="#/apps">About Vault <span class="arr">→</span></a><a class="btn" href="${demoSrc("vault")}" target="_blank" rel="noopener">Open the preview</a></p>
+        <span class="row-chips"><span class="chip acc">Early preview · 0.0.6</span><span class="chip">Built with GPUI + lumen</span></span>
+        <h2 class="wl-title"><img class="wl-icon" src="assets/wardlight-icon.svg" alt="" width="56" height="56">Wardlight</h2>
+        <p class="wl-sub">Passwords, one-time codes and SSH keys in one encrypted vault. A native desktop app for macOS, Windows and Linux.</p>
+        <p><b>GPUI</b>, Zed's framework, runs the window, the title bar and the keyboard. <b>lumen</b> draws every screen inside it through <a href="#/guide/gpui">lumen-gpui</a>: lists, forms, dialogs, the ⌘K palette and the code countdown.</p>
+        <p class="wl-acts"><a class="btn main" href="#/apps">About Wardlight <span class="arr">→</span></a><a class="btn" href="${WARDLIGHT}/releases/latest" target="_blank" rel="noopener">Download</a><a class="btn" href="${WARDLIGHT}" target="_blank" rel="noopener">Source</a></p>
       </div>
-      <div class="frame">${live("vault", { height: 420 })}</div>
+      <div class="frame wl-shot"><img alt="Wardlight's Passwords screen: logins on the left, GitHub's details on the right with its one-time code counting down" data-l="img/wardlight-passwords-light.png" data-d="img/wardlight-passwords-dark.png" src="img/wardlight-passwords-${isDark() ? "dark" : "light"}.png"></div>
     </div>
   </section>`;
 }
@@ -543,6 +544,7 @@ function component(slug) {
     ${pager(prev && [`#/components/${prev.slug}`, prev.name], next && [`#/components/${next.slug}`, next.name])}`);
 }
 
+const WARDLIGHT = "https://github.com/amiralibg/wardlight";
 const SRC = `${REPO}/blob/main/crates/lumen-demos/src/main.rs`;
 const SRC_DIR = `${REPO}/blob/main/crates/lumen-demos/src`;
 const SHOWS = [
@@ -580,13 +582,30 @@ const APPS = [
   ["app-finance", "Tally", "Finance", "Balance and spending stats, a cash-flow chart, budgets that fill as you spend, transactions and an add dialog.", "apps/finance.rs"],
   ["app-todo", "Today", "To-do", "The tutorial app: add tasks, tick them off, filter and clear, in about 70 lines.", "apps/todo.rs"],
   ["app-settings", "Preferences", "Settings", "A searchable sidebar of panes. Appearance changes the whole window live: theme, look, accent, motion and text size. Do Not Disturb runs on two time wheels.", "apps/settings.rs"],
-  ["vault", "Vault", "In progress", "A local-first password manager: an item list, a password field with copy and reveal, a one-time code and a password health gauge.", "main.rs"],
 ];
 function apps() {
   return docsShell(guideNav(), `
     <p class="crumb">Apps</p>
-    <h1>${APPS.length} apps built with lumen.</h1>
-    <p class="lead">Complete windows, not snippets: each has its own navigation, data and flows. Every one runs live here and natively from the same source.</p>
+    <h1>${APPS.length + 1} apps built with lumen.</h1>
+    <p class="lead">Complete windows, not snippets. Wardlight ships on its own; the other ${APPS.length} run live here and natively from the same source.</p>
+    <h2 id="wardlight">Wardlight</h2>
+    <p>A password and SSH manager, and the first lumen app that ships on its own (<a href="${WARDLIGHT}/releases/latest" target="_blank" rel="noopener">download</a>, <a href="${WARDLIGHT}" target="_blank" rel="noopener">source</a>). It's an early preview: everything works, but it hasn't had a security review yet.</p>
+    <figure class="wl-fig"><img loading="lazy" alt="Wardlight's Passwords screen" data-l="img/wardlight-passwords-light.png" data-d="img/wardlight-passwords-dark.png" src="img/wardlight-passwords-${isDark() ? "dark" : "light"}.png"></figure>
+    <h3>Built with GPUI and lumen</h3>
+    <p>Wardlight is a <a href="https://gpui.rs" target="_blank" rel="noopener">GPUI</a> app. GPUI owns the window, the custom title bar, menus, keyboard shortcuts and input methods. Every screen inside is a lumen view hosted through <a href="#/guide/gpui">lumen-gpui</a>, so the lists, detail panes, dialogs, the ⌘K palette and the one-time-code ring are the same widgets you see on this site, with the same looks and motion. The two share state both ways: GPUI actions update the lumen screens, and lumen buttons trigger GPUI commands.</p>
+    <h3>What it does</h3>
+    <ul>
+      <li><b>Passwords</b> with folders, tags, favorites, history, a strength meter and a reused-password warning, and one-time codes (TOTP) next to them.</li>
+      <li><b>SSH keys</b>: generate ed25519 or RSA 4096, import existing OpenSSH keys, copy the public key, export encrypted.</li>
+      <li><b>SSH hosts</b>: aliases, jump hosts and options linked to a vault key; import <code>~/.ssh/config</code> and write hosts back, previewed as a diff.</li>
+      <li><b>Backups</b>: scheduled encrypted backups, exports, and imports from Bitwarden or CSV with a review before anything is written.</li>
+      <li><b>Careful with secrets</b>: the clipboard clears after 30 seconds, the vault locks when idle or asleep, and Touch ID, Windows Hello or fprintd can unlock it.</li>
+    </ul>
+    <div class="wl-pair">
+      <figure class="wl-fig"><img loading="lazy" alt="SSH Keys: keys with fingerprints, and one key's public key and the hosts that use it" data-l="img/wardlight-ssh-keys-light.png" data-d="img/wardlight-ssh-keys-dark.png" src="img/wardlight-ssh-keys-${isDark() ? "dark" : "light"}.png"><figcaption>SSH keys</figcaption></figure>
+      <figure class="wl-fig"><img loading="lazy" alt="SSH Hosts: hosts marked new or edited, and one host's details with its ssh command" data-l="img/wardlight-ssh-hosts-light.png" data-d="img/wardlight-ssh-hosts-dark.png" src="img/wardlight-ssh-hosts-${isDark() ? "dark" : "light"}.png"><figcaption>SSH hosts</figcaption></figure>
+    </div>
+    <h2>Demo apps</h2>
     <div class="apps">${APPS.map(([d, n, tag, p, src]) => `
       <article class="app glass glow">
         <div class="thumb"><img loading="lazy" alt="" data-l="${poster(d, false)}" data-d="${poster(d, true)}" src="${poster(d, isDark())}"></div>
@@ -599,8 +618,7 @@ function apps() {
       </article>`).join("")}</div>
     <h2>Run them natively</h2>
     ${pre("cargo run -p lumen-demos -- app-mail          # or app-music, app-tracker, app-notes,\n                                              #    app-assistant, app-finance, app-todo\ncargo run -p lumen-demos -- app-notes --look mac", "sh")}
-    <h2>Vault</h2>
-    <p>The first app that will ship on its own. <b>Local first:</b> the vault is an encrypted file you own, and sync is optional. <b>Native on every platform:</b> macOS, Windows and GNOME looks with the system accent and fonts, from one codebase. The feature set, cryptography and threat model are being researched before any code is written.</p>`, true);
+`, true);
 }
 
 function changelog() {

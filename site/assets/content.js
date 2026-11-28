@@ -2612,10 +2612,10 @@ ${code(`cx.new(|cx| LumenView::new(state, view, window, cx)
 <h2>Text input</h2>
 <p>A focused lumen text field registers a GPUI input handler, so input methods work: CJK composition shows underlined in the field and commits on confirm, macOS press-and-hold accents and dead keys work, and the candidate window sits under the caret. Scripts the bundled Geist lacks load the system fonts as fallbacks the first time they appear.</p>
 <h2>gpui-ce</h2>
-<p>The community fork <code>gpui-ce</code> 0.3 is supported with <code>default-features = false, features = ["ce"]</code>. Start the app with <code>lumen_gpui::application()</code>, which works with either GPUI. The <code>ce</code> build compiles and passes its tests, but isn't verified in a window yet: on macOS 27, gpui-ce 0.3.0 deadlocks in its own <code>open_window</code>.</p>
+<p>The community fork <code>gpui-ce</code> 0.3 is supported with <code>default-features = false, features = ["ce"]</code>. Start the app with <code>lumen_gpui::application()</code>, which works with either GPUI. Open windows from <code>lumen_gpui::run(app, |cx| ...)</code>: gpui-ce 0.3.0 on macOS deadlocks if a window opens inside its launch callback, and <code>run</code> defers it to the next main-loop turn (with Zed's GPUI it calls straight through). The <code>ce</code> build passes the real-window selftest.</p>
 <h2>Limits today</h2>
 <ul>
-<li>Accessibility trees aren't bridged to GPUI.</li>
+<li>Accessibility is bridged with gpui-ce only: lumen's nodes join the window's AccessKit tree. Zed's GPUI has no tree to join yet.</li>
 </ul>
 <p>Run the example: <code>cd crates/lumen-gpui && cargo run --example dashboard</code>, or <code>cargo run --example selftest</code> for a scripted check in a real window. It shows a GPUI sidebar driving a lumen dashboard, and a lumen Deploy button updating the GPUI header.</p>`,
   },
@@ -2645,14 +2645,22 @@ lumen-gpui   optional: hosts lumen views inside a GPUI app (separate workspace)<
 <h2>Platforms?</h2>
 <p>macOS, Windows, Linux (X11 and Wayland through winit), and browsers with WebGPU or WebGL2.</p>
 <h2>Accessibility?</h2>
-<p>Everything is keyboard reachable with visible focus. Screen reader support through AccessKit is on the roadmap.</p>
+<p>Everything is keyboard reachable with visible focus, and widgets describe themselves to screen readers through AccessKit: VoiceOver on macOS, Narrator and NVDA on Windows, Orca on Linux. Inside GPUI the tree is bridged with gpui-ce; Zed's GPUI has no accessibility tree to join yet. Screen readers have been checked on macOS so far.</p>
 <h2>What's next?</h2>
-<p>Combobox, command palette, number and tag inputs, a data table and virtualized grid, tree, code editor, and docking panels. And a password manager built with lumen.</p>`,
+<p>Voice widgets (a recorder, voice notes and a live session view), a small toy app, and running the platform checklist on real Windows and Linux machines. <a href="#/apps">Wardlight</a>, the password and SSH manager built with GPUI and lumen, is out as an early preview.</p>`,
   },
 ];
 
 export const CHANGELOG = [
-  { v: "Unreleased", date: "2026-11-24", items: [
+  { v: "Next round", date: "2026-11-28", items: [
+    "Wardlight, a password and SSH manager built with GPUI and lumen, is out as an early preview. GPUI runs the window; every screen is a lumen view. It replaces the Vault preview on the home page.",
+    "Accessibility: widgets describe themselves (role, name, value, state) and lumen-app exposes them through AccessKit to VoiceOver, Narrator, NVDA and Orca. Screen reader actions click, focus, step and set values. With gpui-ce, lumen views join the GPUI window's tree.",
+    "Virtualized lists: Ui::virtual_rows, list_view and table build only the visible rows, rows of any height, with Page Up/Down and type-ahead.",
+    "Interactive window chrome: lumen-drawn title bars move, maximize and close the window, with regions for drag and caption buttons; App::custom_chrome turns it on.",
+    "CI builds and renders demos on Linux, Windows and macOS. gpui-ce is verified in a real window, and lumen_gpui::run avoids gpui-ce 0.3.0's launch deadlock.",
+    "Twenty-two new components: signature pad, avatar upload, time dial, aspect-ratio picker, ruler slider, hex viewer, tree table, problems panel, stack trace, blame and coverage views, query builder, regex tester, feature flags, dependency graph, veil, onboarding checklist, swipe actions, docking panels, bubble chart, chart annotations and dot-matrix display.",
+  ] },
+  { v: "Earlier", date: "2026-11-24", items: [
     "Every app fits a phone: under 1000 px the sidebar collapses to icons, and under 640 px each app shows one pane at a time with a back button (a tap opens a note, message or issue; music gets a mini player).",
     "Horizontal scrolling: Ui::scroll_row keeps its children at natural width and scrolls sideways with a trackpad or Shift + wheel, while a plain wheel still scrolls the page. Editor tabs, pricing cards and the phone board use it.",
     "Narrow cards: one-line labels keep their width instead of drawing over each other, icons and keycaps never shrink, chart labels thin out by measured width, and world clocks, quarter picker, countdown, shortcut bar, settings rows and model picker reflow. --check also reports text spilling out of squeezed widgets.",
